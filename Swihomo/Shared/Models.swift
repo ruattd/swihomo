@@ -255,6 +255,22 @@ enum ProxyNodeSortCriterion: String, CaseIterable, Identifiable {
     }
 }
 
+enum ConnectionSortCriterion: String, CaseIterable, Identifiable {
+    case process
+    case speed
+    case rule
+
+    var id: Self { self }
+
+    var displayName: String {
+        switch self {
+        case .process: "Process"
+        case .speed: "Live Speed"
+        case .rule: "Rule"
+        }
+    }
+}
+
 enum ProxySortDirection: String, CaseIterable, Identifiable {
     case ascending
     case descending
@@ -278,6 +294,132 @@ enum ProxySortDirection: String, CaseIterable, Identifiable {
 
 struct MihomoDelayResponse: Decodable {
     let delay: Int?
+}
+
+struct MihomoConnectionResponse: Decodable {
+    let connections: [MihomoConnection]
+}
+
+struct MihomoConnection: Decodable, Identifiable, Hashable {
+    let id: String
+    let metadata: MihomoConnectionMetadata
+    let upload: Int64
+    let download: Int64
+    let startedAt: String?
+    let chains: [String]
+    let providerChains: [String]
+    let rule: String
+    let rulePayload: String
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case metadata
+        case upload
+        case download
+        case startedAt = "start"
+        case chains
+        case providerChains
+        case rule
+        case rulePayload
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        metadata = try container.decode(MihomoConnectionMetadata.self, forKey: .metadata)
+        upload = try container.decodeIfPresent(Int64.self, forKey: .upload) ?? 0
+        download = try container.decodeIfPresent(Int64.self, forKey: .download) ?? 0
+        startedAt = try container.decodeIfPresent(String.self, forKey: .startedAt)
+        chains = try container.decodeIfPresent([String].self, forKey: .chains) ?? []
+        providerChains = try container.decodeIfPresent([String].self, forKey: .providerChains) ?? []
+        rule = try container.decodeIfPresent(String.self, forKey: .rule) ?? ""
+        rulePayload = try container.decodeIfPresent(String.self, forKey: .rulePayload) ?? ""
+    }
+
+    var processName: String {
+        metadata.process.isEmpty ? "Unknown Process" : metadata.process
+    }
+
+    var destination: String {
+        if !metadata.host.isEmpty { return metadata.host }
+        if !metadata.remoteDestination.isEmpty { return metadata.remoteDestination }
+        return metadata.destinationIP
+    }
+
+    var ruleDescription: String {
+        [rule, rulePayload]
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
+    }
+
+    var routingDescription: String {
+        let chain = chains.joined(separator: " > ")
+        return [ruleDescription, chain]
+            .filter { !$0.isEmpty }
+            .joined(separator: " -> ")
+    }
+}
+
+struct MihomoConnectionMetadata: Decodable, Hashable {
+    let network: String
+    let type: String
+    let sourceIP: String
+    let sourcePort: String
+    let destinationIP: String
+    let destinationPort: String
+    let host: String
+    let process: String
+    let processPath: String
+    let remoteDestination: String
+
+    private enum CodingKeys: String, CodingKey {
+        case network
+        case type
+        case sourceIP
+        case sourcePort
+        case destinationIP
+        case destinationPort
+        case host
+        case process
+        case processPath
+        case remoteDestination
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        network = try container.decodeIfPresent(String.self, forKey: .network) ?? ""
+        type = try container.decodeIfPresent(String.self, forKey: .type) ?? ""
+        sourceIP = try container.decodeIfPresent(String.self, forKey: .sourceIP) ?? ""
+        sourcePort = try Self.stringValue(forKey: .sourcePort, in: container)
+        destinationIP = try container.decodeIfPresent(String.self, forKey: .destinationIP) ?? ""
+        destinationPort = try Self.stringValue(forKey: .destinationPort, in: container)
+        host = try container.decodeIfPresent(String.self, forKey: .host) ?? ""
+        process = try container.decodeIfPresent(String.self, forKey: .process) ?? ""
+        processPath = try container.decodeIfPresent(String.self, forKey: .processPath) ?? ""
+        remoteDestination = try container.decodeIfPresent(String.self, forKey: .remoteDestination) ?? ""
+    }
+
+    private static func stringValue(
+        forKey key: CodingKeys,
+        in container: KeyedDecodingContainer<CodingKeys>
+    ) throws -> String {
+        if let value = try container.decodeIfPresent(String.self, forKey: key) {
+            return value
+        }
+        if let value = try container.decodeIfPresent(Int.self, forKey: key) {
+            return String(value)
+        }
+        return ""
+    }
+}
+
+struct MihomoConnectionActivity: Identifiable, Hashable {
+    let connection: MihomoConnection
+    let uploadSpeed: Int64
+    let downloadSpeed: Int64
+
+    var id: String { connection.id }
+    var totalSpeed: Int64 { uploadSpeed + downloadSpeed }
 }
 
 struct MihomoControllerQueryItem: Codable {

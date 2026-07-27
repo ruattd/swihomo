@@ -12,6 +12,9 @@ final class AppModel: ObservableObject {
     @Published private(set) var logEntries: [LogEntry] = []
     @Published private(set) var externalResources: [ExternalResource] = []
     @Published private(set) var updatingExternalResourceIDs: Set<String> = []
+    @Published private(set) var connectionActivities: [MihomoConnectionActivity] = []
+    @Published private(set) var closingConnectionIDs: Set<String> = []
+    @Published private(set) var isClosingAllConnections = false
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
 
@@ -20,10 +23,15 @@ final class AppModel: ObservableObject {
     private lazy var controller = MihomoControllerClient(tunnel: tunnel)
     private var logStore: PersistentLogStore?
     private var coreLogPollingTask: Task<Void, Never>?
+    private var connectionPollingTask: Task<Void, Never>?
+    // ContentView opens the Connection detail by default until the user navigates away.
+    private var isConnectionMonitoringEnabled = true
     private var errorDismissalTask: Task<Void, Never>?
     private var proxyRefreshGeneration = 0
+    private var connectionRefreshGeneration = 0
     private var originalProxyGroupIndices: [String: Int] = [:]
     private var originalProxyCandidateIndices: [String: [String: Int]] = [:]
+    private var connectionTransferSamples: [String: ConnectionTransferSample] = [:]
 
     init() {
         tunnel.onStatusChanged = { [weak self] status in
@@ -31,28 +39,39 @@ final class AppModel: ObservableObject {
             self?.record(.info, module: "Tunnel", "Status changed to \(status.rawValue).")
             if status == .connected {
                 Task {
+                    self?.startCoreLogPolling()
+                    if self?.isConnectionMonitoringEnabled == true {
+                        self?.startConnectionPolling()
+                    }
                     await self?.reloadProxyGroupOrder(showErrors: false)
                     await self?.reloadProxyGroups(showErrors: false)
                     await self?.reloadCoreLogs(showErrors: false)
                     await self?.reloadExternalResources(showErrors: false)
-                    self?.startCoreLogPolling()
                 }
             } else {
                 self?.coreLogPollingTask?.cancel()
                 self?.coreLogPollingTask = nil
+                self?.connectionPollingTask?.cancel()
+                self?.connectionPollingTask = nil
                 self?.proxyRefreshGeneration += 1
+                self?.connectionRefreshGeneration += 1
                 self?.proxyGroups = []
                 self?.delays = [:]
                 self?.testingProxyGroupIDs = []
                 self?.originalProxyGroupIndices = [:]
                 self?.originalProxyCandidateIndices = [:]
                 self?.externalResources = []
+                self?.connectionActivities = []
+                self?.connectionTransferSamples = [:]
+                self?.closingConnectionIDs = []
+                self?.isClosingAllConnections = false
             }
         }
     }
 
     deinit {
         coreLogPollingTask?.cancel()
+        connectionPollingTask?.cancel()
     }
 
     var isConnected: Bool { tunnelStatus == .connected || tunnelStatus == .connecting }
@@ -80,6 +99,9 @@ final class AppModel: ObservableObject {
             snapshot = try await profiles.loadSnapshot()
             try await tunnel.prepare()
             tunnelStatus = tunnel.status
+            if tunnelStatus == .connected, isConnectionMonitoringEnabled {
+                startConnectionPolling()
+            }
             record(.info, module: "Lifecycle", "Loaded profile store and Packet Tunnel configuration.")
         } catch {
             present(error, module: "Lifecycle")
@@ -145,13 +167,24 @@ final class AppModel: ObservableObject {
         let previousOverrides = snapshot.overrides
         await perform(module: "Configuration", "Saved runtime overrides.") { [self] in
             snapshot = try await profiles.saveOverrides(overrides)
-            guard tunnelStatus == .connected, previousOverrides.logLevel != overrides.logLevel else { return }
+            guard tunnelStatus == .connected else { return }
 
-            do {
-                try await controller.updateLogLevel(overrides.logLevel, using: previousOverrides)
-                record(.info, module: "Configuration", "Applied log level to the running core.")
-            } catch {
-                record(.warning, module: "Configuration", "Saved log level. Reconnect to apply it to the running core.")
+            if previousOverrides.logLevel != overrides.logLevel {
+                do {
+                    try await controller.updateLogLevel(overrides.logLevel, using: previousOverrides)
+                    record(.info, module: "Configuration", "Applied log level to the running core.")
+                } catch {
+                    record(.warning, module: "Configuration", "Saved log level. Reconnect to apply it to the running core.")
+                }
+            }
+
+            if previousOverrides.mode != overrides.mode {
+                do {
+                    try await controller.updateRoutingMode(overrides.mode, using: previousOverrides)
+                    record(.info, module: "Configuration", "Applied routing mode to the running core.")
+                } catch {
+                    record(.warning, module: "Configuration", "Saved routing mode. Reconnect to apply it to the running core.")
+                }
             }
         }
     }
@@ -276,8 +309,104 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func sortedConnectionActivities(
+        by criterion: ConnectionSortCriterion,
+        direction: ProxySortDirection
+    ) -> [MihomoConnectionActivity] {
+        connectionActivities.sorted { left, right in
+            let comparison: ComparisonResult
+            switch criterion {
+            case .process:
+                comparison = left.connection.processName.localizedCaseInsensitiveCompare(right.connection.processName)
+            case .speed:
+                if left.totalSpeed == right.totalSpeed {
+                    comparison = .orderedSame
+                } else {
+                    comparison = left.totalSpeed < right.totalSpeed ? .orderedAscending : .orderedDescending
+                }
+            case .rule:
+                comparison = left.connection.ruleDescription.localizedCaseInsensitiveCompare(right.connection.ruleDescription)
+            }
+            return isOrdered(comparison, direction: direction, fallback: { left.id < right.id })
+        }
+    }
+
     func reloadLogs() async {
         await reloadCoreLogs(showErrors: true)
+    }
+
+    func reloadConnections(showErrors: Bool = true) async {
+        guard isConnectionMonitoringEnabled, tunnelStatus == .connected else { return }
+
+        connectionRefreshGeneration += 1
+        let generation = connectionRefreshGeneration
+        do {
+            let connections = try await controller.connections(using: snapshot.overrides)
+            guard generation == connectionRefreshGeneration else { return }
+            updateConnectionActivities(connections, at: Date())
+        } catch where showErrors && generation == connectionRefreshGeneration {
+            present(error, module: "Connections")
+        } catch {
+            // The connection dashboard keeps polling while the controller is temporarily unavailable.
+        }
+    }
+
+    func setConnectionMonitoringEnabled(_ isEnabled: Bool) {
+        if isConnectionMonitoringEnabled == isEnabled {
+            if isEnabled, tunnelStatus == .connected, connectionPollingTask == nil {
+                startConnectionPolling()
+            }
+            return
+        }
+        isConnectionMonitoringEnabled = isEnabled
+
+        guard isEnabled, tunnelStatus == .connected else {
+            connectionPollingTask?.cancel()
+            connectionPollingTask = nil
+            connectionRefreshGeneration += 1
+            return
+        }
+
+        startConnectionPolling()
+    }
+
+    func closeConnection(id: String) async -> Bool {
+        guard tunnelStatus == .connected else {
+            present(ClientError.tunnelUnavailable, module: "Connections")
+            return false
+        }
+        guard closingConnectionIDs.insert(id).inserted else { return false }
+        defer { closingConnectionIDs.remove(id) }
+
+        do {
+            try await controller.closeConnection(id: id, using: snapshot.overrides)
+            connectionActivities.removeAll { $0.id == id }
+            connectionTransferSamples[id] = nil
+            record(.info, module: "Connections", "Closed connection \(id).")
+            return true
+        } catch {
+            present(error, module: "Connections")
+            return false
+        }
+    }
+
+    func closeAllConnections() async {
+        guard tunnelStatus == .connected else {
+            present(ClientError.tunnelUnavailable, module: "Connections")
+            return
+        }
+        guard !isClosingAllConnections else { return }
+        isClosingAllConnections = true
+        defer { isClosingAllConnections = false }
+
+        do {
+            try await controller.closeAllConnections(using: snapshot.overrides)
+            connectionActivities = []
+            connectionTransferSamples = [:]
+            record(.info, module: "Connections", "Closed all connections.")
+        } catch {
+            present(error, module: "Connections")
+        }
     }
 
     func reloadExternalResources() async {
@@ -345,6 +474,39 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private func updateConnectionActivities(_ connections: [MihomoConnection], at timestamp: Date) {
+        var latestSamples: [String: ConnectionTransferSample] = [:]
+        connectionActivities = connections.map { connection in
+            let previous = connectionTransferSamples[connection.id]
+            let elapsed = timestamp.timeIntervalSince(previous?.timestamp ?? timestamp)
+            let uploadSpeed: Int64
+            let downloadSpeed: Int64
+
+            if let previous,
+               elapsed > 0,
+               connection.upload >= previous.upload,
+               connection.download >= previous.download {
+                uploadSpeed = Int64(Double(connection.upload - previous.upload) / elapsed)
+                downloadSpeed = Int64(Double(connection.download - previous.download) / elapsed)
+            } else {
+                uploadSpeed = 0
+                downloadSpeed = 0
+            }
+
+            latestSamples[connection.id] = ConnectionTransferSample(
+                upload: connection.upload,
+                download: connection.download,
+                timestamp: timestamp
+            )
+            return MihomoConnectionActivity(
+                connection: connection,
+                uploadSpeed: uploadSpeed,
+                downloadSpeed: downloadSpeed
+            )
+        }
+        connectionTransferSamples = latestSamples
+    }
+
     private func reloadProxyGroupOrder(showErrors: Bool) async {
         guard tunnelStatus == .connected else { return }
         do {
@@ -381,6 +543,16 @@ final class AppModel: ObservableObject {
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
                 guard !Task.isCancelled else { return }
                 await self?.reloadCoreLogs(showErrors: false)
+            }
+        }
+    }
+
+    private func startConnectionPolling() {
+        connectionPollingTask?.cancel()
+        connectionPollingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.reloadConnections(showErrors: false)
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
         }
     }
@@ -506,4 +678,10 @@ final class AppModel: ObservableObject {
             .joined(separator: ".")
         return "decoding=\(kind) path=\(path.isEmpty ? "<root>" : path) debug=\(context.debugDescription)"
     }
+}
+
+private struct ConnectionTransferSample {
+    let upload: Int64
+    let download: Int64
+    let timestamp: Date
 }

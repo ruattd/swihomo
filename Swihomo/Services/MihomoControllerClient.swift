@@ -73,6 +73,31 @@ actor MihomoControllerClient {
         )
     }
 
+    func connections(using overrides: ProxyOverrides) async throws -> [MihomoConnection] {
+        let response: MihomoConnectionResponse = try await request(
+            path: "connections",
+            method: "GET",
+            overrides: overrides
+        )
+        return response.connections
+    }
+
+    func closeConnection(id: String, using overrides: ProxyOverrides) async throws {
+        let _: EmptyResponse = try await request(
+            path: "connections/\(id)",
+            method: "DELETE",
+            overrides: overrides
+        )
+    }
+
+    func closeAllConnections(using overrides: ProxyOverrides) async throws {
+        let _: EmptyResponse = try await request(
+            path: "connections",
+            method: "DELETE",
+            overrides: overrides
+        )
+    }
+
     func updateExternalResource(
         _ resource: ExternalResource,
         using overrides: ProxyOverrides
@@ -98,6 +123,20 @@ actor MihomoControllerClient {
         }
 
         let body = try JSONEncoder().encode(Configuration(logLevel: level))
+        let _: EmptyResponse = try await request(
+            path: "configs",
+            method: "PATCH",
+            overrides: overrides,
+            body: body
+        )
+    }
+
+    func updateRoutingMode(_ mode: ProxyMode, using overrides: ProxyOverrides) async throws {
+        struct Configuration: Encodable {
+            let mode: ProxyMode
+        }
+
+        let body = try JSONEncoder().encode(Configuration(mode: mode))
         let _: EmptyResponse = try await request(
             path: "configs",
             method: "PATCH",

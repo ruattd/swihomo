@@ -281,18 +281,64 @@ private struct FeatureDetailView: View {
 private struct DashboardView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var connectionSortCriterion = ConnectionSortCriterion.process
+    @State private var connectionSortDirection = ProxySortDirection.ascending
+    @State private var selectedConnection: MihomoConnectionActivity?
+    @State private var connectionSearchText = ""
+    @State private var showsBackToTopButton = false
+
+    private var showsConnections: Bool {
+        model.tunnelStatus == .connected
+    }
 
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
+        Group {
+            if showsConnections {
+                connectedDashboard
+            } else {
+                VStack(spacing: 24) {
+                    Spacer(minLength: 20)
+                    connectionSummary
+                    Spacer(minLength: 20)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(20)
+            }
+        }
+        .animation(reduceMotion ? nil : .bouncy, value: showsConnections)
+        .animation(reduceMotion ? nil : .snappy, value: model.isConnected)
+        .animation(reduceMotion ? nil : .snappy, value: model.snapshot.activeProfileID)
+        .onAppear {
+            model.setConnectionMonitoringEnabled(true)
+        }
+        .task(id: showsConnections) {
+            guard showsConnections else { return }
+            model.setConnectionMonitoringEnabled(true)
+        }
+        .onDisappear {
+            model.setConnectionMonitoringEnabled(false)
+        }
+        .onChange(of: showsConnections) { _, isConnected in
+            if !isConnected {
+                showsBackToTopButton = false
+            }
+        }
+        .navigationDestination(item: $selectedConnection) { activity in
+            ConnectionDetailView(activity: activity, model: model)
+        }
+    }
+
+    private var connectionSummary: some View {
+        VStack(spacing: showsConnections ? 10 : 24) {
             Image(systemName: model.isConnected ? "checkmark.shield.fill" : "shield.lefthalf.filled")
-                .font(.system(size: 72))
+                .font(.system(size: showsConnections ? 48 : 72))
                 .foregroundStyle(model.isConnected ? .green : .secondary)
                 .contentTransition(.symbolEffect(.replace))
                 .symbolEffect(.pulse, value: model.isConnected)
             Text(model.connectionStatusTitle)
-                .font(.largeTitle.bold())
+                .font(showsConnections ? .title2.bold() : .largeTitle.bold())
             Text(model.snapshot.activeProfile?.name ?? "Choose a configuration profile to begin")
+                .font(showsConnections ? .footnote : .body)
                 .foregroundStyle(.secondary)
             if let profile = model.snapshot.activeProfile {
                 Button(model.isConnected ? "Disconnect" : "Connect") {
@@ -303,37 +349,434 @@ private struct DashboardView: View {
                     }
                 }
                 .liquidGlassButton(prominent: true)
-                .controlSize(.large)
+                .controlSize(showsConnections ? .regular : .large)
             } else {
                 Text("Import a local YAML file or add an online subscription in Profiles.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-            Divider().frame(maxWidth: 480)
-            HStack(spacing: 28) {
-                Metric(label: "Mode", value: model.snapshot.overrides.mode.displayName)
-                Metric(label: "Profiles", value: "\(model.snapshot.profiles.count)")
-                Metric(label: "Groups", value: "\(model.proxyGroups.count)")
+            Divider().frame(maxWidth: showsConnections ? 620 : 480)
+            HStack(spacing: showsConnections ? 22 : 28) {
+                Metric(label: "Mode", value: model.snapshot.overrides.mode.displayName, compact: showsConnections)
+                Metric(label: "Profiles", value: "\(model.snapshot.profiles.count)", compact: showsConnections)
+                Metric(label: "Groups", value: "\(model.proxyGroups.count)", compact: showsConnections)
             }
-            Spacer()
         }
-        .padding()
-        .animation(reduceMotion ? nil : .bouncy, value: model.isConnected)
-        .animation(reduceMotion ? nil : .snappy, value: model.snapshot.activeProfileID)
     }
 
+    private var connectedDashboard: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    GeometryReader { geometry in
+                        Color.clear.preference(
+                            key: ConnectionDashboardScrollOffsetKey.self,
+                            value: geometry.frame(in: .named("connection-dashboard-scroll")).minY
+                        )
+                    }
+                    .frame(height: 0)
+                    .id("connection-dashboard-top")
+
+                    connectionSummary
+                        .frame(maxWidth: .infinity)
+
+                    LiveConnectionsView(
+                        sortCriterion: $connectionSortCriterion,
+                        sortDirection: $connectionSortDirection,
+                        selectedConnection: $selectedConnection,
+                        searchText: $connectionSearchText
+                    )
+                }
+                .frame(maxWidth: 860)
+                .frame(maxWidth: .infinity)
+                .padding(16)
+            }
+            .coordinateSpace(name: "connection-dashboard-scroll")
+            .onPreferenceChange(ConnectionDashboardScrollOffsetKey.self) { offset in
+                let shouldShow = offset < -180
+                guard shouldShow != showsBackToTopButton else { return }
+                withAnimation(reduceMotion ? nil : .snappy) {
+                    showsBackToTopButton = shouldShow
+                }
+            }
+            .searchable(text: $connectionSearchText, prompt: "Search process or destination")
+            .overlay(alignment: .bottomTrailing) {
+                if showsBackToTopButton {
+                    Button {
+                        withAnimation(reduceMotion ? nil : .snappy) {
+                            proxy.scrollTo("connection-dashboard-top", anchor: .top)
+                        }
+                    } label: {
+                        Label("Back to Top", systemImage: "arrow.up")
+                            .labelStyle(.iconOnly)
+                            .frame(width: 42, height: 42)
+                    }
+                    .liquidGlassButton()
+                    .accessibilityLabel("Back to Top")
+                    .padding(20)
+                    .transition(.scale.combined(with: .opacity))
+                }
+            }
+        }
+    }
+}
+
+private struct ConnectionDashboardScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
 }
 
 private struct Metric: View {
     let label: String
     let value: String
+    var compact = false
 
     var body: some View {
         VStack(spacing: 4) {
-            Text(value).font(.title3.weight(.semibold))
+            Text(value).font(compact ? .body.weight(.semibold) : .title3.weight(.semibold))
             Text(label).font(.caption).foregroundStyle(.secondary)
         }
     }
+}
+
+private struct LiveConnectionsView: View {
+    @EnvironmentObject private var model: AppModel
+    @Binding var sortCriterion: ConnectionSortCriterion
+    @Binding var sortDirection: ProxySortDirection
+    @Binding var selectedConnection: MihomoConnectionActivity?
+    @Binding var searchText: String
+    @State private var showingCloseAllConfirmation = false
+
+    private var connections: [MihomoConnectionActivity] {
+        model.sortedConnectionActivities(by: sortCriterion, direction: sortDirection)
+    }
+
+    private var filteredConnections: [MihomoConnectionActivity] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return connections }
+        return connections.filter { activity in
+            let metadata = activity.connection.metadata
+            return [
+                activity.connection.processName,
+                activity.connection.destination,
+                metadata.destinationIP,
+                metadata.remoteDestination,
+                address(metadata.destinationIP, port: metadata.destinationPort)
+            ].contains { $0.localizedCaseInsensitiveContains(query) }
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Live Connections")
+                        .font(.headline)
+                    Text("Updates every second from mihomo")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text("\(connections.count)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(Color.cyan.opacity(0.14), in: Capsule())
+            }
+
+            HStack(spacing: 10) {
+                Button(role: .destructive) {
+                    showingCloseAllConfirmation = true
+                } label: {
+                    Label("Close All", systemImage: "xmark.circle")
+                }
+                .liquidGlassButton()
+                .disabled(connections.isEmpty || model.isClosingAllConnections)
+                Spacer()
+                Menu {
+                    Section("Sort by") {
+                        ForEach(ConnectionSortCriterion.allCases) { criterion in
+                            Button {
+                                sortCriterion = criterion
+                                sortDirection = criterion == .speed ? .descending : .ascending
+                            } label: {
+                                Label(
+                                    criterion.displayName,
+                                    systemImage: sortCriterion == criterion ? "checkmark" : "circle"
+                                )
+                            }
+                        }
+                    }
+                    Section("Direction") {
+                        ForEach(ProxySortDirection.allCases) { direction in
+                            Button {
+                                sortDirection = direction
+                            } label: {
+                                Label(
+                                    direction.displayName,
+                                    systemImage: sortDirection == direction ? "checkmark" : direction.systemImage
+                                )
+                            }
+                        }
+                    }
+                } label: {
+                    Label(
+                        sortCriterion.displayName,
+                        systemImage: sortDirection.systemImage
+                    )
+                        .font(.subheadline.weight(.medium))
+                }
+                .liquidGlassButton()
+            }
+
+            if filteredConnections.isEmpty {
+                ContentUnavailableView(
+                    connections.isEmpty ? "No Active Connections" : "No Matching Connections",
+                    systemImage: "point.3.connected.trianglepath.dotted",
+                    description: Text(connections.isEmpty ? "New traffic will appear here automatically." : "Try a process name, domain, or IP address.")
+                )
+                .frame(maxWidth: .infinity, minHeight: 260)
+            } else {
+                LazyVStack(spacing: 8) {
+                    ForEach(filteredConnections) { activity in
+                        Button {
+                            selectedConnection = activity
+                        } label: {
+                            ConnectionRow(activity: activity)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        }
+        .confirmationDialog(
+            "Close All Connections?",
+            isPresented: $showingCloseAllConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Close All", role: .destructive) {
+                Task { await model.closeAllConnections() }
+            }
+        } message: {
+            Text("This immediately closes every connection managed by mihomo.")
+        }
+    }
+}
+
+private struct ConnectionRow: View {
+    let activity: MihomoConnectionActivity
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 12) {
+                ConnectionProcessIcon(metadata: activity.connection.metadata)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(activity.connection.processName)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                    Text(activity.connection.destination)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.tertiary)
+            }
+
+            Text(activity.connection.routingDescription.isEmpty ? "No matching rule reported" : activity.connection.routingDescription)
+                .font(.caption2)
+                .foregroundStyle(.cyan)
+                .lineLimit(2)
+
+            HStack(spacing: 10) {
+                Label(byteRate(activity.downloadSpeed), systemImage: "arrow.down")
+                Label(byteRate(activity.uploadSpeed), systemImage: "arrow.up")
+                Spacer()
+                Text(byteRate(activity.totalSpeed))
+                    .font(.caption.monospacedDigit().weight(.semibold))
+            }
+            .font(.caption2.monospacedDigit())
+            .foregroundStyle(.secondary)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .liquidGlassCard(cornerRadius: 14)
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(activity.connection.processName), \(byteRate(activity.totalSpeed)), \(activity.connection.routingDescription)")
+        .accessibilityHint("Show connection details")
+    }
+}
+
+private struct ConnectionDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    let activity: MihomoConnectionActivity
+    @ObservedObject var model: AppModel
+
+    private var currentActivity: MihomoConnectionActivity {
+        model.connectionActivities.first { $0.id == activity.id } ?? activity
+    }
+
+    private var connection: MihomoConnection { currentActivity.connection }
+    private var metadata: MihomoConnectionMetadata { connection.metadata }
+
+    var body: some View {
+        List {
+            Section {
+                HStack(spacing: 12) {
+                    ConnectionProcessIcon(metadata: metadata)
+                        .frame(width: 42, height: 42)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(connection.processName)
+                            .font(.headline)
+                        Text(connection.destination)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+            }
+
+            Section("Live Speed") {
+                DetailValueRow(label: "Download", value: byteRate(currentActivity.downloadSpeed))
+                DetailValueRow(label: "Upload", value: byteRate(currentActivity.uploadSpeed))
+                DetailValueRow(label: "Total", value: byteRate(currentActivity.totalSpeed))
+            }
+
+            Section("Traffic") {
+                DetailValueRow(label: "Downloaded", value: byteCount(connection.download))
+                DetailValueRow(label: "Uploaded", value: byteCount(connection.upload))
+                if let startedAt = connection.startedAt {
+                    DetailValueRow(label: "Started", value: startedAt)
+                }
+            }
+
+            Section("Routing") {
+                DetailValueRow(label: "Rule", value: connection.rule.isEmpty ? "Not reported" : connection.rule)
+                DetailValueRow(label: "Rule Payload", value: connection.rulePayload.isEmpty ? "Not reported" : connection.rulePayload)
+                if !connection.chains.isEmpty {
+                    DetailValueRow(label: "Proxy Chain", value: connection.chains.joined(separator: " > "))
+                }
+                if !connection.providerChains.isEmpty {
+                    DetailValueRow(label: "Provider Chain", value: connection.providerChains.joined(separator: " > "))
+                }
+            }
+
+            Section("Connection") {
+                DetailValueRow(label: "Protocol", value: [metadata.network, metadata.type].filter { !$0.isEmpty }.joined(separator: " / "))
+                DetailValueRow(label: "Source", value: address(metadata.sourceIP, port: metadata.sourcePort))
+                DetailValueRow(label: "Destination", value: address(metadata.destinationIP, port: metadata.destinationPort))
+                if !metadata.host.isEmpty {
+                    DetailValueRow(label: "Host", value: metadata.host)
+                }
+                if !metadata.remoteDestination.isEmpty {
+                    DetailValueRow(label: "Remote Destination", value: metadata.remoteDestination)
+                }
+                if !metadata.processPath.isEmpty {
+                    DetailValueRow(label: "Process Path", value: metadata.processPath)
+                }
+            }
+        }
+        .navigationTitle("Connection Details")
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button(role: .destructive) {
+                    Task {
+                        if await model.closeConnection(id: activity.id) {
+                            dismiss()
+                        }
+                    }
+                } label: {
+                    Label("Close", systemImage: "xmark.circle")
+                }
+                .disabled(model.closingConnectionIDs.contains(activity.id))
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done") { dismiss() }
+            }
+        }
+    }
+}
+
+private struct DetailValueRow: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        LabeledContent(label) {
+            Text(value.isEmpty ? "Not reported" : value)
+                .multilineTextAlignment(.trailing)
+                .textSelection(.enabled)
+        }
+    }
+}
+
+private struct ConnectionProcessIcon: View {
+    let metadata: MihomoConnectionMetadata
+
+    var body: some View {
+#if os(macOS)
+        if let icon {
+            Image(nsImage: icon)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 36, height: 36)
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        } else {
+            fallbackIcon
+        }
+#else
+        fallbackIcon
+#endif
+    }
+
+    private var fallbackIcon: some View {
+        Image(systemName: "app.dashed")
+            .font(.title3.weight(.medium))
+            .foregroundStyle(.cyan)
+            .frame(width: 36, height: 36)
+            .background(Color.cyan.opacity(0.13), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+#if os(macOS)
+    private var icon: NSImage? {
+        NSWorkspace.shared.runningApplications.first { application in
+            let matchesPath = !metadata.processPath.isEmpty && application.executableURL?.path == metadata.processPath
+            let matchesBundleID = !metadata.process.isEmpty && application.bundleIdentifier == metadata.process
+            let matchesName = !metadata.process.isEmpty && application.localizedName?.localizedCaseInsensitiveCompare(metadata.process) == .orderedSame
+            return matchesPath || matchesBundleID || matchesName
+        }?.icon
+    }
+#endif
+}
+
+private func byteCount(_ value: Int64) -> String {
+    ByteCountFormatter.string(fromByteCount: value, countStyle: .file)
+}
+
+private func byteRate(_ value: Int64) -> String {
+    "\(byteCount(value))/s"
+}
+
+private func address(_ host: String, port: String) -> String {
+    guard !host.isEmpty else { return "Not reported" }
+    guard !port.isEmpty else { return host }
+    return "\(host):\(port)"
 }
 
 private struct ProfilesView: View {
@@ -1215,7 +1658,7 @@ private struct OverridesView: View {
                             Text(draft == model.snapshot.overrides ? "All changes saved" : "Unsaved changes")
                                 .font(.subheadline.weight(.semibold))
                             HStack(alignment: .bottom, spacing: 12) {
-                                Text("Log level updates live. Other changes apply after reconnect; invalid YAML prevents mihomo from starting.")
+                                Text("Routing mode and log level update live. Other changes apply after reconnect; invalid YAML prevents mihomo from starting.")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(2)
@@ -1228,7 +1671,7 @@ private struct OverridesView: View {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(draft == model.snapshot.overrides ? "All changes saved" : "Unsaved changes")
                                     .font(.subheadline.weight(.semibold))
-                                Text("Log level updates live. Other changes apply after reconnect; invalid YAML prevents mihomo from starting.")
+                                Text("Routing mode and log level update live. Other changes apply after reconnect; invalid YAML prevents mihomo from starting.")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
@@ -1460,7 +1903,9 @@ private struct ExternalResourceEditor: View {
                 isLoading = false
             }
         }
+#if os(macOS)
         .frame(minWidth: 520, minHeight: 420)
+#endif
     }
 }
 
