@@ -1,0 +1,4 @@
+[submodule "Vendor/mihomo"]
+	path = Vendor/mihomo
+	url = https://github.com/ruattd/swihomo-core
+	branch = Alpha

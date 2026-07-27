@@ -1,0 +1,231 @@
+import Foundation
+import NetworkExtension
+
+@MainActor
+final class TunnelController {
+    static let providerBundleIdentifier = "com.swihomo.client.PacketTunnel"
+
+    private var manager: NETunnelProviderManager?
+    private var statusObserver: NSObjectProtocol?
+
+    private(set) var status: NEVPNStatus = .invalid {
+        didSet { onStatusChanged?(status) }
+    }
+    var onStatusChanged: ((NEVPNStatus) -> Void)?
+
+    deinit {
+        if let statusObserver {
+            NotificationCenter.default.removeObserver(statusObserver)
+        }
+    }
+
+    func prepare() async throws {
+        let managers = try await NETunnelProviderManager.loadAll()
+        let manager = managers.first { manager in
+            (manager.protocolConfiguration as? NETunnelProviderProtocol)?
+                .providerBundleIdentifier == Self.providerBundleIdentifier
+        } ?? NETunnelProviderManager()
+
+        self.manager = manager
+        observe(manager)
+        status = manager.connection.status
+    }
+
+    func connect(
+        profileID: UUID,
+        configuration: MihomoRuntimeConfiguration,
+        dnsEnabled: Bool
+    ) async throws {
+        if manager == nil {
+            try await prepare()
+        }
+        guard let manager else { return }
+
+        let tunnelProtocol = NETunnelProviderProtocol()
+        tunnelProtocol.providerBundleIdentifier = Self.providerBundleIdentifier
+        tunnelProtocol.serverAddress = "Swihomo"
+        tunnelProtocol.providerConfiguration = [
+            "profileID": profileID.uuidString,
+            "profileYAML": configuration.profileYAML,
+            "overridesYAML": configuration.overridesYAML,
+            "dnsEnabled": NSNumber(value: dnsEnabled)
+        ]
+        manager.protocolConfiguration = tunnelProtocol
+        manager.localizedDescription = "Swihomo"
+        manager.isEnabled = true
+
+        try await manager.save()
+        try await manager.load()
+        observe(manager)
+        status = manager.connection.status
+        try manager.connection.startVPNTunnel()
+    }
+
+    func disconnect() {
+        manager?.connection.stopVPNTunnel()
+    }
+
+    func controllerResponse(for request: MihomoControllerRequest) async throws -> MihomoControllerResponse {
+        let response = try await sendProviderRequest(
+            TunnelProviderRequest(operation: .controller, controllerRequest: request)
+        )
+        guard let controllerResponse = response.controllerResponse else {
+            throw ClientError.controllerRequestFailed("The Packet Tunnel did not return a controller response.")
+        }
+        return controllerResponse
+    }
+
+    func coreLogs() async throws -> [LogEntry] {
+        let response = try await sendProviderRequest(
+            TunnelProviderRequest(operation: .coreLogs, controllerRequest: nil)
+        )
+        return response.coreLogs ?? []
+    }
+
+    func proxyGroupOrder() async throws -> [String] {
+        let response = try await sendProviderRequest(
+            TunnelProviderRequest(operation: .proxyGroupOrder)
+        )
+        return response.proxyGroupOrder ?? []
+    }
+
+    func externalResources() async throws -> [ExternalResource] {
+        let response = try await sendProviderRequest(
+            TunnelProviderRequest(operation: .externalResources)
+        )
+        return response.externalResources ?? []
+    }
+
+    func readExternalResource(identifier: String) async throws -> Data {
+        let response = try await sendProviderRequest(
+            TunnelProviderRequest(
+                operation: .readExternalResource,
+                resourceIdentifier: identifier
+            )
+        )
+        guard let contents = response.resourceContents else {
+            throw ClientError.controllerRequestFailed("The Packet Tunnel did not return external resource contents.")
+        }
+        return contents
+    }
+
+    func writeExternalResource(identifier: String, contents: Data) async throws {
+        _ = try await sendProviderRequest(
+            TunnelProviderRequest(
+                operation: .writeExternalResource,
+                resourceIdentifier: identifier,
+                resourceContents: contents
+            )
+        )
+    }
+
+    private func sendProviderRequest(_ request: TunnelProviderRequest) async throws -> TunnelProviderResponse {
+        let message = try JSONEncoder().encode(request)
+        let responseData = try await sendProviderMessage(message)
+        let decoder = JSONDecoder()
+
+        // A running pre-IPC extension accepts the flattened controller fields.
+        if let legacyResponse = try? decoder.decode(MihomoControllerResponse.self, from: responseData) {
+            switch request.operation {
+            case .controller:
+                return TunnelProviderResponse(
+                    controllerResponse: legacyResponse,
+                    coreLogs: nil,
+                    proxyGroupOrder: nil,
+                    externalResources: nil,
+                    resourceContents: nil,
+                    errorMessage: nil
+                )
+            case .coreLogs, .proxyGroupOrder, .externalResources, .readExternalResource, .writeExternalResource:
+                throw ClientError.controllerRequestFailed(
+                    "This operation requires reconnecting the Packet Tunnel with the current extension build."
+                )
+            }
+        }
+
+        let response = try decoder.decode(TunnelProviderResponse.self, from: responseData)
+        if let errorMessage = response.errorMessage {
+            throw ClientError.controllerRequestFailed(errorMessage)
+        }
+        return response
+    }
+
+    private func sendProviderMessage(_ message: Data) async throws -> Data {
+        guard status == .connected,
+              let session = manager?.connection as? NETunnelProviderSession else {
+            throw ClientError.tunnelUnavailable
+        }
+
+        return try await withCheckedThrowingContinuation { continuation in
+            do {
+                try session.sendProviderMessage(message) { response in
+                    guard let response else {
+                        continuation.resume(throwing: ClientError.tunnelUnavailable)
+                        return
+                    }
+                    continuation.resume(returning: response)
+                }
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+
+    private func observe(_ manager: NETunnelProviderManager) {
+        if let statusObserver {
+            NotificationCenter.default.removeObserver(statusObserver)
+        }
+        statusObserver = NotificationCenter.default.addObserver(
+            forName: .NEVPNStatusDidChange,
+            object: manager.connection,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refreshStatus()
+            }
+        }
+    }
+
+    private func refreshStatus() {
+        guard let manager else { return }
+        status = manager.connection.status
+    }
+}
+
+private extension NETunnelProviderManager {
+    static func loadAll() async throws -> [NETunnelProviderManager] {
+        try await withCheckedThrowingContinuation { continuation in
+            loadAllFromPreferences { managers, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: managers ?? [])
+                }
+            }
+        }
+    }
+
+    func save() async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            saveToPreferences { error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
+                }
+            }
+        }
+    }
+
+    func load() async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            loadFromPreferences { error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
+                }
+            }
+        }
+    }
+}

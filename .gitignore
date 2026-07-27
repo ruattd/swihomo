@@ -1,0 +1,51 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Xcode
+DerivedData/
+build/
+.build/
+.build-ios/
+*.xcarchive/
+*.xcresult/
+*.dSYM/
+*.ipa
+*.moved-aside
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xcscmblueprint
+*.xcuserstate
+xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# Swift Package Manager
+.swiftpm/
+Packages/
+
+# Dependency managers
+Pods/
+Carthage/Build/
+
+# Generated mihomo artifacts
+Vendor/MihomoCore.xcframework/
+Vendor/mihomo/.build-mihomo/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.mobileprovision
+*.p12
+*.cer
+*.key
+
+# Tooling and logs
+.codegraph/
+.idea/
+.vscode/
+*.log
