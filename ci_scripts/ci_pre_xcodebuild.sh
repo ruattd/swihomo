@@ -4,15 +4,67 @@ set -euo pipefail
 ROOT="${CI_PRIMARY_REPOSITORY_PATH:-$(cd "$(dirname "$0")/.." && pwd)}"
 CORE_ROOT="$ROOT/Vendor/mihomo"
 OUTPUT="$ROOT/Vendor/MihomoCore.xcframework"
+GO_VERSION="1.26.5"
+GO_TOOL_ROOT="${CI_DERIVED_DATA_PATH:-${TMPDIR:-/tmp}}/swihomo-go"
+GO_ROOT="$GO_TOOL_ROOT/go$GO_VERSION"
 
 fail() {
     printf 'Xcode Cloud pre-build failed: %s\n' "$1" >&2
     exit 1
 }
 
+ensure_go() {
+    if [[ -x "$GO_ROOT/bin/go" ]]; then
+        export GOROOT="$GO_ROOT"
+        export PATH="$GOROOT/bin:$PATH"
+    else
+        local archive
+        local expected_sha256
+        local architecture
+
+        case "$(uname -m)" in
+            arm64)
+                architecture="arm64"
+                expected_sha256="efb87ff28af9a188d0536ef5d42e63dd52ba8263cd7344a993cc48dd11dedb6a"
+                ;;
+            x86_64)
+                architecture="amd64"
+                expected_sha256="6231d8d3b8f5552ec6cbf6d685bdd5482e1e703214b120e89b3bf0d7bf1ef725"
+                ;;
+            *) fail "Unsupported macOS architecture: $(uname -m)" ;;
+        esac
+
+        mkdir -p "$GO_TOOL_ROOT"
+        archive="$(mktemp "$GO_TOOL_ROOT/go$GO_VERSION.darwin-$architecture.XXXXXX")"
+        printf 'Downloading Go %s for %s...\n' "$GO_VERSION" "$architecture"
+        curl -fsSL --retry 3 "https://go.dev/dl/go$GO_VERSION.darwin-$architecture.tar.gz" --output "$archive"
+
+        [[ "$(shasum -a 256 "$archive" | awk '{ print $1 }')" == "$expected_sha256" ]] || \
+            fail "Downloaded Go archive did not match its expected SHA-256."
+
+        rm -rf "$GO_ROOT" "$GO_TOOL_ROOT/go"
+        tar -xzf "$archive" -C "$GO_TOOL_ROOT"
+        mv "$GO_TOOL_ROOT/go" "$GO_ROOT"
+        rm -f "$archive"
+
+        export GOROOT="$GO_ROOT"
+        export PATH="$GOROOT/bin:$PATH"
+    fi
+
+    case "$(go version)" in
+        "go version go$GO_VERSION "*) ;;
+        *) fail "Expected Go $GO_VERSION, found: $(go version)" ;;
+    esac
+    printf 'Using %s\n' "$(go version)"
+}
+
 [[ -f "$ROOT/.gitmodules" ]] || fail "Missing .gitmodules."
 command -v git >/dev/null || fail "Git is unavailable."
-command -v go >/dev/null || fail "Go is required to build the embedded mihomo core."
+command -v curl >/dev/null || fail "curl is unavailable."
+command -v shasum >/dev/null || fail "shasum is unavailable."
+command -v tar >/dev/null || fail "tar is unavailable."
+
+ensure_go
 
 git -C "$ROOT" submodule sync --recursive
 git -C "$ROOT" submodule update --init --recursive
