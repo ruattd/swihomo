@@ -75,6 +75,7 @@
 		200000000000000000000020 /* MihomoCore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = Vendor/MihomoCore.xcframework; sourceTree = SOURCE_ROOT; };
 		200000000000000000000021 /* PersistentLogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistentLogStore.swift; sourceTree = "<group>"; };
 		200000000000000000000022 /* MihomoCoreVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MihomoCoreVersion.swift; sourceTree = "<group>"; };
+		200000000000000000000023 /* Version.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Version.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -103,6 +104,7 @@
 			children = (
 				400000000000000000000002 /* Swihomo */,
 				400000000000000000000006 /* PacketTunnel */,
+				400000000000000000000009 /* Config */,
 				400000000000000000000007 /* Frameworks */,
 				400000000000000000000008 /* Products */,
 			);
@@ -179,6 +181,14 @@
 				200000000000000000000019 /* PacketTunnel.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		400000000000000000000009 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000023 /* Version.xcconfig */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -298,6 +308,7 @@
 /* Begin XCBuildConfiguration section */
 		800000000000000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 200000000000000000000023 /* Version.xcconfig */;
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
 				SWIFT_VERSION = 5.9;
@@ -306,6 +317,7 @@
 		};
 		800000000000000000000002 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 200000000000000000000023 /* Version.xcconfig */;
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
 				SWIFT_VERSION = 5.9;
@@ -319,7 +331,6 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = "Swihomo/Swihomo-iOS.entitlements";
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "Swihomo/Swihomo-macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 7P8CLHDH5G;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Swihomo;
@@ -329,7 +340,6 @@
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.swihomo.client;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
@@ -347,7 +357,6 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = "Swihomo/Swihomo-iOS.entitlements";
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "Swihomo/Swihomo-macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 7P8CLHDH5G;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Swihomo;
@@ -357,7 +366,6 @@
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.swihomo.client;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
@@ -376,7 +384,6 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "PacketTunnel/PacketTunnel-macOS.entitlements";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 7P8CLHDH5G;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
@@ -392,7 +399,6 @@
 				INFOPLIST_FILE = PacketTunnel/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.swihomo.client.PacketTunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
@@ -413,7 +419,6 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "PacketTunnel/PacketTunnel-macOS.entitlements";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 7P8CLHDH5G;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
@@ -429,7 +434,6 @@
 				INFOPLIST_FILE = PacketTunnel/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.swihomo.client.PacketTunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
