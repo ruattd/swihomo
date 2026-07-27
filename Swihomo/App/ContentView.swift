@@ -16,11 +16,7 @@ struct ContentView: View {
                     FeatureDetailView(section: section)
                 }
         } detail: {
-            ContentUnavailableView(
-                "Choose a Feature",
-                systemImage: "rectangle.split.2x1",
-                description: Text("Select a card from the home page to open its controls.")
-            )
+            FeatureDetailView(section: .connection)
         }
         .navigationSplitViewStyle(.balanced)
 #if os(macOS)
@@ -28,16 +24,55 @@ struct ContentView: View {
 #endif
         .overlay(alignment: .bottom) {
             if let error = model.errorMessage {
-                Text(error)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .padding(10)
-                    .background(.regularMaterial, in: Capsule())
-                    .padding()
+                ErrorBanner(message: error, dismiss: { model.dismissError() })
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .animation(reduceMotion ? nil : .snappy, value: model.errorMessage)
+    }
+}
+
+private struct ErrorBanner: View {
+    let message: String
+    let dismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.title3)
+                .foregroundStyle(.red)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Couldn't Complete Request")
+                    .font(.subheadline.weight(.semibold))
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 0)
+
+            Button(action: dismiss) {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.bold))
+                    .frame(width: 28, height: 28)
+                    .background(Color.primary.opacity(0.08), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss error")
+        }
+        .padding(14)
+        .liquidGlassCard(cornerRadius: 20)
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.red.opacity(0.22), lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.14), radius: 16, y: 6)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -469,6 +504,7 @@ private struct ProfileCard: View {
 
 private struct RemoteProfileSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var name = ""
     @State private var address = ""
     @State private var customUserAgent = ""
@@ -489,6 +525,10 @@ private struct RemoteProfileSheet: View {
             return nil
         }
         return url
+    }
+
+    private var pagePadding: CGFloat {
+        horizontalSizeClass == .compact ? 16 : 24
     }
 
     var body: some View {
@@ -560,7 +600,8 @@ private struct RemoteProfileSheet: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .padding(24)
+                .padding(.horizontal, pagePadding)
+                .padding(.vertical, pagePadding)
             }
             .navigationTitle("Online Profile")
             .toolbar {
@@ -582,7 +623,9 @@ private struct RemoteProfileSheet: View {
                 }
             }
         }
+#if os(macOS)
         .frame(minWidth: 460, minHeight: 430)
+#endif
         .onAppear { focusedField = .address }
     }
 }
@@ -590,11 +633,17 @@ private struct RemoteProfileSheet: View {
 private struct ProxiesView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var expandedGroupNames: Set<String> = []
     @State private var groupSortCriterion = ProxyGroupSortCriterion.original
     @State private var groupSortDirection = ProxySortDirection.ascending
     @State private var nodeSortCriterion = ProxyNodeSortCriterion.original
     @State private var nodeSortDirection = ProxySortDirection.ascending
+    @State private var isShowingSortOptions = false
+
+    private var usesCompactLayout: Bool {
+        horizontalSizeClass == .compact
+    }
 
     var body: some View {
         NavigationStack {
@@ -639,30 +688,41 @@ private struct ProxiesView: View {
             .navigationTitle("Proxies")
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
-                    Menu {
-                        Picker("Group order", selection: $groupSortCriterion) {
-                            ForEach(ProxyGroupSortCriterion.allCases) { criterion in
-                                Text(criterion.displayName).tag(criterion)
-                            }
+                    if usesCompactLayout {
+                        Button {
+                            isShowingSortOptions = true
+                        } label: {
+                            Label("Sort", systemImage: "arrow.up.arrow.down")
                         }
-                        Picker("Group direction", selection: $groupSortDirection) {
-                            ForEach(ProxySortDirection.allCases) { direction in
-                                Label(direction.displayName, systemImage: direction.systemImage).tag(direction)
+                    } else {
+                        Menu {
+                            Section("Proxy Group Cards") {
+                                Picker("Order", selection: $groupSortCriterion) {
+                                    ForEach(ProxyGroupSortCriterion.allCases) { criterion in
+                                        Text(criterion.displayName).tag(criterion)
+                                    }
+                                }
+                                Picker("Direction", selection: $groupSortDirection) {
+                                    ForEach(ProxySortDirection.allCases) { direction in
+                                        Label(direction.displayName, systemImage: direction.systemImage).tag(direction)
+                                    }
+                                }
                             }
-                        }
-                        Divider()
-                        Picker("Node order", selection: $nodeSortCriterion) {
-                            ForEach(ProxyNodeSortCriterion.allCases) { criterion in
-                                Text(criterion.displayName).tag(criterion)
+                            Section("Nodes Within Groups") {
+                                Picker("Order", selection: $nodeSortCriterion) {
+                                    ForEach(ProxyNodeSortCriterion.allCases) { criterion in
+                                        Text(criterion.displayName).tag(criterion)
+                                    }
+                                }
+                                Picker("Direction", selection: $nodeSortDirection) {
+                                    ForEach(ProxySortDirection.allCases) { direction in
+                                        Label(direction.displayName, systemImage: direction.systemImage).tag(direction)
+                                    }
+                                }
                             }
+                        } label: {
+                            Label("Sort", systemImage: "arrow.up.arrow.down")
                         }
-                        Picker("Node direction", selection: $nodeSortDirection) {
-                            ForEach(ProxySortDirection.allCases) { direction in
-                                Label(direction.displayName, systemImage: direction.systemImage).tag(direction)
-                            }
-                        }
-                    } label: {
-                        Label("Sort", systemImage: "arrow.up.arrow.down")
                     }
 
                     Button {
@@ -685,19 +745,31 @@ private struct ProxiesView: View {
             .onChange(of: model.proxyGroups.map(\.name)) { _, names in
                 synchronizeExpandedGroups(names)
             }
+            .sheet(isPresented: $isShowingSortOptions) {
+                ProxySortOptionsSheet(
+                    groupSortCriterion: $groupSortCriterion,
+                    groupSortDirection: $groupSortDirection,
+                    nodeSortCriterion: $nodeSortCriterion,
+                    nodeSortDirection: $nodeSortDirection
+                )
+            }
         }
     }
 
     private func toggle(_ group: MihomoProxyGroup) {
-        if expandedGroupNames.contains(group.id) {
-            expandedGroupNames.remove(group.id)
-        } else {
-            expandedGroupNames.insert(group.id)
+        withAnimation(reduceMotion ? nil : .snappy) {
+            if expandedGroupNames.contains(group.id) {
+                expandedGroupNames.remove(group.id)
+            } else {
+                expandedGroupNames.insert(group.id)
+            }
         }
     }
 
     private func test(_ group: MihomoProxyGroup) {
-        expandedGroupNames.insert(group.id)
+        withAnimation(reduceMotion ? nil : .snappy) {
+            _ = expandedGroupNames.insert(group.id)
+        }
         Task { await model.testDelays(in: group) }
     }
 
@@ -711,8 +783,55 @@ private struct ProxiesView: View {
     }
 }
 
+private struct ProxySortOptionsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var groupSortCriterion: ProxyGroupSortCriterion
+    @Binding var groupSortDirection: ProxySortDirection
+    @Binding var nodeSortCriterion: ProxyNodeSortCriterion
+    @Binding var nodeSortDirection: ProxySortDirection
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Proxy Group Cards") {
+                    Picker("Order", selection: $groupSortCriterion) {
+                        ForEach(ProxyGroupSortCriterion.allCases) { criterion in
+                            Text(criterion.displayName).tag(criterion)
+                        }
+                    }
+                    Picker("Direction", selection: $groupSortDirection) {
+                        ForEach(ProxySortDirection.allCases) { direction in
+                            Label(direction.displayName, systemImage: direction.systemImage).tag(direction)
+                        }
+                    }
+                }
+
+                Section("Nodes Within Every Group") {
+                    Picker("Order", selection: $nodeSortCriterion) {
+                        ForEach(ProxyNodeSortCriterion.allCases) { criterion in
+                            Text(criterion.displayName).tag(criterion)
+                        }
+                    }
+                    Picker("Direction", selection: $nodeSortDirection) {
+                        ForEach(ProxySortDirection.allCases) { direction in
+                            Label(direction.displayName, systemImage: direction.systemImage).tag(direction)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Sort Proxies")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
 private struct ProxyGroupSection: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     let group: MihomoProxyGroup
     let isExpanded: Bool
     let toggleExpansion: () -> Void
@@ -720,7 +839,19 @@ private struct ProxyGroupSection: View {
     let nodeSortCriterion: ProxyNodeSortCriterion
     let nodeSortDirection: ProxySortDirection
 
-    private let columns = [GridItem(.adaptive(minimum: 180, maximum: 300), spacing: 12)]
+    private var usesCompactLayout: Bool {
+        horizontalSizeClass == .compact
+    }
+
+    private var columns: [GridItem] {
+        [GridItem(
+            .adaptive(
+                minimum: usesCompactLayout ? 120 : 180,
+                maximum: usesCompactLayout ? 180 : 300
+            ),
+            spacing: usesCompactLayout ? 10 : 12
+        )]
+    }
 
     var body: some View {
         let isTesting = model.testingProxyGroupIDs.contains(group.id)
@@ -765,7 +896,7 @@ private struct ProxyGroupSection: View {
             }
 
             if isExpanded {
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+                LazyVGrid(columns: columns, alignment: .leading, spacing: usesCompactLayout ? 10 : 12) {
                     ForEach(
                         model.sortedCandidates(
                             in: group,
@@ -785,23 +916,32 @@ private struct ProxyGroupSection: View {
             }
         }
         .padding(14)
-        .liquidGlassCard()
+        .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.primary.opacity(0.09), lineWidth: 1)
+        }
     }
 }
 
 private struct ProxyNodeCard: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     let node: String
     let group: MihomoProxyGroup
     let delay: Int?
 
     private var isSelected: Bool { group.selected == node }
 
+    private var usesCompactLayout: Bool {
+        horizontalSizeClass == .compact
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 8) {
+        VStack(alignment: .leading, spacing: usesCompactLayout ? 8 : 12) {
+            HStack(alignment: .top, spacing: usesCompactLayout ? 6 : 8) {
                 Text(node)
-                    .font(.subheadline.weight(.semibold))
+                    .font(usesCompactLayout ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if isSelected {
@@ -816,7 +956,7 @@ private struct ProxyNodeCard: View {
                         .font(.caption.monospacedDigit().weight(.semibold))
                         .foregroundStyle(delay < 300 ? .green : .orange)
                 } else {
-                    Text("No delay result")
+                    Text(usesCompactLayout ? "No result" : "No delay result")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -828,16 +968,18 @@ private struct ProxyNodeCard: View {
                         .labelStyle(.iconOnly)
                 }
                 .liquidGlassButton()
+                .controlSize(usesCompactLayout ? .small : .regular)
             }
 
         }
-        .padding(12)
+        .padding(usesCompactLayout ? 10 : 12)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(isSelected ? Color.green.opacity(0.2) : Color.clear, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(isSelected ? Color.green.opacity(0.45) : Color.secondary.opacity(0.14), lineWidth: 1)
         }
+        .liquidGlassCard(cornerRadius: 16)
         .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .onTapGesture {
             guard !isSelected else { return }
@@ -850,6 +992,7 @@ private struct ProxyNodeCard: View {
 
 private struct OverridesView: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var draft = ProxyOverrides.default()
     @State private var isControllerSecretVisible = false
 
@@ -861,6 +1004,20 @@ private struct OverridesView: View {
 #else
         0
 #endif
+    }
+
+    private var usesCompactLayout: Bool {
+        horizontalSizeClass == .compact
+    }
+
+    private var saveButton: some View {
+        Button {
+            Task { await model.saveOverrides(draft) }
+        } label: {
+            Label("Save Overrides", systemImage: "checkmark")
+        }
+        .liquidGlassButton(prominent: true)
+        .disabled(draft == model.snapshot.overrides)
     }
 
     private func portField(_ title: String, value: Binding<Int>) -> some View {
@@ -912,6 +1069,19 @@ private struct OverridesView: View {
                             }
                             .labelsHidden()
                             .pickerStyle(.segmented)
+
+                            HStack {
+                                Label("Mihomo Log Level", systemImage: "text.line.first.and.arrowtriangle.forward")
+                                    .font(.subheadline.weight(.semibold))
+                                Spacer()
+                                Picker("Mihomo Log Level", selection: $draft.logLevel) {
+                                    ForEach(MihomoLogLevel.allCases) { level in
+                                        Text(level.displayName).tag(level)
+                                    }
+                                }
+                                .labelsHidden()
+                                .pickerStyle(.menu)
+                            }
                         }
 
                         Divider()
@@ -1035,27 +1205,38 @@ private struct OverridesView: View {
                     .frame(maxWidth: 860, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.horizontal, 20)
-                    .padding(.top, 88)
-                    .padding(.bottom, 20)
+                    .padding(.top, 20)
+                    .padding(.bottom, usesCompactLayout ? 120 : 88)
             }
-            .overlay(alignment: .top) {
-                HStack(alignment: .center, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(draft == model.snapshot.overrides ? "All changes saved" : "Unsaved changes")
-                            .font(.subheadline.weight(.semibold))
-                        Text("Reconnect after saving. Invalid YAML prevents mihomo from starting.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+            .overlay(alignment: .bottom) {
+                Group {
+                    if usesCompactLayout {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(draft == model.snapshot.overrides ? "All changes saved" : "Unsaved changes")
+                                .font(.subheadline.weight(.semibold))
+                            HStack(alignment: .bottom, spacing: 12) {
+                                Text("Log level updates live. Other changes apply after reconnect; invalid YAML prevents mihomo from starting.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                                Spacer(minLength: 8)
+                                saveButton
+                            }
+                        }
+                    } else {
+                        HStack(alignment: .center, spacing: 16) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(draft == model.snapshot.overrides ? "All changes saved" : "Unsaved changes")
+                                    .font(.subheadline.weight(.semibold))
+                                Text("Log level updates live. Other changes apply after reconnect; invalid YAML prevents mihomo from starting.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            Spacer()
+                            saveButton
+                        }
                     }
-                    Spacer()
-                    Button {
-                        Task { await model.saveOverrides(draft) }
-                    } label: {
-                        Label("Save Overrides", systemImage: "checkmark")
-                    }
-                    .liquidGlassButton(prominent: true)
-                    .disabled(draft == model.snapshot.overrides)
                 }
                 .padding(14)
                 .liquidGlassCard()
@@ -1063,7 +1244,7 @@ private struct OverridesView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 20)
                 .padding(.trailing, verticalScrollerInset)
-                .padding(.top, 10)
+                .padding(.bottom, 10)
             }
             .navigationTitle("Overrides")
             .onAppear { draft = model.snapshot.overrides }
@@ -1204,6 +1385,7 @@ private struct ExternalResourceRow: View {
                             .controlSize(.small)
                     } else {
                         Label("Update", systemImage: "arrow.down.circle")
+                            .foregroundStyle(.white)
                     }
                 }
                 .liquidGlassButton(prominent: true)
@@ -1214,7 +1396,6 @@ private struct ExternalResourceRow: View {
                 Button("Replace", action: replace)
                     .liquidGlassButton()
                     .disabled(isUpdating)
-                Spacer()
             }
         }
         .padding(.vertical, 4)
@@ -1429,11 +1610,11 @@ private struct LogEntryRow: View {
 
 private extension View {
     @ViewBuilder
-    func liquidGlassCard() -> some View {
+    func liquidGlassCard(cornerRadius: CGFloat = 24) -> some View {
         if #available(iOS 26.0, macOS 26.0, *) {
-            glassEffect(.regular.interactive(), in: .rect(cornerRadius: 24))
+            glassEffect(.regular.interactive(), in: .rect(cornerRadius: cornerRadius))
         } else {
-            background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            background(.regularMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         }
     }
 

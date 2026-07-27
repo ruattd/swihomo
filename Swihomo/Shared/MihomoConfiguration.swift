@@ -34,6 +34,7 @@ enum MihomoConfigurationBuilder {
         let secret = yamlQuoted(overrides.controllerSecret)
         return """
         mode: \(overrides.mode.rawValue)
+        log-level: \(overrides.logLevel.rawValue)
         mixed-port: \(overrides.mixedPort)
         allow-lan: \(overrides.allowLAN)
         ipv6: \(overrides.ipv6Enabled)

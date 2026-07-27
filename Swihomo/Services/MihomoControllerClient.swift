@@ -88,6 +88,24 @@ actor MihomoControllerClient {
         )
     }
 
+    func updateLogLevel(_ level: MihomoLogLevel, using overrides: ProxyOverrides) async throws {
+        struct Configuration: Encodable {
+            let logLevel: MihomoLogLevel
+
+            enum CodingKeys: String, CodingKey {
+                case logLevel = "log-level"
+            }
+        }
+
+        let body = try JSONEncoder().encode(Configuration(logLevel: level))
+        let _: EmptyResponse = try await request(
+            path: "configs",
+            method: "PATCH",
+            overrides: overrides,
+            body: body
+        )
+    }
+
     private func request<Response: Decodable>(
         path: String,
         method: String,

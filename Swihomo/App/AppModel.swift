@@ -18,14 +18,14 @@ final class AppModel: ObservableObject {
     private let profiles = SharedProfileRepository()
     private let tunnel = TunnelController()
     private lazy var controller = MihomoControllerClient(tunnel: tunnel)
-    private let logStore = PersistentLogStore(directoryName: "AppLogs")
+    private var logStore: PersistentLogStore?
     private var coreLogPollingTask: Task<Void, Never>?
+    private var errorDismissalTask: Task<Void, Never>?
     private var proxyRefreshGeneration = 0
     private var originalProxyGroupIndices: [String: Int] = [:]
     private var originalProxyCandidateIndices: [String: [String: Int]] = [:]
 
     init() {
-        logEntries = logStore.entries()
         tunnel.onStatusChanged = { [weak self] status in
             self?.tunnelStatus = status
             self?.record(.info, module: "Tunnel", "Status changed to \(status.rawValue).")
@@ -67,6 +67,13 @@ final class AppModel: ObservableObject {
     }
 
     func load() async {
+        if logStore == nil {
+            let store = await Task.detached(priority: .utility) {
+                PersistentLogStore(directoryName: "AppLogs")
+            }.value
+            logStore = store
+            logEntries = store.entries()
+        }
         isLoading = true
         defer { isLoading = false }
         do {
@@ -128,9 +135,24 @@ final class AppModel: ObservableObject {
         tunnel.disconnect()
     }
 
+    func dismissError() {
+        errorDismissalTask?.cancel()
+        errorDismissalTask = nil
+        errorMessage = nil
+    }
+
     func saveOverrides(_ overrides: ProxyOverrides) async {
+        let previousOverrides = snapshot.overrides
         await perform(module: "Configuration", "Saved runtime overrides.") { [self] in
             snapshot = try await profiles.saveOverrides(overrides)
+            guard tunnelStatus == .connected, previousOverrides.logLevel != overrides.logLevel else { return }
+
+            do {
+                try await controller.updateLogLevel(overrides.logLevel, using: previousOverrides)
+                record(.info, module: "Configuration", "Applied log level to the running core.")
+            } catch {
+                record(.warning, module: "Configuration", "Saved log level. Reconnect to apply it to the running core.")
+            }
         }
     }
 
@@ -312,7 +334,7 @@ final class AppModel: ObservableObject {
     }
 
     private func reloadCoreLogs(showErrors: Bool) async {
-        guard tunnelStatus == .connected else { return }
+        guard tunnelStatus == .connected, let logStore else { return }
         do {
             let coreLogs = try await tunnel.coreLogs()
             logEntries = logStore.replace(source: .core, with: coreLogs)
@@ -422,11 +444,19 @@ final class AppModel: ObservableObject {
 
     private func present(_ error: Error, module: String) {
         let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        errorDismissalTask?.cancel()
         errorMessage = message
+        errorDismissalTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.errorMessage = nil
+            self?.errorDismissalTask = nil
+        }
         record(.error, module: module, detailedError(error, message: message))
     }
 
     private func record(_ level: LogLevel, module: String, _ message: String) {
+        guard let logStore else { return }
         logEntries = logStore.append(source: .app, module: module, level: level, message: message)
     }
 

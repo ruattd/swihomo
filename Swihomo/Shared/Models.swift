@@ -44,8 +44,20 @@ enum ProxyMode: String, Codable, CaseIterable, Identifiable {
     var displayName: String { rawValue.capitalized }
 }
 
+enum MihomoLogLevel: String, Codable, CaseIterable, Identifiable {
+    case debug
+    case info
+    case warning
+    case error
+    case silent
+
+    var id: Self { self }
+    var displayName: String { rawValue.capitalized }
+}
+
 struct ProxyOverrides: Codable, Equatable {
     var mode: ProxyMode
+    var logLevel: MihomoLogLevel
     var mixedPort: Int
     var allowLAN: Bool
     var ipv6Enabled: Bool
@@ -56,6 +68,7 @@ struct ProxyOverrides: Codable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case mode
+        case logLevel
         case mixedPort
         case allowLAN
         case ipv6Enabled
@@ -67,6 +80,7 @@ struct ProxyOverrides: Codable, Equatable {
 
     init(
         mode: ProxyMode,
+        logLevel: MihomoLogLevel = .info,
         mixedPort: Int,
         allowLAN: Bool,
         ipv6Enabled: Bool,
@@ -76,6 +90,7 @@ struct ProxyOverrides: Codable, Equatable {
         customYAML: String = ""
     ) {
         self.mode = mode
+        self.logLevel = logLevel
         self.mixedPort = mixedPort
         self.allowLAN = allowLAN
         self.ipv6Enabled = ipv6Enabled
@@ -88,6 +103,7 @@ struct ProxyOverrides: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         mode = try container.decode(ProxyMode.self, forKey: .mode)
+        logLevel = try container.decodeIfPresent(MihomoLogLevel.self, forKey: .logLevel) ?? .info
         mixedPort = try container.decode(Int.self, forKey: .mixedPort)
         allowLAN = try container.decode(Bool.self, forKey: .allowLAN)
         ipv6Enabled = try container.decode(Bool.self, forKey: .ipv6Enabled)
@@ -100,6 +116,7 @@ struct ProxyOverrides: Codable, Equatable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(mode, forKey: .mode)
+        try container.encode(logLevel, forKey: .logLevel)
         try container.encode(mixedPort, forKey: .mixedPort)
         try container.encode(allowLAN, forKey: .allowLAN)
         try container.encode(ipv6Enabled, forKey: .ipv6Enabled)
@@ -112,6 +129,7 @@ struct ProxyOverrides: Codable, Equatable {
     static func `default`() -> ProxyOverrides {
         ProxyOverrides(
             mode: .rule,
+            logLevel: .info,
             mixedPort: 7890,
             allowLAN: false,
             ipv6Enabled: false,
