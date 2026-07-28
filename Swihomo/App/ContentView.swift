@@ -281,8 +281,8 @@ private struct FeatureDetailView: View {
 private struct DashboardView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var connectionSortCriterion = ConnectionSortCriterion.process
-    @State private var connectionSortDirection = ProxySortDirection.ascending
+    @AppStorage("connectionSortCriterion") private var connectionSortCriterion = ConnectionSortCriterion.process
+    @AppStorage("connectionSortDirection") private var connectionSortDirection = ProxySortDirection.ascending
     @State private var selectedConnection: MihomoConnectionActivity?
     @State private var connectionSearchText = ""
     @State private var showsBackToTopButton = false
@@ -669,11 +669,11 @@ private struct ConnectionDetailView: View {
             Section("Routing") {
                 DetailValueRow(label: "Rule", value: connection.rule.isEmpty ? "Not reported" : connection.rule)
                 DetailValueRow(label: "Rule Payload", value: connection.rulePayload.isEmpty ? "Not reported" : connection.rulePayload)
-                if !connection.chains.isEmpty {
-                    DetailValueRow(label: "Proxy Chain", value: connection.chains.joined(separator: " > "))
+                if !connection.proxyChainDescription.isEmpty {
+                    DetailValueRow(label: "Proxy Chain", value: connection.proxyChainDescription)
                 }
-                if !connection.providerChains.isEmpty {
-                    DetailValueRow(label: "Provider Chain", value: connection.providerChains.joined(separator: " > "))
+                if !connection.providerChainDescription.isEmpty {
+                    DetailValueRow(label: "Provider Chain", value: connection.providerChainDescription)
                 }
             }
 
@@ -1076,17 +1076,11 @@ private struct RemoteProfileSheet: View {
 private struct ProxiesView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var expandedGroupNames: Set<String> = []
-    @State private var groupSortCriterion = ProxyGroupSortCriterion.original
-    @State private var groupSortDirection = ProxySortDirection.ascending
-    @State private var nodeSortCriterion = ProxyNodeSortCriterion.original
-    @State private var nodeSortDirection = ProxySortDirection.ascending
-    @State private var isShowingSortOptions = false
-
-    private var usesCompactLayout: Bool {
-        horizontalSizeClass == .compact
-    }
+    @AppStorage("proxyGroupSortCriterion") private var groupSortCriterion = ProxyGroupSortCriterion.original
+    @AppStorage("proxyGroupSortDirection") private var groupSortDirection = ProxySortDirection.ascending
+    @AppStorage("proxyNodeSortCriterion") private var nodeSortCriterion = ProxyNodeSortCriterion.original
+    @AppStorage("proxyNodeSortDirection") private var nodeSortDirection = ProxySortDirection.ascending
 
     var body: some View {
         NavigationStack {
@@ -1131,41 +1125,58 @@ private struct ProxiesView: View {
             .navigationTitle("Proxies")
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
-                    if usesCompactLayout {
-                        Button {
-                            isShowingSortOptions = true
-                        } label: {
-                            Label("Sort", systemImage: "arrow.up.arrow.down")
-                        }
-                    } else {
-                        Menu {
-                            Section("Proxy Group Cards") {
-                                Picker("Order", selection: $groupSortCriterion) {
-                                    ForEach(ProxyGroupSortCriterion.allCases) { criterion in
-                                        Text(criterion.displayName).tag(criterion)
-                                    }
-                                }
-                                Picker("Direction", selection: $groupSortDirection) {
-                                    ForEach(ProxySortDirection.allCases) { direction in
-                                        Label(direction.displayName, systemImage: direction.systemImage).tag(direction)
-                                    }
+                    Menu {
+                        Section("Proxy Group Cards: Sort by") {
+                            ForEach(ProxyGroupSortCriterion.allCases) { criterion in
+                                Button {
+                                    groupSortCriterion = criterion
+                                } label: {
+                                    Label(
+                                        criterion.displayName,
+                                        systemImage: groupSortCriterion == criterion ? "checkmark" : "circle"
+                                    )
                                 }
                             }
-                            Section("Nodes Within Groups") {
-                                Picker("Order", selection: $nodeSortCriterion) {
-                                    ForEach(ProxyNodeSortCriterion.allCases) { criterion in
-                                        Text(criterion.displayName).tag(criterion)
-                                    }
-                                }
-                                Picker("Direction", selection: $nodeSortDirection) {
-                                    ForEach(ProxySortDirection.allCases) { direction in
-                                        Label(direction.displayName, systemImage: direction.systemImage).tag(direction)
-                                    }
+                        }
+                        Section("Proxy Group Cards: Direction") {
+                            ForEach(ProxySortDirection.allCases) { direction in
+                                Button {
+                                    groupSortDirection = direction
+                                } label: {
+                                    Label(
+                                        direction.displayName,
+                                        systemImage: groupSortDirection == direction ? "checkmark" : direction.systemImage
+                                    )
                                 }
                             }
-                        } label: {
-                            Label("Sort", systemImage: "arrow.up.arrow.down")
                         }
+                        Section("Nodes Within Groups: Sort by") {
+                            ForEach(ProxyNodeSortCriterion.allCases) { criterion in
+                                Button {
+                                    nodeSortCriterion = criterion
+                                } label: {
+                                    Label(
+                                        criterion.displayName,
+                                        systemImage: nodeSortCriterion == criterion ? "checkmark" : "circle"
+                                    )
+                                }
+                            }
+                        }
+                        Section("Nodes Within Groups: Direction") {
+                            ForEach(ProxySortDirection.allCases) { direction in
+                                Button {
+                                    nodeSortDirection = direction
+                                } label: {
+                                    Label(
+                                        direction.displayName,
+                                        systemImage: nodeSortDirection == direction ? "checkmark" : direction.systemImage
+                                    )
+                                }
+                            }
+                        }
+                    } label: {
+                        Label(groupSortCriterion.displayName, systemImage: groupSortDirection.systemImage)
+                            .font(.subheadline.weight(.medium))
                     }
 
                     Button {
@@ -1187,14 +1198,6 @@ private struct ProxiesView: View {
             }
             .onChange(of: model.proxyGroups.map(\.name)) { _, names in
                 synchronizeExpandedGroups(names)
-            }
-            .sheet(isPresented: $isShowingSortOptions) {
-                ProxySortOptionsSheet(
-                    groupSortCriterion: $groupSortCriterion,
-                    groupSortDirection: $groupSortDirection,
-                    nodeSortCriterion: $nodeSortCriterion,
-                    nodeSortDirection: $nodeSortDirection
-                )
             }
         }
     }
@@ -1223,52 +1226,6 @@ private struct ProxiesView: View {
             return
         }
         expandedGroupNames.formIntersection(availableNames)
-    }
-}
-
-private struct ProxySortOptionsSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @Binding var groupSortCriterion: ProxyGroupSortCriterion
-    @Binding var groupSortDirection: ProxySortDirection
-    @Binding var nodeSortCriterion: ProxyNodeSortCriterion
-    @Binding var nodeSortDirection: ProxySortDirection
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Proxy Group Cards") {
-                    Picker("Order", selection: $groupSortCriterion) {
-                        ForEach(ProxyGroupSortCriterion.allCases) { criterion in
-                            Text(criterion.displayName).tag(criterion)
-                        }
-                    }
-                    Picker("Direction", selection: $groupSortDirection) {
-                        ForEach(ProxySortDirection.allCases) { direction in
-                            Label(direction.displayName, systemImage: direction.systemImage).tag(direction)
-                        }
-                    }
-                }
-
-                Section("Nodes Within Every Group") {
-                    Picker("Order", selection: $nodeSortCriterion) {
-                        ForEach(ProxyNodeSortCriterion.allCases) { criterion in
-                            Text(criterion.displayName).tag(criterion)
-                        }
-                    }
-                    Picker("Direction", selection: $nodeSortDirection) {
-                        ForEach(ProxySortDirection.allCases) { direction in
-                            Label(direction.displayName, systemImage: direction.systemImage).tag(direction)
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Sort Proxies")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
-        }
     }
 }
 
@@ -1954,6 +1911,7 @@ private struct LogsView: View {
     @State private var filter = LogFilter.all
     @State private var levelFilter = LogLevelFilter.all
     @State private var searchText = ""
+    @State private var showingClearLogsConfirmation = false
 
     private var entries: [LogEntry] {
         model.logEntries
@@ -2003,7 +1961,17 @@ private struct LogsView: View {
             .navigationTitle("Logs")
             .searchable(text: $searchText, prompt: "Search module, message, or level")
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    Menu {
+                        Button(role: .destructive) {
+                            showingClearLogsConfirmation = true
+                        } label: {
+                            Label("Clear Logs", systemImage: "trash")
+                        }
+                    } label: {
+                        Label("More", systemImage: "ellipsis.circle")
+                    }
+
                     Button {
                         Task { await model.reloadLogs() }
                     } label: {
@@ -2011,6 +1979,24 @@ private struct LogsView: View {
                     }
                     .disabled(!model.isConnected)
                 }
+            }
+            .confirmationDialog(
+                "Clear Logs?",
+                isPresented: $showingClearLogsConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Clear App Logs", role: .destructive) {
+                    Task { await model.clearLogs(source: .app) }
+                }
+                Button("Clear Core Logs", role: .destructive) {
+                    Task { await model.clearLogs(source: .core) }
+                }
+                Button("Clear All Logs", role: .destructive) {
+                    Task { await model.clearLogs() }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Choose which logs to permanently remove.")
             }
             .task { await model.reloadLogs() }
         }

@@ -28,6 +28,7 @@ final class AppModel: ObservableObject {
     private var isConnectionMonitoringEnabled = true
     private var errorDismissalTask: Task<Void, Never>?
     private var proxyRefreshGeneration = 0
+    private var coreLogRefreshGeneration = 0
     private var connectionRefreshGeneration = 0
     private var originalProxyGroupIndices: [String: Int] = [:]
     private var originalProxyCandidateIndices: [String: [String: Int]] = [:]
@@ -335,6 +336,26 @@ final class AppModel: ObservableObject {
         await reloadCoreLogs(showErrors: true)
     }
 
+    func clearLogs(source: LogSource? = nil) async {
+        guard let logStore else { return }
+
+        if source != .app {
+            coreLogRefreshGeneration += 1
+            guard tunnelStatus == .connected else {
+                present(ClientError.tunnelUnavailable, module: "Logs")
+                return
+            }
+            do {
+                try await tunnel.clearCoreLogs()
+            } catch {
+                present(error, module: "Logs")
+                return
+            }
+        }
+
+        logEntries = logStore.clear(source: source)
+    }
+
     func reloadConnections(showErrors: Bool = true) async {
         guard isConnectionMonitoringEnabled, tunnelStatus == .connected else { return }
 
@@ -464,8 +485,11 @@ final class AppModel: ObservableObject {
 
     private func reloadCoreLogs(showErrors: Bool) async {
         guard tunnelStatus == .connected, let logStore else { return }
+        coreLogRefreshGeneration += 1
+        let generation = coreLogRefreshGeneration
         do {
             let coreLogs = try await tunnel.coreLogs()
+            guard generation == coreLogRefreshGeneration else { return }
             logEntries = logStore.replace(source: .core, with: coreLogs)
         } catch where showErrors {
             present(error, module: "Logs")

@@ -229,6 +229,10 @@ enum CoreLogStore {
     static func entries() -> [LogEntry] {
         store.entries()
     }
+
+    static func clear() {
+        _ = store.clear()
+    }
 }
 
 @_cdecl("swihomo_write_packet")

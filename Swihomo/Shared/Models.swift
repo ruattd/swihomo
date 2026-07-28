@@ -352,9 +352,18 @@ struct MihomoConnection: Decodable, Identifiable, Hashable {
             .joined(separator: ", ")
     }
 
+    var proxyChainDescription: String {
+        chains.reversed().joined(separator: " > ")
+    }
+
+    var providerChainDescription: String {
+        providerChains
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .joined(separator: " > ")
+    }
+
     var routingDescription: String {
-        let chain = chains.joined(separator: " > ")
-        return [ruleDescription, chain]
+        [ruleDescription, proxyChainDescription]
             .filter { !$0.isEmpty }
             .joined(separator: " -> ")
     }
@@ -535,6 +544,7 @@ struct ExternalResource: Codable, Identifiable, Hashable {
 enum TunnelProviderOperation: String, Codable {
     case controller
     case coreLogs
+    case clearCoreLogs
     case proxyGroupOrder
     case externalResources
     case readExternalResource

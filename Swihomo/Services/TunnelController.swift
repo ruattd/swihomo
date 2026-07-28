@@ -82,6 +82,12 @@ final class TunnelController {
         return response.coreLogs ?? []
     }
 
+    func clearCoreLogs() async throws {
+        _ = try await sendProviderRequest(
+            TunnelProviderRequest(operation: .clearCoreLogs)
+        )
+    }
+
     func proxyGroupOrder() async throws -> [String] {
         let response = try await sendProviderRequest(
             TunnelProviderRequest(operation: .proxyGroupOrder)
@@ -136,7 +142,7 @@ final class TunnelController {
                     resourceContents: nil,
                     errorMessage: nil
                 )
-            case .coreLogs, .proxyGroupOrder, .externalResources, .readExternalResource, .writeExternalResource:
+            case .coreLogs, .clearCoreLogs, .proxyGroupOrder, .externalResources, .readExternalResource, .writeExternalResource:
                 throw ClientError.controllerRequestFailed(
                     "This operation requires reconnecting the Packet Tunnel with the current extension build."
                 )

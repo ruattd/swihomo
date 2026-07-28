@@ -56,6 +56,19 @@ final class PersistentLogStore: @unchecked Sendable {
         }
     }
 
+    @discardableResult
+    func clear(source: LogSource? = nil) -> [LogEntry] {
+        queue.sync {
+            if let source {
+                storedEntries.removeAll { $0.source == source }
+            } else {
+                storedEntries = []
+            }
+            persistLocked()
+            return storedEntries
+        }
+    }
+
     private func appendLocked(_ entry: LogEntry) {
         storedEntries.append(entry)
         trimLocked()

@@ -70,6 +70,16 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                     resourceContents: nil,
                     errorMessage: nil
                 )
+            case .clearCoreLogs:
+                CoreLogStore.clear()
+                return TunnelProviderResponse(
+                    controllerResponse: nil,
+                    coreLogs: nil,
+                    proxyGroupOrder: nil,
+                    externalResources: nil,
+                    resourceContents: nil,
+                    errorMessage: nil
+                )
             case .proxyGroupOrder:
                 return TunnelProviderResponse(
                     controllerResponse: nil,
