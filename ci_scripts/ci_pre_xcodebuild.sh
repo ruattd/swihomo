@@ -58,6 +58,46 @@ ensure_go() {
     printf 'Using %s\n' "$(go version)"
 }
 
+sync_mihomo_version() {
+    local version_file="$CORE_ROOT/constant/version.go"
+    local latest_tag=""
+    local tag
+    local version
+    local temporary_file
+    local line
+    local updated=false
+
+    [[ -f "$version_file" ]] || fail "mihomo version.go is missing."
+
+    git -C "$CORE_ROOT" fetch --tags --force origin
+    while IFS= read -r tag; do
+        [[ "$tag" == "Prerelease-Alpha" ]] && continue
+        latest_tag="$tag"
+        break
+    done < <(git -C "$CORE_ROOT" tag --list --sort=-version:refname)
+
+    [[ -n "$latest_tag" ]] || fail "No non-Alpha mihomo release tags were found."
+    version="${latest_tag#v}"
+    temporary_file="$(mktemp "$version_file.XXXXXX")"
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ "$line" =~ ^([[:space:]]*Version[[:space:]]*=[[:space:]]*\")[^\"]*(\".*)$ ]]; then
+            printf '%s%s%s\n' "${BASH_REMATCH[1]}" "$version" "${BASH_REMATCH[2]}" >> "$temporary_file"
+            updated=true
+        else
+            printf '%s\n' "$line" >> "$temporary_file"
+        fi
+    done < "$version_file"
+
+    [[ "$updated" == true ]] || {
+        rm -f "$temporary_file"
+        fail "mihomo version.go does not declare a Version value."
+    }
+
+    mv "$temporary_file" "$version_file"
+    printf 'Set embedded mihomo version to %s from tag %s\n' "$version" "$latest_tag"
+}
+
 [[ -f "$ROOT/.gitmodules" ]] || fail "Missing .gitmodules."
 command -v git >/dev/null || fail "Git is unavailable."
 command -v curl >/dev/null || fail "curl is unavailable."
@@ -80,6 +120,7 @@ while IFS= read -r line; do
 done <<< "$SUBMODULE_STATUS"
 
 [[ -f "$CORE_ROOT/go.mod" ]] || fail "mihomo submodule is missing its Go module."
+sync_mihomo_version
 
 printf 'Building embedded mihomo core...\n'
 bash "$ROOT/scripts/build-mihomo-core.sh"
