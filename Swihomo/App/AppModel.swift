@@ -27,6 +27,7 @@ final class AppModel: ObservableObject {
     // ContentView opens the Connection detail by default until the user navigates away.
     private var isConnectionMonitoringEnabled = true
     private var errorDismissalTask: Task<Void, Never>?
+    private var reconnectProfile: Profile?
     private var proxyRefreshGeneration = 0
     private var coreLogRefreshGeneration = 0
     private var connectionRefreshGeneration = 0
@@ -66,6 +67,11 @@ final class AppModel: ObservableObject {
                 self?.connectionTransferSamples = [:]
                 self?.closingConnectionIDs = []
                 self?.isClosingAllConnections = false
+
+                if (status == .disconnected || status == .invalid), let profile = self?.reconnectProfile {
+                    self?.reconnectProfile = nil
+                    Task { await self?.connect(profile: profile) }
+                }
             }
         }
     }
@@ -158,17 +164,25 @@ final class AppModel: ObservableObject {
         tunnel.disconnect()
     }
 
+    func reconnect() {
+        guard tunnelStatus == .connected, let profile = snapshot.activeProfile else { return }
+        reconnectProfile = profile
+        record(.info, module: "Tunnel", "Requested reconnect.")
+        tunnel.disconnect()
+    }
+
     func dismissError() {
         errorDismissalTask?.cancel()
         errorDismissalTask = nil
         errorMessage = nil
     }
 
-    func saveOverrides(_ overrides: ProxyOverrides) async {
+    func saveOverrides(_ overrides: ProxyOverrides) async -> Bool {
         let previousOverrides = snapshot.overrides
-        await perform(module: "Configuration", "Saved runtime overrides.") { [self] in
+        do {
             snapshot = try await profiles.saveOverrides(overrides)
-            guard tunnelStatus == .connected else { return }
+            record(.info, module: "Configuration", "Saved runtime overrides.")
+            guard tunnelStatus == .connected else { return true }
 
             if previousOverrides.logLevel != overrides.logLevel {
                 do {
@@ -187,6 +201,10 @@ final class AppModel: ObservableObject {
                     record(.warning, module: "Configuration", "Saved routing mode. Reconnect to apply it to the running core.")
                 }
             }
+            return true
+        } catch {
+            present(error, module: "Configuration")
+            return false
         }
     }
 

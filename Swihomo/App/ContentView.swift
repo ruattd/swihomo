@@ -1312,7 +1312,7 @@ private struct ProxyGroupSection: View {
                         )
                     }
                 }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .transition(.opacity)
             }
         }
         .padding(14)
@@ -1321,6 +1321,7 @@ private struct ProxyGroupSection: View {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(Color.primary.opacity(0.09), lineWidth: 1)
         }
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 }
 
@@ -1395,6 +1396,7 @@ private struct OverridesView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var draft = ProxyOverrides.default()
     @State private var isControllerSecretVisible = false
+    @State private var showingReconnectConfirmation = false
 
     private var verticalScrollerInset: CGFloat {
 #if os(macOS)
@@ -1410,9 +1412,25 @@ private struct OverridesView: View {
         horizontalSizeClass == .compact
     }
 
+    private var changesRequireReconnect: Bool {
+        let saved = model.snapshot.overrides
+        return draft.mixedPort != saved.mixedPort
+            || draft.allowLAN != saved.allowLAN
+            || draft.ipv6Enabled != saved.ipv6Enabled
+            || draft.dnsEnabled != saved.dnsEnabled
+            || draft.controllerPort != saved.controllerPort
+            || draft.controllerSecret != saved.controllerSecret
+            || draft.customYAML != saved.customYAML
+    }
+
     private var saveButton: some View {
         Button {
-            Task { await model.saveOverrides(draft) }
+            let overrides = draft
+            let requiresReconnect = changesRequireReconnect
+            Task {
+                guard await model.saveOverrides(overrides), requiresReconnect, model.tunnelStatus == .connected else { return }
+                showingReconnectConfirmation = true
+            }
         } label: {
             Label("Save Overrides", systemImage: "checkmark")
         }
@@ -1650,6 +1668,18 @@ private struct OverridesView: View {
             .onAppear { draft = model.snapshot.overrides }
             .onChange(of: model.snapshot.overrides) { _, overrides in
                 draft = overrides
+            }
+            .confirmationDialog(
+                "Reconnect to Apply Changes?",
+                isPresented: $showingReconnectConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Reconnect") {
+                    model.reconnect()
+                }
+                Button("Not Now", role: .cancel) {}
+            } message: {
+                Text("Your saved network, controller, DNS, or custom YAML changes require reconnecting to take effect.")
             }
         }
     }
