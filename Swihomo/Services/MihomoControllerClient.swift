@@ -115,6 +115,14 @@ actor MihomoControllerClient {
         )
     }
 
+    func updateGeoData(using overrides: ProxyOverrides) async throws {
+        let _: EmptyResponse = try await request(
+            path: "upgrade/geo",
+            method: "POST",
+            overrides: overrides
+        )
+    }
+
     func externalResourceDetails(using overrides: ProxyOverrides) async throws -> [String: MihomoProviderDetails] {
         async let proxyProviderDetailsTask = providerDetails(
             path: "providers/proxies",

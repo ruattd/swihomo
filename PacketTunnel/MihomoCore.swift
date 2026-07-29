@@ -194,10 +194,16 @@ enum MihomoCoreResources {
             throw MihomoCoreError(message: lastError())
         }
         defer { SwihomoCoreFreeString(contents) }
-        return try JSONDecoder().decode(
+        var resources = try JSONDecoder().decode(
             [ExternalResource].self,
             from: Data(String(cString: contents).utf8)
         )
+        guard let homeDirectory = try? EmbeddedMihomoCore.homeDirectory() else { return resources }
+        for index in resources.indices where resources[index].kind == .geoData {
+            let fileURL = homeDirectory.appendingPathComponent(resources[index].path)
+            resources[index].updatedAt = (try? FileManager.default.attributesOfItem(atPath: fileURL.path))?[.modificationDate] as? Date
+        }
+        return resources
     }
 
     static func read(identifier: String) throws -> Data {

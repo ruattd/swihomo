@@ -1872,7 +1872,7 @@ private struct ExternalResourcesView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
-                    Text("Provider cache files and the GeoIP or GeoSite databases required by this profile appear here. Replace a geodata file, then reconnect to load it.")
+                    Text("Provider cache files and the GeoIP or GeoSite databases required by this profile appear here. Update refreshes enabled geodata databases; replace a file, then reconnect to load it.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .padding(14)
@@ -1991,60 +1991,59 @@ private struct ExternalResourceCard: View {
                         .foregroundStyle(resource.isPresent ? .green : .orange)
                 }
 
-                if resource.kind == .geoData {
-                    Label(
-                        resource.isPresent ? "Cached in MihomoCore" : "Not cached yet",
-                        systemImage: resource.isPresent ? "internaldrive.fill" : "exclamationmark.triangle"
-                    )
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                } else {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 8) {
-                            Label("Last updated", systemImage: "clock")
-                            Spacer()
-                            if let updatedAt = resource.updatedAt {
-                                Text(updatedAt, format: .dateTime.year().month().day().hour().minute())
-                            } else {
-                                Text("Unavailable")
-                            }
-                        }
+                VStack(alignment: .leading, spacing: 6) {
+                    if resource.kind == .geoData {
+                        Label(
+                            resource.isPresent ? "Cached in MihomoCore" : "Not cached yet",
+                            systemImage: resource.isPresent ? "internaldrive.fill" : "exclamationmark.triangle"
+                        )
+                    }
 
-                        if let subscriptionInfo {
-                            HStack(spacing: 8) {
-                                Label("Subscription", systemImage: "chart.pie.fill")
-                                Spacer()
-                                subscriptionSummary(subscriptionInfo)
-                                    .lineLimit(1)
-                            }
-                        } else if let ruleCount = resource.ruleCount {
-                            HStack(spacing: 8) {
-                                Label("Rules", systemImage: "list.number")
-                                Spacer()
-                                Text("\(ruleCount) rules")
-                            }
+                    HStack(spacing: 8) {
+                        Label("Last updated", systemImage: "clock")
+                        Spacer()
+                        if let updatedAt = resource.updatedAt {
+                            Text(updatedAt, format: .dateTime.year().month().day().hour().minute())
+                        } else {
+                            Text("Unavailable")
                         }
                     }
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+
+                    if resource.kind != .geoData, let subscriptionInfo {
+                        HStack(spacing: 8) {
+                            Label("Subscription", systemImage: "chart.pie.fill")
+                            Spacer()
+                            subscriptionSummary(subscriptionInfo)
+                                .lineLimit(1)
+                        }
+                    } else if resource.kind != .geoData, let ruleCount = resource.ruleCount {
+                        HStack(spacing: 8) {
+                            Label("Rules", systemImage: "list.number")
+                            Spacer()
+                            Text("\(ruleCount) rules")
+                        }
+                    }
                 }
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
 
                 HStack {
-                    if resource.kind != .geoData {
-                        Button {
-                            Task { await model.updateExternalResource(resource) }
-                        } label: {
-                            if isUpdating {
-                                ProgressView()
-                                    .controlSize(.small)
-                            } else {
-                                Label("Update", systemImage: "arrow.down.circle")
-                                    .foregroundStyle(.white)
-                            }
+                    Button {
+                        Task { await model.updateExternalResource(resource) }
+                    } label: {
+                        if isUpdating {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Label("Update", systemImage: "arrow.down.circle")
+                                .foregroundStyle(.white)
                         }
-                        .liquidGlassButton(prominent: true)
-                        .disabled(!model.isConnected || isUpdating)
+                    }
+                    .liquidGlassButton(prominent: true)
+                    .disabled(!model.isConnected || isUpdating)
+
+                    if resource.kind != .geoData {
                         Button("Edit", action: edit)
                             .liquidGlassButton()
                             .disabled(!resource.isPresent || isUpdating)

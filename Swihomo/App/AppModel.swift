@@ -36,6 +36,8 @@ final class AppModel: ObservableObject {
     private var originalProxyCandidateIndices: [String: [String: Int]] = [:]
     private var connectionTransferSamples: [String: ConnectionTransferSample] = [:]
 
+    private static let geoDataLastUpdatedKeyPrefix = "com.swihomo.geodata.lastUpdated."
+
     init() {
         tunnel.onStartFailed = { [weak self] error in
             self?.reconnectProfile = nil
@@ -539,10 +541,16 @@ final class AppModel: ObservableObject {
         defer { updatingExternalResourceIDs.remove(resource.id) }
 
         do {
-            try await controller.updateExternalResource(resource, using: snapshot.overrides)
+            if resource.kind == .geoData {
+                try await controller.updateGeoData(using: snapshot.overrides)
+                recordGeoDataUpdate(at: .now)
+                record(.info, module: "Resources", "Updated enabled geodata databases.")
+            } else {
+                try await controller.updateExternalResource(resource, using: snapshot.overrides)
+                await reloadProxyGroups(showErrors: false)
+                record(.info, module: "Resources", "Updated external resource \(resource.name).")
+            }
             await reloadExternalResources(showErrors: false)
-            await reloadProxyGroups(showErrors: false)
-            record(.info, module: "Resources", "Updated external resource \(resource.name).")
         } catch {
             present(error, module: "Resources")
         }
@@ -620,10 +628,16 @@ final class AppModel: ObservableObject {
             let providerDetails = (try? await controller.externalResourceDetails(using: snapshot.overrides)) ?? [:]
             externalResources = resources.map { resource in
                 var resource = resource
-                let details = providerDetails[resource.id]
-                resource.updatedAt = details?.updatedAt
-                resource.subscriptionInfo = details?.subscriptionInfo
-                resource.ruleCount = details?.ruleCount
+                if let details = providerDetails[resource.id] {
+                    resource.updatedAt = details.updatedAt
+                    resource.subscriptionInfo = details.subscriptionInfo
+                    resource.ruleCount = details.ruleCount
+                }
+                if resource.kind == .geoData,
+                   let lastUpdated = UserDefaults.standard.object(forKey: Self.geoDataLastUpdatedKey(resource.id)) as? Date,
+                   lastUpdated > (resource.updatedAt ?? .distantPast) {
+                    resource.updatedAt = lastUpdated
+                }
                 return resource
             }
             record(.debug, module: "Resources", "Loaded \(externalResources.count) external resources.")
@@ -667,6 +681,16 @@ final class AppModel: ObservableObject {
             }
             originalProxyCandidateIndices[group.id] = candidateIndices
         }
+    }
+
+    private func recordGeoDataUpdate(at date: Date) {
+        for resource in externalResources where resource.kind == .geoData {
+            UserDefaults.standard.set(date, forKey: Self.geoDataLastUpdatedKey(resource.id))
+        }
+    }
+
+    private static func geoDataLastUpdatedKey(_ resourceID: String) -> String {
+        geoDataLastUpdatedKeyPrefix + resourceID
     }
 
     private func originalGroupIndex(for group: MihomoProxyGroup) -> Int {
