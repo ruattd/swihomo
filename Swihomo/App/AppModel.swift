@@ -173,6 +173,15 @@ final class AppModel: ObservableObject {
     }
 
     func connect(profile: Profile) async {
+        if tunnelStatus != .disconnected && tunnelStatus != .invalid {
+            reconnectProfile = profile
+            record(.info, module: "Tunnel", "Switching Packet Tunnel to \(profile.name).")
+            if tunnelStatus != .disconnecting {
+                tunnel.disconnect()
+            }
+            return
+        }
+
         await perform(module: "Tunnel", "Requested Packet Tunnel start for \(profile.name).") { [self] in
             snapshot = try await profiles.activateProfile(profile.id)
             let runtime = try await profiles.runtimeConfiguration(for: profile.id)
@@ -194,6 +203,7 @@ final class AppModel: ObservableObject {
     }
 
     func disconnect() {
+        reconnectProfile = nil
         record(.info, module: "Tunnel", "Requested disconnect.")
         tunnel.disconnect()
     }
