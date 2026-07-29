@@ -14,6 +14,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var externalResources: [ExternalResource] = []
     @Published private(set) var updatingExternalResourceIDs: Set<String> = []
     @Published private(set) var connectionActivities: [MihomoConnectionActivity] = []
+    @Published private(set) var trafficUploadSpeed: Int64 = 0
+    @Published private(set) var trafficDownloadSpeed: Int64 = 0
+    @Published private(set) var trafficUploadTotal: Int64 = 0
+    @Published private(set) var trafficDownloadTotal: Int64 = 0
     @Published private(set) var closingConnectionIDs: Set<String> = []
     @Published private(set) var isClosingAllConnections = false
     @Published private(set) var isLoading = false
@@ -25,6 +29,7 @@ final class AppModel: ObservableObject {
     private var logStore: PersistentLogStore?
     private var coreLogPollingTask: Task<Void, Never>?
     private var connectionPollingTask: Task<Void, Never>?
+    private var trafficStreamTask: Task<Void, Never>?
     // ContentView opens the Connection detail by default until the user navigates away.
     private var isConnectionMonitoringEnabled = true
     private var errorDismissalTask: Task<Void, Never>?
@@ -48,6 +53,9 @@ final class AppModel: ObservableObject {
             self?.record(.info, module: "Tunnel", "Status changed to \(status.rawValue).")
             if status == .connected {
                 Task {
+                    #if os(macOS)
+                    self?.startTrafficStream()
+                    #endif
                     self?.startCoreLogPolling()
                     if self?.isConnectionMonitoringEnabled == true {
                         self?.startConnectionPolling()
@@ -60,6 +68,9 @@ final class AppModel: ObservableObject {
             } else {
                 self?.coreLogPollingTask?.cancel()
                 self?.coreLogPollingTask = nil
+                #if os(macOS)
+                self?.stopTrafficStream()
+                #endif
                 self?.connectionPollingTask?.cancel()
                 self?.connectionPollingTask = nil
                 self?.proxyRefreshGeneration += 1
@@ -86,6 +97,7 @@ final class AppModel: ObservableObject {
     deinit {
         coreLogPollingTask?.cancel()
         connectionPollingTask?.cancel()
+        trafficStreamTask?.cancel()
     }
 
     var isConnected: Bool { tunnelStatus == .connected || tunnelStatus == .connecting }
@@ -116,6 +128,11 @@ final class AppModel: ObservableObject {
             if tunnelStatus == .connected, isConnectionMonitoringEnabled {
                 startConnectionPolling()
             }
+            #if os(macOS)
+            if tunnelStatus == .connected {
+                startTrafficStream()
+            }
+            #endif
             record(.info, module: "Lifecycle", "Loaded profile store and Packet Tunnel configuration.")
         } catch {
             present(error, module: "Lifecycle")
@@ -668,6 +685,54 @@ final class AppModel: ObservableObject {
             }
         }
     }
+
+    #if os(macOS)
+    private func startTrafficStream() {
+        trafficStreamTask?.cancel()
+        trafficStreamTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self, self.tunnelStatus == .connected else { return }
+                await self.consumeTrafficStream()
+                guard !Task.isCancelled else { return }
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+            }
+        }
+    }
+
+    private func stopTrafficStream() {
+        trafficStreamTask?.cancel()
+        trafficStreamTask = nil
+        trafficUploadSpeed = 0
+        trafficDownloadSpeed = 0
+        trafficUploadTotal = 0
+        trafficDownloadTotal = 0
+    }
+
+    private func consumeTrafficStream() async {
+        let overrides = snapshot.overrides
+        guard let url = URL(string: "http://127.0.0.1:\(overrides.controllerPort)/traffic") else { return }
+        var request = URLRequest(url: url)
+        if !overrides.controllerSecret.isEmpty {
+            request.setValue("Bearer \(overrides.controllerSecret)", forHTTPHeaderField: "Authorization")
+        }
+        let decoder = JSONDecoder()
+        do {
+            let (bytes, response) = try await URLSession.shared.bytes(for: request)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  (200..<300).contains(httpResponse.statusCode) else { return }
+            for try await line in bytes.lines {
+                if Task.isCancelled { break }
+                guard let frame = try? decoder.decode(MihomoTrafficFrame.self, from: Data(line.utf8)) else { continue }
+                trafficUploadSpeed = frame.up
+                trafficDownloadSpeed = frame.down
+                trafficUploadTotal = frame.upTotal
+                trafficDownloadTotal = frame.downTotal
+            }
+        } catch {
+            // The stream drops when the core restarts; the outer loop reconnects.
+        }
+    }
+    #endif
 
     private func recordOriginalProxyOrder(_ groups: [MihomoProxyGroup]) {
         for group in groups {

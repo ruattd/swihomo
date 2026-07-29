@@ -11,7 +11,10 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             HomeView()
-                .navigationSplitViewColumnWidth(min: 360, ideal: 400, max: 460)
+                .navigationSplitViewColumnWidth(min: 280, ideal: 280, max: 460)
+                #if os(macOS)
+                .frame(minWidth: 280)
+                #endif
                 .navigationDestination(for: HomeSection.self) { section in
                     FeatureDetailView(section: section)
                 }
@@ -766,10 +769,6 @@ private struct ConnectionProcessIcon: View {
 #endif
 }
 
-private func byteCount(_ value: Int64) -> String {
-    ByteCountFormatter.string(fromByteCount: value, countStyle: .file)
-}
-
 private func subscriptionSummary(_ subscriptionInfo: MihomoSubscriptionInfo) -> Text {
     var summary = Text("\(byteCount(subscriptionInfo.used)) / \(byteCount(subscriptionInfo.total))")
     if let usageFraction = subscriptionInfo.usageFraction {
@@ -783,10 +782,6 @@ private func subscriptionSummary(_ subscriptionInfo: MihomoSubscriptionInfo) -> 
         return summary + Text(" (expires ") + Text(expirationDate, format: .dateTime.year().month().day()) + Text(")")
     }
     return summary
-}
-
-private func byteRate(_ value: Int64) -> String {
-    "\(byteCount(value))/s"
 }
 
 private func address(_ host: String, port: String) -> String {

@@ -28,6 +28,8 @@
 		100000000000000000000023 /* MihomoCoreVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000022 /* MihomoCoreVersion.swift */; };
 		100000000000000000000024 /* MihomoCoreVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000022 /* MihomoCoreVersion.swift */; };
 		100000000000000000000025 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000024 /* Assets.xcassets */; };
+		100000000000000000000026 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000025 /* MenuBarView.swift */; };
+		100000000000000000000027 /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000026 /* Formatting.swift */; };
 		D000000000000000000000001 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = D000000000000000000000003 /* Yams */; };
 /* End PBXBuildFile section */
 
@@ -79,6 +81,8 @@
 		200000000000000000000022 /* MihomoCoreVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MihomoCoreVersion.swift; sourceTree = "<group>"; };
 		200000000000000000000023 /* Version.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Version.xcconfig; sourceTree = "<group>"; };
 		200000000000000000000024 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		200000000000000000000025 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
+		200000000000000000000026 /* Formatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Formatting.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -133,6 +137,7 @@
 				200000000000000000000001 /* SwihomoApp.swift */,
 				200000000000000000000002 /* ContentView.swift */,
 				200000000000000000000003 /* AppModel.swift */,
+				200000000000000000000025 /* MenuBarView.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -145,6 +150,7 @@
 				200000000000000000000007 /* MihomoConfiguration.swift */,
 				200000000000000000000021 /* PersistentLogStore.swift */,
 				200000000000000000000022 /* MihomoCoreVersion.swift */,
+				200000000000000000000026 /* Formatting.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -321,6 +327,8 @@
 				100000000000000000000009 /* MihomoControllerClient.swift in Sources */,
 				100000000000000000000021 /* PersistentLogStore.swift in Sources */,
 				100000000000000000000023 /* MihomoCoreVersion.swift in Sources */,
+				100000000000000000000026 /* MenuBarView.swift in Sources */,
+				100000000000000000000027 /* Formatting.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

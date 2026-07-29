@@ -358,6 +358,13 @@ struct MihomoConnectionResponse: Decodable {
     let connections: [MihomoConnection]
 }
 
+struct MihomoTrafficFrame: Decodable {
+    let up: Int64
+    let down: Int64
+    let upTotal: Int64
+    let downTotal: Int64
+}
+
 struct MihomoConnection: Decodable, Identifiable, Hashable {
     let id: String
     let metadata: MihomoConnectionMetadata
