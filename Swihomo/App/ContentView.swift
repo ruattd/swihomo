@@ -867,6 +867,7 @@ private struct ProfileCard: View {
     let profile: Profile
     @State private var showingRemoteEditor = false
     @State private var showingProfileOverrideEditor = false
+    @State private var showingDeleteConfirmation = false
 
     private var isActive: Bool {
         model.snapshot.activeProfileID == profile.id
@@ -904,6 +905,12 @@ private struct ProfileCard: View {
                 }
 
                 Menu {
+                    Button {
+                        showingProfileOverrideEditor = true
+                    } label: {
+                        Label("Overrides...", systemImage: "curlybraces.square")
+                    }
+
                     if profile.source == .remote {
                         Button {
                             showingRemoteEditor = true
@@ -912,7 +919,7 @@ private struct ProfileCard: View {
                         }
                     }
                     Button(role: .destructive) {
-                        Task { await model.deleteProfile(profile) }
+                        showingDeleteConfirmation = true
                     } label: {
                         Label("Delete Profile", systemImage: "trash")
                     }
@@ -954,13 +961,6 @@ private struct ProfileCard: View {
                     .liquidGlassButton()
                 }
 
-                Button {
-                    showingProfileOverrideEditor = true
-                } label: {
-                    Label("Overrides...", systemImage: "curlybraces.square")
-                }
-                .liquidGlassButton()
-
                 Spacer()
 
                 Button(isActive && model.isConnected ? "Connected" : "Connect") {
@@ -996,6 +996,18 @@ private struct ProfileCard: View {
                 }
                 showingProfileOverrideEditor = false
             }
+        }
+        .confirmationDialog(
+            "Delete \(profile.name)?",
+            isPresented: $showingDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                Task { await model.deleteProfile(profile) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes the profile and its stored configuration. This action can't be undone.")
         }
     }
 }
