@@ -20,6 +20,7 @@ build/
 *.xcscmblueprint
 *.xcuserstate
 xcuserdata/
+*.xcodeproj/project.xcworkspace/
 *.xcworkspace/xcuserdata/
 *.xcodeproj/xcuserdata/
 
