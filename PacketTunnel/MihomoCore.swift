@@ -10,6 +10,13 @@ enum MihomoCoreFactory {
     static func make() -> any MihomoCoreEngine {
         EmbeddedMihomoCore()
     }
+
+    static func prewarmGeoData(requiring requirements: MihomoGeoDataRequirements) async throws {
+        await GeoDataCache.prewarm(
+            in: try EmbeddedMihomoCore.homeDirectory(),
+            requiring: requirements
+        )
+    }
 }
 
 private final class EmbeddedMihomoCore: MihomoCoreEngine {
@@ -20,19 +27,14 @@ private final class EmbeddedMihomoCore: MihomoCoreEngine {
         PacketFlowBridgeRegistry.set(bridge)
 
         var profile = [UInt8](configuration.profileYAML)
-        var overrides = [UInt8](configuration.overridesYAML)
         let homeDirectory = try Self.homeDirectory()
         let result = profile.withUnsafeMutableBufferPointer { profileBuffer in
-            overrides.withUnsafeMutableBufferPointer { overrideBuffer in
-                homeDirectory.path.withCString { homeDirectoryPointer in
-                    SwihomoCoreStart(
-                        profileBuffer.baseAddress,
-                        profileBuffer.count,
-                        overrideBuffer.baseAddress,
-                        overrideBuffer.count,
-                        homeDirectoryPointer
-                    )
-                }
+            homeDirectory.path.withCString { homeDirectoryPointer in
+                SwihomoCoreStart(
+                    profileBuffer.baseAddress,
+                    profileBuffer.count,
+                    homeDirectoryPointer
+                )
             }
         }
 
@@ -55,7 +57,7 @@ private final class EmbeddedMihomoCore: MihomoCoreEngine {
         bridge = nil
     }
 
-    private static func homeDirectory() throws -> URL {
+    static func homeDirectory() throws -> URL {
         guard let applicationSupport = FileManager.default.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
@@ -75,6 +77,109 @@ private final class EmbeddedMihomoCore: MihomoCoreEngine {
         let message = String(cString: error)
         return message.isEmpty ? "Mihomo core failed to start." : message
     }
+}
+
+private enum GeoDataCache {
+    private enum Resource {
+        case geoIP
+        case geoIPMMDB
+        case geoSite
+
+        var fileName: String {
+            switch self {
+            case .geoIP: "GeoIP.dat"
+            case .geoIPMMDB: "geoip.metadb"
+            case .geoSite: "GeoSite.dat"
+            }
+        }
+
+        var sources: [URL] {
+            let name: String
+            switch self {
+            case .geoIP: name = "geoip.dat"
+            case .geoIPMMDB: name = "geoip.metadb"
+            case .geoSite: name = "geosite.dat"
+            }
+            return [
+                URL(string: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/\(name)")!,
+                URL(string: "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/\(name)")!
+            ]
+        }
+    }
+
+    private static let minimumFileSize = 1_024
+    private static let maximumAge: TimeInterval = 7 * 24 * 60 * 60
+
+    static func prewarm(in directory: URL, requiring requirements: MihomoGeoDataRequirements) async {
+        var resources = [Resource]()
+        if requirements.requiresGeoIP {
+            resources.append(requirements.usesGeoIPDat ? .geoIP : .geoIPMMDB)
+        }
+        if requirements.requiresGeoSite {
+            resources.append(.geoSite)
+        }
+        for resource in resources {
+            await prewarm(resource, in: directory)
+        }
+    }
+
+    private static func prewarm(_ resource: Resource, in directory: URL) async {
+        let fileURL = directory.appendingPathComponent(resource.fileName)
+        guard shouldRefresh(fileURL) else { return }
+
+        do {
+            let data = try await download(resource)
+            try data.write(to: fileURL, options: .atomic)
+            CoreLogStore.append(level: .info, message: "Downloaded \(resource.fileName) before starting Mihomo.")
+        } catch {
+            CoreLogStore.append(
+                level: .warning,
+                message: "Couldn't prewarm \(resource.fileName). Mihomo will use its configured downloader: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private static func shouldRefresh(_ fileURL: URL) -> Bool {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
+              let size = attributes[.size] as? NSNumber,
+              size.intValue >= minimumFileSize,
+              let modificationDate = attributes[.modificationDate] as? Date else {
+            return true
+        }
+        return Date.now.timeIntervalSince(modificationDate) >= maximumAge
+    }
+
+    private static func download(_ resource: Resource) async throws -> Data {
+        var failures = [String]()
+        for source in resource.sources {
+            do {
+                var request = URLRequest(url: source)
+                request.timeoutInterval = 8
+                request.cachePolicy = .reloadIgnoringLocalCacheData
+                request.setValue("application/octet-stream", forHTTPHeaderField: "Accept")
+                request.setValue("Swihomo", forHTTPHeaderField: "User-Agent")
+
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard let response = response as? HTTPURLResponse,
+                      (200..<300).contains(response.statusCode) else {
+                    throw GeoDataDownloadError(message: "Unexpected server response from \(source.host ?? source.absoluteString).")
+                }
+                guard data.count >= minimumFileSize else {
+                    throw GeoDataDownloadError(message: "Downloaded \(resource.fileName) from \(source.host ?? source.absoluteString) is incomplete.")
+                }
+                return data
+            } catch {
+                failures.append("\(source.host ?? source.absoluteString): \(error.localizedDescription)")
+            }
+        }
+        throw GeoDataDownloadError(message: failures.joined(separator: "; "))
+    }
+}
+
+private struct GeoDataDownloadError: LocalizedError {
+    let message: String
+
+    var errorDescription: String? { message }
 }
 
 struct MihomoCoreError: LocalizedError {

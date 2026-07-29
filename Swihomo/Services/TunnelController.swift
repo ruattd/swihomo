@@ -7,11 +7,13 @@ final class TunnelController {
 
     private var manager: NETunnelProviderManager?
     private var statusObserver: NSObjectProtocol?
+    private var isStarting = false
 
     private(set) var status: NEVPNStatus = .invalid {
         didSet { onStatusChanged?(status) }
     }
     var onStatusChanged: ((NEVPNStatus) -> Void)?
+    var onStartFailed: ((Error) -> Void)?
 
     deinit {
         if let statusObserver {
@@ -47,7 +49,6 @@ final class TunnelController {
         tunnelProtocol.providerConfiguration = [
             "profileID": profileID.uuidString,
             "profileYAML": configuration.profileYAML,
-            "overridesYAML": configuration.overridesYAML,
             "dnsEnabled": NSNumber(value: dnsEnabled)
         ]
         manager.protocolConfiguration = tunnelProtocol
@@ -58,7 +59,13 @@ final class TunnelController {
         try await manager.load()
         observe(manager)
         status = manager.connection.status
-        try manager.connection.startVPNTunnel()
+        isStarting = true
+        do {
+            try manager.connection.startVPNTunnel()
+        } catch {
+            isStarting = false
+            throw error
+        }
     }
 
     func disconnect() {
@@ -195,6 +202,26 @@ final class TunnelController {
     private func refreshStatus() {
         guard let manager else { return }
         status = manager.connection.status
+
+        if status == .connected {
+            isStarting = false
+            return
+        }
+        guard isStarting, status == .disconnected || status == .invalid else { return }
+        isStarting = false
+        Task { [weak self] in
+            guard let self, let error = await self.lastDisconnectError() else { return }
+            self.onStartFailed?(error)
+        }
+    }
+
+    private func lastDisconnectError() async -> Error? {
+        guard let manager else { return nil }
+        return await withCheckedContinuation { continuation in
+            manager.connection.fetchLastDisconnectError { error in
+                continuation.resume(returning: error)
+            }
+        }
     }
 }
 

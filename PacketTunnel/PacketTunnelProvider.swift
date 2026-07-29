@@ -11,22 +11,37 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             throw ClientError.missingProfile
         }
 
-        guard let profileYAML = configuration.providerConfiguration?["profileYAML"] as? Data,
-              let overridesYAML = configuration.providerConfiguration?["overridesYAML"] as? Data else {
+        guard let profileYAML = configuration.providerConfiguration?["profileYAML"] as? Data else {
             throw ClientError.missingProfile
         }
         let dnsEnabled = (configuration.providerConfiguration?["dnsEnabled"] as? NSNumber)?.boolValue ?? true
 
+        // Download required geodata before the default route reaches the core's packet flow.
+        let geoDataRequirements = MihomoGeoDataRequirements(profileYAML: profileYAML)
+        try await MihomoCoreFactory.prewarmGeoData(requiring: geoDataRequirements)
         try await setTunnelNetworkSettings(networkSettings(dnsEnabled: dnsEnabled))
 
         let core = MihomoCoreFactory.make()
-        try await core.start(
-            configuration: MihomoRuntimeConfiguration(
-                profileYAML: profileYAML,
-                overridesYAML: overridesYAML
-            ),
-            packetFlow: packetFlow
-        )
+        do {
+            try await core.start(
+                configuration: MihomoRuntimeConfiguration(profileYAML: profileYAML),
+                packetFlow: packetFlow
+            )
+        } catch {
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            let tunnelError = NSError(
+                domain: "com.swihomo.mihomo",
+                code: 1,
+                userInfo: [
+                    NSLocalizedDescriptionKey: message,
+                    NSLocalizedFailureReasonErrorKey: message,
+                    NSUnderlyingErrorKey: error as NSError
+                ]
+            )
+            CoreLogStore.append(level: .error, message: "Failed to start Mihomo core: \(message)")
+            cancelTunnelWithError(tunnelError)
+            throw tunnelError
+        }
         self.core = core
     }
 

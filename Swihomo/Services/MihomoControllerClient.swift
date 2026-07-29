@@ -105,12 +105,29 @@ actor MihomoControllerClient {
         let providerType = switch resource.kind {
         case .proxyProvider: "proxies"
         case .ruleProvider: "rules"
+        case .geoData:
+            throw ClientError.controllerRequestFailed("Geo databases are loaded when the Packet Tunnel reconnects.")
         }
         let _: EmptyResponse = try await request(
             path: "providers/\(providerType)/\(resource.name)",
             method: "PUT",
             overrides: overrides
         )
+    }
+
+    func externalResourceDetails(using overrides: ProxyOverrides) async throws -> [String: MihomoProviderDetails] {
+        async let proxyProviderDetailsTask = providerDetails(
+            path: "providers/proxies",
+            kind: .proxyProvider,
+            using: overrides
+        )
+        async let ruleProviderDetailsTask = providerDetails(
+            path: "providers/rules",
+            kind: .ruleProvider,
+            using: overrides
+        )
+        let (proxyProviderDetails, ruleProviderDetails) = try await (proxyProviderDetailsTask, ruleProviderDetailsTask)
+        return proxyProviderDetails.merging(ruleProviderDetails) { _, latest in latest }
     }
 
     func updateLogLevel(_ level: MihomoLogLevel, using overrides: ProxyOverrides) async throws {
@@ -177,6 +194,35 @@ actor MihomoControllerClient {
             return EmptyResponse() as! Response
         }
         return try JSONDecoder().decode(Response.self, from: response.body)
+    }
+
+    private func providerDetails(
+        path: String,
+        kind: ExternalResourceKind,
+        using overrides: ProxyOverrides
+    ) async throws -> [String: MihomoProviderDetails] {
+        let response: MihomoProviderResponse = try await request(
+            path: path,
+            method: "GET",
+            overrides: overrides
+        )
+        return response.providers.reduce(into: [:]) { details, provider in
+            details["\(kind.rawValue):\(provider.key)"] = MihomoProviderDetails(
+                updatedAt: date(from: provider.value.updatedAt),
+                subscriptionInfo: kind == .proxyProvider ? provider.value.subscriptionInfo : nil,
+                ruleCount: kind == .ruleProvider ? provider.value.ruleCount : nil
+            )
+        }
+    }
+
+    private func date(from value: String?) -> Date? {
+        guard let value else { return nil }
+
+        let fractionalSecondsFormatter = ISO8601DateFormatter()
+        fractionalSecondsFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let date = fractionalSecondsFormatter.date(from: value) ?? ISO8601DateFormatter().date(from: value)
+        guard let date, date.timeIntervalSince1970 > 0 else { return nil }
+        return date
     }
 }
 

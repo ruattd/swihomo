@@ -4,8 +4,6 @@
 int SwihomoCoreStart(
     uint8_t *profile,
     size_t profileLength,
-    uint8_t *overrides,
-    size_t overridesLength,
     const char *homeDirectory
 );
 int SwihomoCoreInputPacket(uint8_t *packet, size_t length, int family);

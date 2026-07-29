@@ -23,6 +23,64 @@ struct Profile: Codable, Identifiable, Hashable {
     var createdAt: Date
     var updatedAt: Date
     var lastFetchedAt: Date?
+    var subscriptionInfo: MihomoSubscriptionInfo?
+    var customOverridesEnabled: Bool
+    var customOverrideYAML: String
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case source
+        case remoteURL
+        case customUserAgent
+        case createdAt
+        case updatedAt
+        case lastFetchedAt
+        case subscriptionInfo
+        case customOverridesEnabled
+        case customOverrideYAML
+    }
+
+    init(
+        id: UUID,
+        name: String,
+        source: ProfileSource,
+        remoteURL: URL?,
+        customUserAgent: String?,
+        createdAt: Date,
+        updatedAt: Date,
+        lastFetchedAt: Date?,
+        subscriptionInfo: MihomoSubscriptionInfo?,
+        customOverridesEnabled: Bool = true,
+        customOverrideYAML: String = ""
+    ) {
+        self.id = id
+        self.name = name
+        self.source = source
+        self.remoteURL = remoteURL
+        self.customUserAgent = customUserAgent
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.lastFetchedAt = lastFetchedAt
+        self.subscriptionInfo = subscriptionInfo
+        self.customOverridesEnabled = customOverridesEnabled
+        self.customOverrideYAML = customOverrideYAML
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        source = try container.decode(ProfileSource.self, forKey: .source)
+        remoteURL = try container.decodeIfPresent(URL.self, forKey: .remoteURL)
+        customUserAgent = try container.decodeIfPresent(String.self, forKey: .customUserAgent)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        lastFetchedAt = try container.decodeIfPresent(Date.self, forKey: .lastFetchedAt)
+        subscriptionInfo = try container.decodeIfPresent(MihomoSubscriptionInfo.self, forKey: .subscriptionInfo)
+        customOverridesEnabled = try container.decodeIfPresent(Bool.self, forKey: .customOverridesEnabled) ?? true
+        customOverrideYAML = try container.decodeIfPresent(String.self, forKey: .customOverrideYAML) ?? ""
+    }
 
     var detail: String {
         switch source {
@@ -521,11 +579,13 @@ struct LogEntry: Codable, Identifiable, Hashable {
 enum ExternalResourceKind: String, Codable, CaseIterable {
     case proxyProvider
     case ruleProvider
+    case geoData
 
     var displayName: String {
         switch self {
         case .proxyProvider: "Proxy Providers"
         case .ruleProvider: "Rule Providers"
+        case .geoData: "Geo Data"
         }
     }
 }
@@ -539,6 +599,94 @@ struct ExternalResource: Codable, Identifiable, Hashable {
     let url: String?
     let behavior: String?
     let isPresent: Bool
+    var updatedAt: Date?
+    var subscriptionInfo: MihomoSubscriptionInfo?
+    var ruleCount: Int?
+}
+
+struct MihomoProviderResponse: Decodable {
+    let providers: [String: MihomoProvider]
+}
+
+struct MihomoProvider: Decodable {
+    let updatedAt: String?
+    let subscriptionInfo: MihomoSubscriptionInfo?
+    let ruleCount: Int?
+}
+
+struct MihomoSubscriptionInfo: Codable, Hashable {
+    let upload: Int64
+    let download: Int64
+    let total: Int64
+    let expire: Int64
+
+    private enum CodingKeys: String, CodingKey {
+        case upload = "Upload"
+        case download = "Download"
+        case total = "Total"
+        case expire = "Expire"
+    }
+
+    init(upload: Int64, download: Int64, total: Int64, expire: Int64) {
+        self.upload = upload
+        self.download = download
+        self.total = total
+        self.expire = expire
+    }
+
+    init?(subscriptionUserInfo: String?) {
+        guard let subscriptionUserInfo else { return nil }
+
+        var upload: Int64 = 0
+        var download: Int64 = 0
+        var total: Int64 = 0
+        var expire: Int64 = 0
+        var foundValue = false
+
+        for field in subscriptionUserInfo.replacingOccurrences(of: " ", with: "").split(separator: ";") {
+            let parts = field.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            guard parts.count == 2 else { continue }
+
+            let value: Int64
+            if let integer = Int64(parts[1]) {
+                value = integer
+            } else if let decimal = Double(parts[1]) {
+                value = Int64(decimal)
+            } else {
+                continue
+            }
+
+            switch parts[0].lowercased() {
+            case "upload": upload = value
+            case "download": download = value
+            case "total": total = value
+            case "expire": expire = value
+            default: continue
+            }
+            foundValue = true
+        }
+
+        guard foundValue else { return nil }
+        self.init(upload: upload, download: download, total: total, expire: expire)
+    }
+
+    var used: Int64 { max(0, upload) + max(0, download) }
+
+    var usageFraction: Double? {
+        guard total > 0 else { return nil }
+        return min(max(Double(used) / Double(total), 0), 1)
+    }
+
+    var expirationDate: Date? {
+        guard expire > 0 else { return nil }
+        return Date(timeIntervalSince1970: TimeInterval(expire))
+    }
+}
+
+struct MihomoProviderDetails: Hashable {
+    let updatedAt: Date?
+    let subscriptionInfo: MihomoSubscriptionInfo?
+    let ruleCount: Int?
 }
 
 enum TunnelProviderOperation: String, Codable {

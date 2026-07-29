@@ -51,7 +51,8 @@ private struct ErrorBanner: View {
                 Text(message)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
             }
 
             Spacer(minLength: 0)
@@ -769,6 +770,21 @@ private func byteCount(_ value: Int64) -> String {
     ByteCountFormatter.string(fromByteCount: value, countStyle: .file)
 }
 
+private func subscriptionSummary(_ subscriptionInfo: MihomoSubscriptionInfo) -> Text {
+    var summary = Text("\(byteCount(subscriptionInfo.used)) / \(byteCount(subscriptionInfo.total))")
+    if let usageFraction = subscriptionInfo.usageFraction {
+        summary = summary + Text(" (\(Int((usageFraction * 100).rounded()))%")
+        if let expirationDate = subscriptionInfo.expirationDate {
+            summary = summary + Text(", expires ") + Text(expirationDate, format: .dateTime.year().month().day())
+        }
+        return summary + Text(")")
+    }
+    if let expirationDate = subscriptionInfo.expirationDate {
+        return summary + Text(" (expires ") + Text(expirationDate, format: .dateTime.year().month().day()) + Text(")")
+    }
+    return summary
+}
+
 private func byteRate(_ value: Int64) -> String {
     "\(byteCount(value))/s"
 }
@@ -849,6 +865,8 @@ private struct ProfilesView: View {
 private struct ProfileCard: View {
     @EnvironmentObject private var model: AppModel
     let profile: Profile
+    @State private var showingRemoteEditor = false
+    @State private var showingProfileOverrideEditor = false
 
     private var isActive: Bool {
         model.snapshot.activeProfileID == profile.id
@@ -886,6 +904,13 @@ private struct ProfileCard: View {
                 }
 
                 Menu {
+                    if profile.source == .remote {
+                        Button {
+                            showingRemoteEditor = true
+                        } label: {
+                            Label("Edit Profile", systemImage: "pencil")
+                        }
+                    }
                     Button(role: .destructive) {
                         Task { await model.deleteProfile(profile) }
                     } label: {
@@ -906,13 +931,17 @@ private struct ProfileCard: View {
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
 
-                if let remoteURL = profile.remoteURL {
-                    Text(remoteURL.absoluteString)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .textSelection(.enabled)
+                if let subscriptionInfo = profile.subscriptionInfo {
+                    HStack(spacing: 7) {
+                        Label("Subscription", systemImage: "chart.pie.fill")
+                        Spacer()
+                        subscriptionSummary(subscriptionInfo)
+                            .lineLimit(1)
+                    }
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
                 }
+
             }
 
             HStack(spacing: 10) {
@@ -924,6 +953,13 @@ private struct ProfileCard: View {
                     }
                     .liquidGlassButton()
                 }
+
+                Button {
+                    showingProfileOverrideEditor = true
+                } label: {
+                    Label("Overrides...", systemImage: "curlybraces.square")
+                }
+                .liquidGlassButton()
 
                 Spacer()
 
@@ -942,17 +978,156 @@ private struct ProfileCard: View {
         }
         .liquidGlassCard()
         .animation(.snappy, value: isActive)
+        .sheet(isPresented: $showingRemoteEditor) {
+            RemoteProfileSheet(profile: profile) { name, url, customUserAgent in
+                Task { await model.updateRemoteProfile(profile, name: name, url: url, customUserAgent: customUserAgent) }
+                showingRemoteEditor = false
+            }
+        }
+        .sheet(isPresented: $showingProfileOverrideEditor) {
+            ProfileOverrideSheet(profile: profile) { contents, globalOverridesEnabled in
+                Task {
+                    if globalOverridesEnabled != profile.customOverridesEnabled {
+                        await model.setCustomOverridesEnabled(globalOverridesEnabled, for: profile)
+                    }
+                    if contents != profile.customOverrideYAML {
+                        await model.setProfileCustomOverride(contents, for: profile)
+                    }
+                }
+                showingProfileOverrideEditor = false
+            }
+        }
+    }
+}
+
+private struct ProfileOverrideSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @State private var contents: String
+    @State private var globalOverridesEnabled: Bool
+    let profile: Profile
+    let save: (String, Bool) -> Void
+
+    init(profile: Profile, save: @escaping (String, Bool) -> Void) {
+        self.profile = profile
+        self.save = save
+        _contents = State(initialValue: profile.customOverrideYAML)
+        _globalOverridesEnabled = State(initialValue: profile.customOverridesEnabled)
+    }
+
+    private var pagePadding: CGFloat {
+        horizontalSizeClass == .compact ? 16 : 24
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    HStack(spacing: 14) {
+                        Image(systemName: "curlybraces.square")
+                            .font(.system(size: 30, weight: .semibold))
+                            .foregroundStyle(.purple)
+                            .frame(width: 58, height: 58)
+                            .background(Color.purple.opacity(0.14), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Profile Custom Override")
+                                .font(.title3.weight(.semibold))
+                            Text("Applied after global custom YAML and before standard overrides.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Toggle(isOn: $globalOverridesEnabled) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Enable Global Overrides")
+                            Text("Applies global custom YAML when this profile connects. Edit it from the Overrides page.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    ZStack(alignment: .topLeading) {
+                        TextEditor(text: $contents)
+                            .font(.body.monospaced())
+                            .textSelection(.enabled)
+                            .scrollContentBackground(.hidden)
+                            .padding(8)
+                        if contents.isEmpty {
+                            Text("# dns!:\n#   enable: false\n# +rules:\n#   - DOMAIN,example.com,DIRECT")
+                                .font(.body.monospaced())
+                                .foregroundStyle(.tertiary)
+                                .padding(16)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .frame(minHeight: 320)
+                    .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Color.primary.opacity(0.09), lineWidth: 1)
+                    }
+
+                    Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
+                        GridRow {
+                            Text("key!")
+                                .foregroundStyle(.purple)
+                            Text("Replace the existing object")
+                        }
+                        GridRow {
+                            Text("+key / key+")
+                                .foregroundStyle(.purple)
+                            Text("Prepend or append array items")
+                        }
+                        GridRow {
+                            Text("<key>")
+                                .foregroundStyle(.purple)
+                            Text("Escape a literal plus-prefixed or plus-suffixed key")
+                        }
+                    }
+                    .font(.caption)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.purple.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .padding(.horizontal, pagePadding)
+                .padding(.vertical, pagePadding)
+            }
+            .navigationTitle(profile.name)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        save(contents, globalOverridesEnabled)
+                    }
+                }
+            }
+        }
+#if os(macOS)
+        .frame(minWidth: 520, minHeight: 500)
+#endif
     }
 }
 
 private struct RemoteProfileSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @State private var name = ""
-    @State private var address = ""
-    @State private var customUserAgent = ""
+    @State private var name: String
+    @State private var address: String
+    @State private var customUserAgent: String
     @FocusState private var focusedField: Field?
+    private let profile: Profile?
     let save: (String, URL, String?) -> Void
+
+    init(profile: Profile? = nil, save: @escaping (String, URL, String?) -> Void) {
+        self.profile = profile
+        self.save = save
+        _name = State(initialValue: profile?.name ?? "")
+        _address = State(initialValue: profile?.remoteURL?.absoluteString ?? "")
+        _customUserAgent = State(initialValue: profile?.customUserAgent ?? "")
+    }
 
     private enum Field {
         case name
@@ -974,6 +1149,8 @@ private struct RemoteProfileSheet: View {
         horizontalSizeClass == .compact ? 16 : 24
     }
 
+    private var isEditing: Bool { profile != nil }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -985,9 +1162,9 @@ private struct RemoteProfileSheet: View {
                             .frame(width: 58, height: 58)
                             .background(Color.indigo.opacity(0.14), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Add Online Profile")
+                            Text(isEditing ? "Edit Online Profile" : "Add Online Profile")
                                 .font(.title3.weight(.semibold))
-                            Text("Import a mihomo subscription directly from its URL.")
+                            Text(isEditing ? "Update the subscription details used for future refreshes." : "Import a mihomo subscription directly from its URL.")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
@@ -1038,7 +1215,7 @@ private struct RemoteProfileSheet: View {
                             .focused($focusedField, equals: .customUserAgent)
                             .padding(14)
                             .liquidGlassCard()
-                        Text("Used for the initial subscription request and every refresh. Leave empty to use \(MihomoCoreVersion.userAgent).")
+                        Text(isEditing ? "Used for future subscription refreshes. Leave empty to use \(MihomoCoreVersion.userAgent)." : "Used for the initial subscription request and every refresh. Leave empty to use \(MihomoCoreVersion.userAgent).")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -1046,13 +1223,13 @@ private struct RemoteProfileSheet: View {
                 .padding(.horizontal, pagePadding)
                 .padding(.vertical, pagePadding)
             }
-            .navigationTitle("Online Profile")
+            .navigationTitle(isEditing ? "Edit Online Profile" : "Online Profile")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Add Profile") {
+                    Button(isEditing ? "Save Changes" : "Add Profile") {
                         guard let subscriptionURL else { return }
                         let profileName = name.trimmingCharacters(in: .whitespacesAndNewlines)
                         let userAgent = customUserAgent.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1693,23 +1870,28 @@ private struct ExternalResourcesView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    Text("Only file and HTTP providers with a mihomo-managed cache file appear here. Save changes, then use Update to load them into the running core.")
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 14) {
+                    Text("Provider cache files and the GeoIP or GeoSite databases required by this profile appear here. Replace a geodata file, then reconnect to load it.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
-                }
+                        .padding(14)
+                        .liquidGlassCard(cornerRadius: 18)
 
-                ForEach(model.externalResources) { resource in
-                    ExternalResourceRow(
-                        resource: resource,
-                        edit: { editingResource = resource },
-                        replace: {
-                            importedResource = resource
-                            showingImporter = true
-                        }
-                    )
+                    ForEach(model.externalResources) { resource in
+                        ExternalResourceCard(
+                            resource: resource,
+                            edit: { editingResource = resource },
+                            replace: {
+                                importedResource = resource
+                                showingImporter = true
+                            }
+                        )
+                    }
                 }
+                .padding(16)
+                .frame(maxWidth: 860)
+                .frame(maxWidth: .infinity)
             }
             .overlay {
                 if model.externalResources.isEmpty {
@@ -1718,7 +1900,7 @@ private struct ExternalResourcesView: View {
                         systemImage: "externaldrive.connected.to.line.below",
                         description: Text(
                             model.isConnected
-                                ? "The active profile has no file or HTTP proxy and rule providers."
+                                ? "The active profile has no managed providers or GeoIP and GeoSite rules."
                                 : "Connect a profile to inspect the provider files managed by mihomo."
                         )
                     )
@@ -1763,7 +1945,7 @@ private struct ExternalResourcesView: View {
     }
 }
 
-private struct ExternalResourceRow: View {
+private struct ExternalResourceCard: View {
     @EnvironmentObject private var model: AppModel
     let resource: ExternalResource
     let edit: () -> Void
@@ -1771,64 +1953,120 @@ private struct ExternalResourceRow: View {
 
     var body: some View {
         let isUpdating = model.updatingExternalResourceIDs.contains(resource.id)
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Image(systemName: resource.kind == .proxyProvider ? "point.3.connected.trianglepath.dotted" : "list.bullet.rectangle")
-                    .foregroundStyle(resource.kind == .proxyProvider ? .orange : .purple)
-                Text(resource.name)
-                    .fontWeight(.medium)
-                Spacer()
-                Text(resource.isPresent ? "READY" : "MISSING")
-                    .font(.caption2.bold())
-                    .foregroundStyle(resource.isPresent ? .green : .orange)
-            }
-
-            HStack(spacing: 6) {
-                Text(resource.kind.displayName)
-                Text(resource.providerType.uppercased())
-                if let behavior = resource.behavior, !behavior.isEmpty {
-                    Text(behavior.uppercased())
+        let tint = switch resource.kind {
+        case .proxyProvider: Color.orange
+        case .ruleProvider: Color.purple
+        case .geoData: Color.teal
+        }
+        let icon = switch resource.kind {
+        case .proxyProvider: "point.3.connected.trianglepath.dotted"
+        case .ruleProvider: "list.bullet.rectangle"
+        case .geoData: "globe.americas.fill"
+        }
+        let subscriptionInfo = resource.kind == .proxyProvider ? resource.subscriptionInfo : nil
+        VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: icon)
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(tint)
+                        .frame(width: 38, height: 38)
+                        .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(resource.name)
+                            .font(.headline)
+                            .lineLimit(1)
+                        HStack(spacing: 6) {
+                            Text(resource.kind.displayName)
+                            Text(resource.providerType.uppercased())
+                            if let behavior = resource.behavior, !behavior.isEmpty {
+                                Text(behavior.uppercased())
+                            }
+                        }
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Text(resource.isPresent ? "READY" : "MISSING")
+                        .font(.caption2.bold())
+                        .foregroundStyle(resource.isPresent ? .green : .orange)
                 }
-            }
-            .font(.caption.weight(.medium))
-            .foregroundStyle(.secondary)
 
-            Text(resource.path)
-                .font(.caption.monospaced())
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
+                if resource.kind == .geoData {
+                    Label(
+                        resource.isPresent ? "Cached in MihomoCore" : "Not cached yet",
+                        systemImage: resource.isPresent ? "internaldrive.fill" : "exclamationmark.triangle"
+                    )
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                } else {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            Label("Last updated", systemImage: "clock")
+                            Spacer()
+                            if let updatedAt = resource.updatedAt {
+                                Text(updatedAt, format: .dateTime.year().month().day().hour().minute())
+                            } else {
+                                Text("Unavailable")
+                            }
+                        }
 
-            if let url = resource.url, !url.isEmpty {
-                Text(url)
-                    .font(.caption)
+                        if let subscriptionInfo {
+                            HStack(spacing: 8) {
+                                Label("Subscription", systemImage: "chart.pie.fill")
+                                Spacer()
+                                subscriptionSummary(subscriptionInfo)
+                                    .lineLimit(1)
+                            }
+                        } else if let ruleCount = resource.ruleCount {
+                            HStack(spacing: 8) {
+                                Label("Rules", systemImage: "list.number")
+                                Spacer()
+                                Text("\(ruleCount) rules")
+                            }
+                        }
+                    }
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .textSelection(.enabled)
-            }
-
-            HStack {
-                Button {
-                    Task { await model.updateExternalResource(resource) }
-                } label: {
-                    if isUpdating {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Label("Update", systemImage: "arrow.down.circle")
-                            .foregroundStyle(.white)
-                    }
                 }
-                .liquidGlassButton(prominent: true)
-                .disabled(!model.isConnected || isUpdating)
-                Button("Edit", action: edit)
-                    .liquidGlassButton()
-                    .disabled(!resource.isPresent || isUpdating)
-                Button("Replace", action: replace)
-                    .liquidGlassButton()
-                    .disabled(isUpdating)
+
+                HStack {
+                    if resource.kind != .geoData {
+                        Button {
+                            Task { await model.updateExternalResource(resource) }
+                        } label: {
+                            if isUpdating {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Label("Update", systemImage: "arrow.down.circle")
+                                    .foregroundStyle(.white)
+                            }
+                        }
+                        .liquidGlassButton(prominent: true)
+                        .disabled(!model.isConnected || isUpdating)
+                        Button("Edit", action: edit)
+                            .liquidGlassButton()
+                            .disabled(!resource.isPresent || isUpdating)
+                    }
+                    Button("Replace", action: replace)
+                        .liquidGlassButton()
+                        .disabled(isUpdating)
+                }
+        }
+        .padding(14)
+        .background(alignment: .topLeading) {
+            if let usageFraction = subscriptionInfo?.usageFraction {
+                GeometryReader { geometry in
+                    Rectangle()
+                        .fill(tint.opacity(0.13))
+                        .frame(width: geometry.size.width * CGFloat(usageFraction))
+                        .allowsHitTesting(false)
+                }
             }
         }
-        .padding(.vertical, 4)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .liquidGlassCard(cornerRadius: 20)
     }
 }
 

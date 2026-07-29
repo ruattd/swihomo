@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import NetworkExtension
+import Yams
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -36,6 +37,10 @@ final class AppModel: ObservableObject {
     private var connectionTransferSamples: [String: ConnectionTransferSample] = [:]
 
     init() {
+        tunnel.onStartFailed = { [weak self] error in
+            self?.reconnectProfile = nil
+            self?.present(error, module: "Mihomo")
+        }
         tunnel.onStatusChanged = { [weak self] status in
             self?.tunnelStatus = status
             self?.record(.info, module: "Tunnel", "Status changed to \(status.rawValue).")
@@ -137,6 +142,30 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func updateRemoteProfile(_ profile: Profile, name: String, url: URL, customUserAgent: String?) async {
+        await perform(module: "Profiles", "Updated online profile \(name).") { [self] in
+            snapshot = try await profiles.updateRemoteProfile(
+                profile.id,
+                name: name,
+                remoteURL: url,
+                customUserAgent: customUserAgent
+            )
+        }
+    }
+
+    func setCustomOverridesEnabled(_ isEnabled: Bool, for profile: Profile) async {
+        let action = isEnabled ? "Enabled" : "Disabled"
+        await perform(module: "Profiles", "\(action) custom overrides for \(profile.name).") { [self] in
+            snapshot = try await profiles.setCustomOverridesEnabled(isEnabled, for: profile.id)
+        }
+    }
+
+    func setProfileCustomOverride(_ contents: String, for profile: Profile) async {
+        await perform(module: "Profiles", "Saved custom override for \(profile.name).") { [self] in
+            snapshot = try await profiles.setCustomOverrideYAML(contents, for: profile.id)
+        }
+    }
+
     func deleteProfile(_ profile: Profile) async {
         await perform(module: "Profiles", "Deleted profile \(profile.name).") { [self] in
             snapshot = try await profiles.deleteProfile(profile.id)
@@ -144,12 +173,17 @@ final class AppModel: ObservableObject {
     }
 
     func connect(profile: Profile) async {
-        await perform(module: "Tunnel", "Started Packet Tunnel for \(profile.name).") { [self] in
+        await perform(module: "Tunnel", "Requested Packet Tunnel start for \(profile.name).") { [self] in
             snapshot = try await profiles.activateProfile(profile.id)
             let runtime = try await profiles.runtimeConfiguration(for: profile.id)
+            let profileContents = try ProfileOverrideComposer.profileContents(
+                baseContents: runtime.contents,
+                globalOverrides: runtime.profile.customOverridesEnabled ? runtime.overrides.customYAML : "",
+                profileOverrides: runtime.profile.customOverrideYAML,
+                standardOverrides: MihomoConfigurationBuilder.standardOverridesYAML(runtime.overrides)
+            )
             let configuration = try MihomoConfigurationBuilder.makeRuntimeConfiguration(
-                profileContents: runtime.contents,
-                overrides: runtime.overrides
+                profileContents: profileContents
             )
             try await tunnel.connect(
                 profileID: profile.id,
@@ -475,7 +509,10 @@ final class AppModel: ObservableObject {
         do {
             try await tunnel.writeExternalResource(identifier: resource.id, contents: contents)
             await reloadExternalResources(showErrors: false)
-            record(.info, module: "Resources", "Saved external resource \(resource.name). Use Update to load the changes.")
+            let nextStep = resource.kind == .geoData
+                ? "Reconnect to load the changes."
+                : "Use Update to load the changes."
+            record(.info, module: "Resources", "Saved external resource \(resource.name). \(nextStep)")
             return true
         } catch {
             present(error, module: "Resources")
@@ -569,7 +606,16 @@ final class AppModel: ObservableObject {
             return
         }
         do {
-            externalResources = try await tunnel.externalResources()
+            let resources = try await tunnel.externalResources()
+            let providerDetails = (try? await controller.externalResourceDetails(using: snapshot.overrides)) ?? [:]
+            externalResources = resources.map { resource in
+                var resource = resource
+                let details = providerDetails[resource.id]
+                resource.updatedAt = details?.updatedAt
+                resource.subscriptionInfo = details?.subscriptionInfo
+                resource.ruleCount = details?.ruleCount
+                return resource
+            }
             record(.debug, module: "Resources", "Loaded \(externalResources.count) external resources.")
         } catch where showErrors {
             present(error, module: "Resources")
@@ -660,13 +706,14 @@ final class AppModel: ObservableObject {
         let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         errorDismissalTask?.cancel()
         errorMessage = message
+        record(.error, module: module, detailedError(error, message: message))
+        guard !(error is ProfileOverrideError) else { return }
         errorDismissalTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 5_000_000_000)
             guard !Task.isCancelled else { return }
             self?.errorMessage = nil
             self?.errorDismissalTask = nil
         }
-        record(.error, module: module, detailedError(error, message: message))
     }
 
     private func record(_ level: LogLevel, module: String, _ message: String) {
@@ -691,6 +738,12 @@ final class AppModel: ObservableObject {
         }
         if let decodingError = error as? DecodingError {
             details.append(decodingDescription(decodingError))
+        }
+        if let overrideError = error as? ProfileOverrideError,
+           let yamlSource = overrideError.yamlSource,
+           let yamlDiagnostic = overrideError.yamlDiagnostic {
+            details.append("yamlSource=\(yamlSource)")
+            details.append("yamlDiagnostic=\(yamlDiagnostic)")
         }
         return details.joined(separator: " | ")
     }
@@ -726,4 +779,104 @@ private struct ConnectionTransferSample {
     let upload: Int64
     let download: Int64
     let timestamp: Date
+}
+
+private enum ProfileOverrideComposer {
+    private enum MergeMode: Equatable {
+        case deepMerge
+        case forceReplace
+        case prepend
+        case append
+    }
+
+    static func profileContents(
+        baseContents: String,
+        globalOverrides: String,
+        profileOverrides: String,
+        standardOverrides: String
+    ) throws -> String {
+        var profile = try mapping(from: baseContents, description: "profile configuration")
+        try merge(contents: globalOverrides, into: &profile, description: "global custom overrides")
+        try merge(contents: profileOverrides, into: &profile, description: "profile custom overrides")
+        try merge(contents: standardOverrides, into: &profile, description: "standard overrides")
+        return try dump(object: profile)
+    }
+
+    private static func merge(contents: String, into base: inout [String: Any], description: String) throws {
+        guard !contents.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        merge(try mapping(from: contents, description: description), into: &base)
+    }
+
+    private static func mapping(from contents: String, description: String) throws -> [String: Any] {
+        let document: Any?
+        do {
+            document = try load(yaml: contents)
+        } catch {
+            throw ProfileOverrideError(yamlSource: description, underlyingError: error)
+        }
+        guard let mapping = document as? [String: Any] else {
+            throw ProfileOverrideError(message: "The \(description) must contain a YAML mapping.")
+        }
+        return mapping
+    }
+
+    // This mirrors mihomo's override merge behavior before standard fields are applied.
+    private static func merge(_ overlay: [String: Any], into base: inout [String: Any]) {
+        for (rawKey, overlayValue) in overlay {
+            let (key, mode) = mergeKey(rawKey)
+            if mode == .deepMerge,
+               var baseMapping = base[key] as? [String: Any],
+               let overlayMapping = overlayValue as? [String: Any] {
+                merge(overlayMapping, into: &baseMapping)
+                base[key] = baseMapping
+                continue
+            }
+            if (mode == .prepend || mode == .append),
+               let baseItems = base[key] as? [Any],
+               let overlayItems = overlayValue as? [Any] {
+                base[key] = mode == .prepend ? overlayItems + baseItems : baseItems + overlayItems
+                continue
+            }
+            base[key] = overlayValue
+        }
+    }
+
+    private static func mergeKey(_ rawKey: String) -> (String, MergeMode) {
+        if rawKey.hasPrefix("+") {
+            return (unescapedKey(String(rawKey.dropFirst())), .prepend)
+        }
+        if rawKey.hasSuffix("+") {
+            return (unescapedKey(String(rawKey.dropLast())), .append)
+        }
+        if rawKey.hasSuffix("!") {
+            return (unescapedKey(String(rawKey.dropLast())), .forceReplace)
+        }
+        return (unescapedKey(rawKey), .deepMerge)
+    }
+
+    private static func unescapedKey(_ key: String) -> String {
+        guard key.count > 2, key.hasPrefix("<"), key.hasSuffix(">") else { return key }
+        return String(key.dropFirst().dropLast())
+    }
+}
+
+private struct ProfileOverrideError: LocalizedError {
+    let message: String
+    let yamlSource: String?
+    let yamlDiagnostic: String?
+
+    init(message: String) {
+        self.message = message
+        yamlSource = nil
+        yamlDiagnostic = nil
+    }
+
+    init(yamlSource: String, underlyingError: Error) {
+        let diagnostic = String(describing: underlyingError)
+        message = "Invalid YAML in \(yamlSource).\n\(diagnostic)"
+        self.yamlSource = yamlSource
+        yamlDiagnostic = diagnostic
+    }
+
+    var errorDescription: String? { message }
 }

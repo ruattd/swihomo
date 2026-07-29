@@ -28,6 +28,7 @@
 		100000000000000000000023 /* MihomoCoreVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000022 /* MihomoCoreVersion.swift */; };
 		100000000000000000000024 /* MihomoCoreVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000022 /* MihomoCoreVersion.swift */; };
 		100000000000000000000025 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000024 /* Assets.xcassets */; };
+		D000000000000000000000001 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = D000000000000000000000003 /* Yams */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -86,6 +87,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				100000000000000000000010 /* NetworkExtension.framework in Frameworks */,
+				D000000000000000000000001 /* Yams in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -212,6 +214,9 @@
 				700000000000000000000001 /* PBXTargetDependency */,
 			);
 			name = Swihomo;
+			packageProductDependencies = (
+				D000000000000000000000003 /* Yams */,
+			);
 			productName = Swihomo;
 			productReference = 200000000000000000000018 /* Swihomo.app */;
 			productType = "com.apple.product-type.application";
@@ -258,6 +263,9 @@
 				Base,
 			);
 			mainGroup = 400000000000000000000001;
+			packageReferences = (
+				D000000000000000000000002 /* Yams */,
+			);
 			productRefGroup = 400000000000000000000008 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -267,6 +275,25 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		D000000000000000000000002 /* Yams */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/jpsim/Yams.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.1.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		D000000000000000000000003 /* Yams */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D000000000000000000000002 /* Yams */;
+			productName = Yams;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin PBXResourcesBuildPhase section */
 		300000000000000000000006 /* Resources */ = {
@@ -325,7 +352,9 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 200000000000000000000023 /* Version.xcconfig */;
 			buildSettings = {
+				ARCHS = arm64;
 				CLANG_ENABLE_MODULES = YES;
+				ONLY_ACTIVE_ARCH = YES;
 				SWIFT_VERSION = 5.9;
 			};
 			name = Debug;
@@ -334,7 +363,9 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 200000000000000000000023 /* Version.xcconfig */;
 			buildSettings = {
+				ARCHS = arm64;
 				CLANG_ENABLE_MODULES = YES;
+				ONLY_ACTIVE_ARCH = YES;
 				SWIFT_VERSION = 5.9;
 			};
 			name = Release;
