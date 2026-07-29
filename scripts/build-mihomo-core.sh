@@ -40,24 +40,14 @@ build_archive() {
 
 build_archive "ios-arm64" "iphoneos" "ios" "arm64" "arm64-apple-ios$IOS_MINIMUM" "-miphoneos-version-min=$IOS_MINIMUM"
 build_archive "ios-simulator-arm64" "iphonesimulator" "ios" "arm64" "arm64-apple-ios$IOS_MINIMUM-simulator" "-mios-simulator-version-min=$IOS_MINIMUM"
-build_archive "ios-simulator-amd64" "iphonesimulator" "ios" "amd64" "x86_64-apple-ios$IOS_MINIMUM-simulator" "-mios-simulator-version-min=$IOS_MINIMUM"
 build_archive "macos-arm64" "macosx" "darwin" "arm64" "arm64-apple-macos$MACOS_MINIMUM" "-mmacosx-version-min=$MACOS_MINIMUM"
-build_archive "macos-amd64" "macosx" "darwin" "amd64" "x86_64-apple-macos$MACOS_MINIMUM" "-mmacosx-version-min=$MACOS_MINIMUM"
 
-mkdir -p "$BUILD_ROOT/ios-simulator-universal" "$BUILD_ROOT/macos-universal" "$BUILD_ROOT/headers"
-lipo -create \
-    "$BUILD_ROOT/ios-simulator-arm64/libswihomo_core.a" \
-    "$BUILD_ROOT/ios-simulator-amd64/libswihomo_core.a" \
-    -output "$BUILD_ROOT/ios-simulator-universal/libswihomo_core.a"
-lipo -create \
-    "$BUILD_ROOT/macos-arm64/libswihomo_core.a" \
-    "$BUILD_ROOT/macos-amd64/libswihomo_core.a" \
-    -output "$BUILD_ROOT/macos-universal/libswihomo_core.a"
+mkdir -p "$BUILD_ROOT/headers"
 cp "$BUILD_ROOT/ios-arm64/libswihomo_core.h" "$BUILD_ROOT/headers/swihomo_core.h"
 
 rm -rf "$OUTPUT"
 xcodebuild -create-xcframework \
     -library "$BUILD_ROOT/ios-arm64/libswihomo_core.a" -headers "$BUILD_ROOT/headers" \
-    -library "$BUILD_ROOT/ios-simulator-universal/libswihomo_core.a" -headers "$BUILD_ROOT/headers" \
-    -library "$BUILD_ROOT/macos-universal/libswihomo_core.a" -headers "$BUILD_ROOT/headers" \
+    -library "$BUILD_ROOT/ios-simulator-arm64/libswihomo_core.a" -headers "$BUILD_ROOT/headers" \
+    -library "$BUILD_ROOT/macos-arm64/libswihomo_core.a" -headers "$BUILD_ROOT/headers" \
     -output "$OUTPUT"
