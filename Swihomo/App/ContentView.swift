@@ -463,10 +463,15 @@ private struct PreferencesView: View {
             Label("Application", systemImage: "app.badge")
                 .font(.title3.weight(.semibold))
 
-            Picker("App Log Level", selection: $appLogLevel) {
-                ForEach(LogLevel.allCases, id: \.rawValue) { level in
-                    Text(level.displayName).tag(level.rawValue)
+            HStack {
+                Text("App Log Level")
+                Spacer()
+                Picker("App Log Level", selection: $appLogLevel) {
+                    ForEach(LogLevel.allCases, id: \.rawValue) { level in
+                        Text(level.displayName).tag(level.rawValue)
+                    }
                 }
+                .labelsHidden()
             }
 
             Text("Controls Swihomo app logs only. Configure mihomo core logging in Overrides.")
@@ -2140,8 +2145,7 @@ private struct OverridesView: View {
 
                         VStack(alignment: .leading, spacing: 10) {
                             if usesCompactLayout {
-                                Text("Routing Mode")
-                                    .font(.subheadline.weight(.semibold))
+                                Label("Routing Mode", systemImage: "arrow.triangle.branch")
                                 Picker("Routing Mode", selection: $draft.mode) {
                                     ForEach(ProxyMode.allCases) { mode in
                                         Text(mode.displayName).tag(mode)
