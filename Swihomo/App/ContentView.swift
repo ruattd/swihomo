@@ -2,6 +2,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 #if os(macOS)
 import AppKit
+#else
+import UIKit
 #endif
 
 struct ContentView: View {
@@ -196,6 +198,7 @@ private enum HomeSection: String, CaseIterable, Hashable, Identifiable {
     case externalResources
     case logs
     case preference
+    case about
 
     var id: String { rawValue }
 
@@ -203,6 +206,7 @@ private enum HomeSection: String, CaseIterable, Hashable, Identifiable {
         switch self {
         case .externalResources: "Resources"
         case .preference: "Preferences"
+        case .about: "About"
         default: rawValue.capitalized
         }
     }
@@ -216,6 +220,7 @@ private enum HomeSection: String, CaseIterable, Hashable, Identifiable {
         case .externalResources: "externaldrive.connected.to.line.below"
         case .logs: "doc.text.magnifyingglass"
         case .preference: "paintpalette"
+        case .about: "info.circle"
         }
     }
 
@@ -228,6 +233,7 @@ private enum HomeSection: String, CaseIterable, Hashable, Identifiable {
         case .externalResources: .purple
         case .logs: .teal
         case .preference: .gray
+        case .about: .blue
         }
     }
 }
@@ -289,6 +295,8 @@ private struct HomeView: View {
             "\(model.logEntries.count) entries"
         case .preference:
             AppTheme(rawValue: selectedTheme)?.title ?? AppTheme.system.title
+        case .about:
+            appVersion
         }
     }
 
@@ -308,7 +316,15 @@ private struct HomeView: View {
             "App activity and mihomo core events"
         case .preference:
             "Appearance and color mode"
+        case .about:
+            "App details and open-source licenses"
         }
+    }
+
+    private var appVersion: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
+        return "\(version) (\(build))"
     }
 }
 
@@ -370,6 +386,8 @@ private struct FeatureDetailView: View {
                 LogsView()
             case .preference:
                 PreferencesView()
+            case .about:
+                AboutView()
             }
         }
     }
@@ -463,6 +481,91 @@ private struct PreferencesView: View {
         .liquidGlassCard(cornerRadius: 20)
     }
 #endif
+}
+
+private struct AboutView: View {
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+    }
+
+    private var buildNumber: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                VStack(spacing: 12) {
+                    appIcon
+                        .frame(width: 96, height: 96)
+
+                    Text("Swihomo")
+                        .font(.title.bold())
+                    Text("A native SwiftUI client for mihomo")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.top, 16)
+
+                VStack(spacing: 0) {
+                    AboutDetailRow(title: "Version", value: appVersion)
+                    Divider()
+                    AboutDetailRow(title: "Build", value: buildNumber)
+                    Divider()
+                    AboutDetailRow(title: "Mihomo Core", value: MihomoCoreVersion.version)
+                    Divider()
+                    AboutDetailRow(title: "License", value: "AGPL-3.0")
+                }
+                .liquidGlassCard(cornerRadius: 20)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Open Source")
+                        .font(.headline)
+                    Text("Swihomo embeds mihomo to provide a native Packet Tunnel experience on iOS and macOS.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Link("View Swihomo on GitHub", destination: URL(string: "https://github.com/ruattd/swihomo")!)
+                    Link("View mihomo on GitHub", destination: URL(string: "https://github.com/MetaCubeX/mihomo")!)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(20)
+                .liquidGlassCard(cornerRadius: 20)
+            }
+            .padding(20)
+            .frame(maxWidth: 560)
+        }
+        .navigationTitle("About")
+    }
+
+    @ViewBuilder
+    private var appIcon: some View {
+        #if os(macOS)
+        Image(nsImage: NSApplication.shared.applicationIconImage)
+            .resizable()
+        #else
+        Image(uiImage: UIImage(named: "AppIcon60x60") ?? UIImage())
+            .resizable()
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        #endif
+    }
+}
+
+private struct AboutDetailRow: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .fontWeight(.medium)
+                .textSelection(.enabled)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 15)
+    }
 }
 
 private struct ThemeOptionCard: View {
