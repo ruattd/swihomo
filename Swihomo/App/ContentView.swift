@@ -393,6 +393,7 @@ private struct FeatureDetailView: View {
 }
 
 private struct PreferencesView: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @AppStorage("appTheme") private var selectedTheme = AppTheme.system.rawValue
     @State private var systemThemeResetID = UUID()
     @AppStorage("automaticallyReclaimsMemory") private var automaticallyReclaimsMemory = false
@@ -415,13 +416,23 @@ private struct PreferencesView: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 12) {
-                            themeOptions
+                    if horizontalSizeClass == .compact {
+                        Picker("Appearance", selection: themeSelection) {
+                            ForEach(AppTheme.allCases) { theme in
+                                Text(theme.title).tag(theme.rawValue)
+                            }
                         }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                    } else {
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 12) {
+                                themeOptions
+                            }
 
-                        VStack(spacing: 12) {
-                            themeOptions
+                            VStack(spacing: 12) {
+                                themeOptions
+                            }
                         }
                     }
                 }
@@ -493,6 +504,16 @@ private struct PreferencesView: View {
                 selectTheme(theme)
             }
         }
+    }
+
+    private var themeSelection: Binding<String> {
+        Binding(
+            get: { self.selectedTheme },
+            set: { newValue in
+                guard let theme = AppTheme(rawValue: newValue) else { return }
+                self.selectTheme(theme)
+            }
+        )
     }
 
     private func selectTheme(_ theme: AppTheme) {
