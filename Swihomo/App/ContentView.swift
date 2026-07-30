@@ -352,7 +352,7 @@ private struct HomeFeatureCard: View {
         .padding(10)
         .frame(maxWidth: .infinity, minHeight: 112, maxHeight: 112, alignment: .topLeading)
         .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .liquidGlassCard()
+        .liquidGlassCard(interactive: true)
 #if os(macOS)
         .help(subtitle)
 #endif
@@ -2809,9 +2809,13 @@ private struct LogEntryRow: View {
 
 private extension View {
     @ViewBuilder
-    func liquidGlassCard(cornerRadius: CGFloat = 24) -> some View {
+    func liquidGlassCard(cornerRadius: CGFloat = 24, interactive: Bool = false) -> some View {
         if #available(iOS 26.0, macOS 26.0, *) {
-            glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
+            if interactive {
+                glassEffect(.regular.interactive(), in: .rect(cornerRadius: cornerRadius))
+            } else {
+                glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
+            }
         } else {
             background(.regularMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         }
