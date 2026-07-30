@@ -240,7 +240,6 @@ private enum HomeSection: String, CaseIterable, Hashable, Identifiable {
 
 private struct HomeView: View {
     @EnvironmentObject private var model: AppModel
-    @AppStorage("appTheme") private var selectedTheme = AppTheme.system.rawValue
 
     var body: some View {
         ScrollView {
@@ -294,7 +293,7 @@ private struct HomeView: View {
         case .logs:
             "\(model.logEntries.count) entries"
         case .preference:
-            AppTheme(rawValue: selectedTheme)?.title ?? AppTheme.system.title
+            "App settings"
         case .about:
             appVersion
         }
@@ -315,7 +314,7 @@ private struct HomeView: View {
         case .logs:
             "App activity and mihomo core events"
         case .preference:
-            "Appearance and color mode"
+            "Configure Swihomo for this device"
         case .about:
             "App details and open-source licenses"
         }
@@ -395,9 +394,11 @@ private struct FeatureDetailView: View {
 
 private struct PreferencesView: View {
     @AppStorage("appTheme") private var selectedTheme = AppTheme.system.rawValue
+    @State private var systemThemeResetID = UUID()
     @AppStorage("automaticallyReclaimsMemory") private var automaticallyReclaimsMemory = false
     @AppStorage("showsMenuBar") private var showsMenuBar = true
     @AppStorage("menuBarDisplay") private var menuBarDisplay = "iconAndSpeed"
+    @AppStorage("appLogLevel") private var appLogLevel = LogLevel.info.rawValue
     #if os(macOS)
     @AppStorage("hidesDockIcon") private var hidesDockIcon = false
     #endif
@@ -432,6 +433,7 @@ private struct PreferencesView: View {
                 menuBarSettings
 #endif
 
+                applicationSettings
                 memoryManagementSettings
             }
             .padding(20)
@@ -441,13 +443,33 @@ private struct PreferencesView: View {
     }
 
     private var memoryManagementSettings: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             Label("Experimental", systemImage: "flask")
                 .font(.title3.weight(.semibold))
 
             Toggle("Automatically reclaim memory", isOn: $automaticallyReclaimsMemory)
 
             Text("When critical memory pressure occurs, asks mihomo to release unused memory. This may increase garbage collection frequency and battery use. Applies the next time you connect.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .liquidGlassCard(cornerRadius: 20)
+    }
+
+    private var applicationSettings: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label("Application", systemImage: "app.badge")
+                .font(.title3.weight(.semibold))
+
+            Picker("App Log Level", selection: $appLogLevel) {
+                ForEach(LogLevel.allCases, id: \.rawValue) { level in
+                    Text(level.displayName).tag(level.rawValue)
+                }
+            }
+
+            Text("Controls Swihomo app logs only. Configure mihomo core logging in Overrides.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -463,9 +485,32 @@ private struct PreferencesView: View {
                 theme: theme,
                 isSelected: selectedTheme == theme.rawValue
             ) {
-                selectedTheme = theme.rawValue
+                selectTheme(theme)
             }
         }
+    }
+
+    private func selectTheme(_ theme: AppTheme) {
+        #if os(macOS)
+        let resetID = UUID()
+        systemThemeResetID = resetID
+
+        guard theme == .system, selectedTheme != AppTheme.system.rawValue else {
+            selectedTheme = theme.rawValue
+            return
+        }
+
+        // Preserve the current system appearance while SwiftUI releases the explicit override.
+        selectedTheme = UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark"
+            ? AppTheme.dark.rawValue
+            : AppTheme.light.rawValue
+        DispatchQueue.main.async {
+            guard systemThemeResetID == resetID else { return }
+            selectedTheme = AppTheme.system.rawValue
+        }
+        #else
+        selectedTheme = theme.rawValue
+        #endif
     }
 
 #if os(macOS)
@@ -1980,6 +2025,7 @@ private struct ProxyNodeCard: View {
 private struct OverridesView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.openURL) private var openURL
     @State private var draft = ProxyOverrides.default()
     @State private var isControllerSecretVisible = false
     @State private var showingReconnectConfirmation = false
@@ -2055,7 +2101,9 @@ private struct OverridesView: View {
             portField("Controller Port", value: $draft.controllerPort)
             Menu {
                 Section("Export to...") {
-                    Link(destination: sparxieInstallURL) {
+                    Button {
+                        openURL(sparxieInstallURL)
+                    } label: {
                         Label("Sparxie", systemImage: "arrow.up.right.square")
                     }
                 }
@@ -2091,19 +2139,32 @@ private struct OverridesView: View {
                         Divider()
 
                         VStack(alignment: .leading, spacing: 10) {
-                            Text("Routing Mode")
-                                .font(.subheadline.weight(.semibold))
-                            Picker("Routing Mode", selection: $draft.mode) {
-                                ForEach(ProxyMode.allCases) { mode in
-                                    Text(mode.displayName).tag(mode)
+                            if usesCompactLayout {
+                                Text("Routing Mode")
+                                    .font(.subheadline.weight(.semibold))
+                                Picker("Routing Mode", selection: $draft.mode) {
+                                    ForEach(ProxyMode.allCases) { mode in
+                                        Text(mode.displayName).tag(mode)
+                                    }
+                                }
+                                .labelsHidden()
+                                .pickerStyle(.segmented)
+                            } else {
+                                HStack {
+                                    Label("Routing Mode", systemImage: "arrow.triangle.branch")
+                                    Spacer()
+                                    Picker("Routing Mode", selection: $draft.mode) {
+                                        ForEach(ProxyMode.allCases) { mode in
+                                            Text(mode.displayName).tag(mode)
+                                        }
+                                    }
+                                    .labelsHidden()
+                                    .pickerStyle(.segmented)
                                 }
                             }
-                            .labelsHidden()
-                            .pickerStyle(.segmented)
 
                             HStack {
                                 Label("Mihomo Log Level", systemImage: "text.line.first.and.arrowtriangle.forward")
-                                    .font(.subheadline.weight(.semibold))
                                 Spacer()
                                 Picker("Mihomo Log Level", selection: $draft.logLevel) {
                                     ForEach(MihomoLogLevel.allCases) { level in
@@ -2130,7 +2191,7 @@ private struct OverridesView: View {
                                 portField("Mixed Port", value: $draft.mixedPort)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                 controllerPortField
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .frame(maxWidth: .infinity, alignment: .trailing)
                             }
                             VStack(alignment: .leading, spacing: 12) {
                                 portField("Mixed Port", value: $draft.mixedPort)

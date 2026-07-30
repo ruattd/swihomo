@@ -42,6 +42,7 @@ final class AppModel: ObservableObject {
     private var connectionTransferSamples: [String: ConnectionTransferSample] = [:]
 
     private static let geoDataLastUpdatedKeyPrefix = "com.swihomo.geodata.lastUpdated."
+    private static let appLogLevelKey = "appLogLevel"
 
     init() {
         tunnel.onStartFailed = { [weak self] error in
@@ -816,6 +817,8 @@ final class AppModel: ObservableObject {
     }
 
     private func record(_ level: LogLevel, module: String, _ message: String) {
+        let appLogLevel = LogLevel(rawValue: UserDefaults.standard.string(forKey: Self.appLogLevelKey) ?? "") ?? .info
+        guard appLogLevel.includes(level) else { return }
         guard let logStore else { return }
         logEntries = logStore.append(source: .app, module: module, level: level, message: message)
     }

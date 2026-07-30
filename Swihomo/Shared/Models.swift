@@ -523,7 +523,7 @@ enum LogSource: String, Codable, CaseIterable {
     var displayName: String { rawValue.capitalized }
 }
 
-enum LogLevel: String, Codable {
+enum LogLevel: String, Codable, CaseIterable {
     case debug
     case info
     case warning
@@ -535,6 +535,19 @@ enum LogLevel: String, Codable {
         case .info: "Info"
         case .warning: "Warning"
         case .error: "Error"
+        }
+    }
+
+    func includes(_ level: LogLevel) -> Bool {
+        priority <= level.priority
+    }
+
+    private var priority: Int {
+        switch self {
+        case .debug: 0
+        case .info: 1
+        case .warning: 2
+        case .error: 3
         }
     }
 }
