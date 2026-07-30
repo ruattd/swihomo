@@ -4,7 +4,12 @@ import NetworkExtension
 protocol MihomoCoreEngine: AnyObject {
     func start(configuration: MihomoRuntimeConfiguration, packetFlow: NEPacketTunnelFlow) async throws
     func stop() async
-    func reclaimMemory()
+    func reclaimMemory() -> MihomoMemoryUsage
+}
+
+struct MihomoMemoryUsage {
+    let before: UInt64
+    let after: UInt64
 }
 
 enum MihomoCoreFactory {
@@ -58,8 +63,11 @@ private final class EmbeddedMihomoCore: MihomoCoreEngine {
         bridge = nil
     }
 
-    func reclaimMemory() {
-        SwihomoCoreFreeMemory()
+    func reclaimMemory() -> MihomoMemoryUsage {
+        var before: UInt64 = 0
+        var after: UInt64 = 0
+        SwihomoCoreFreeMemory(&before, &after)
+        return MihomoMemoryUsage(before: before, after: after)
     }
 
     static func homeDirectory() throws -> URL {

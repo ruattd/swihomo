@@ -228,8 +228,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let source = DispatchSource.makeMemoryPressureSource(eventMask: .critical, queue: memoryPressureQueue)
         source.setEventHandler { [weak self] in
             guard let self, self.memoryPressureSource === source else { return }
-            CoreLogStore.append(level: .warning, message: "Critical memory pressure detected; reclaiming mihomo memory.")
-            self.core?.reclaimMemory()
+            guard let usage = self.core?.reclaimMemory() else { return }
+            CoreLogStore.append(
+                level: .warning,
+                message: "Critical memory pressure detected; mihomo heap memory: \(formatMemoryUsage(usage.before)) -> \(formatMemoryUsage(usage.after))."
+            )
         }
         memoryPressureSource = source
         source.resume()
@@ -238,5 +241,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private func stopMemoryPressureMonitoring() {
         memoryPressureSource?.cancel()
         memoryPressureSource = nil
+    }
+
+    private func formatMemoryUsage(_ bytes: UInt64) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(clamping: bytes), countStyle: .memory)
     }
 }

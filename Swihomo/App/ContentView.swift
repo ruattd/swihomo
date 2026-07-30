@@ -219,7 +219,7 @@ private enum HomeSection: String, CaseIterable, Hashable, Identifiable {
         case .overrides: "slider.horizontal.3"
         case .externalResources: "externaldrive.connected.to.line.below"
         case .logs: "doc.text.magnifyingglass"
-        case .preference: "paintpalette"
+        case .preference: "gearshape"
         case .about: "info.circle"
         }
     }
@@ -405,23 +405,28 @@ private struct PreferencesView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Appearance")
-                        .font(.title2.bold())
-                    Text("Choose how Swihomo appears on this device.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 12) {
-                        themeOptions
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Appearance")
+                            .font(.title2.bold())
+                        Text("Choose how Swihomo appears on this device.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
                     }
 
-                    VStack(spacing: 12) {
-                        themeOptions
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 12) {
+                            themeOptions
+                        }
+
+                        VStack(spacing: 12) {
+                            themeOptions
+                        }
                     }
                 }
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .liquidGlassCard(cornerRadius: 20)
 
 #if os(macOS)
                 menuBarSettings
