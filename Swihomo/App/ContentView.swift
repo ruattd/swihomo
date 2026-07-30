@@ -2811,7 +2811,7 @@ private extension View {
     @ViewBuilder
     func liquidGlassCard(cornerRadius: CGFloat = 24) -> some View {
         if #available(iOS 26.0, macOS 26.0, *) {
-            glassEffect(.regular.interactive(), in: .rect(cornerRadius: cornerRadius))
+            glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
         } else {
             background(.regularMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         }
