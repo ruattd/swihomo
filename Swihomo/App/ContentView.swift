@@ -1639,6 +1639,33 @@ private struct OverridesView: View {
             }
     }
 
+    private var sparxieInstallURL: URL {
+        var allowedCharacters = CharacterSet.urlQueryAllowed
+        allowedCharacters.remove(charactersIn: "&=+?#")
+        let secret = draft.controllerSecret.addingPercentEncoding(withAllowedCharacters: allowedCharacters)
+            ?? draft.controllerSecret
+
+        return URL(string: "sparxie://install-target?url=http%3A%2F%2F127.0.0.1%3A\(draft.controllerPort)&name=Swihomo&type=mihomo&secret=\(secret)")!
+    }
+
+    private var controllerPortField: some View {
+        HStack(spacing: 8) {
+            portField("Controller Port", value: $draft.controllerPort)
+            Menu {
+                Section("Export to...") {
+                    Link(destination: sparxieInstallURL) {
+                        Label("Sparxie", systemImage: "arrow.up.right.square")
+                    }
+                }
+            } label: {
+                Image(systemName: "square.and.arrow.up")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Export controller configuration")
+            .help("Export controller configuration")
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -1700,12 +1727,12 @@ private struct OverridesView: View {
                             HStack(spacing: 28) {
                                 portField("Mixed Port", value: $draft.mixedPort)
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                                portField("Controller Port", value: $draft.controllerPort)
+                                controllerPortField
                                     .frame(maxWidth: .infinity, alignment: .leading)
                             }
                             VStack(alignment: .leading, spacing: 12) {
                                 portField("Mixed Port", value: $draft.mixedPort)
-                                portField("Controller Port", value: $draft.controllerPort)
+                                controllerPortField
                             }
                         }
 
