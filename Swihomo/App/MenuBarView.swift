@@ -148,9 +148,18 @@ struct MenuBarLabelView: View {
 struct MenuBarContentView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.openWindow) private var openWindow
+    @AppStorage("menuBarDisplay") private var menuBarDisplay = MenuBarDisplay.iconAndSpeed.rawValue
+
+    private var trafficSummary: String {
+        let display = MenuBarDisplay(rawValue: menuBarDisplay) ?? .iconAndSpeed
+        if display == .icon {
+            return "↑ \(byteRate(model.trafficUploadSpeed)) ↓ \(byteRate(model.trafficDownloadSpeed))"
+        }
+        return "↑ \(byteCount(model.trafficUploadTotal)) ↓ \(byteCount(model.trafficDownloadTotal))"
+    }
 
     var body: some View {
-        Text("\(model.connectionStatusTitle) · ↑ \(byteCount(model.trafficUploadTotal)) ↓ \(byteCount(model.trafficDownloadTotal))")
+        Text("\(model.connectionStatusTitle) · \(trafficSummary)")
 
         Divider()
 

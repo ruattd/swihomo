@@ -444,6 +444,12 @@ private struct PreferencesView: View {
             .pickerStyle(.segmented)
             .disabled(!showsMenuBar)
 
+            if menuBarDisplay == MenuBarDisplay.icon.rawValue {
+                Text("When Icon Only is selected, the menu shows live transfer speeds instead of total traffic.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Toggle("Hide Dock icon", isOn: $hidesDockIcon)
                 .disabled(!showsMenuBar)
 
