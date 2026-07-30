@@ -395,6 +395,7 @@ private struct FeatureDetailView: View {
 
 private struct PreferencesView: View {
     @AppStorage("appTheme") private var selectedTheme = AppTheme.system.rawValue
+    @AppStorage("automaticallyReclaimsMemory") private var automaticallyReclaimsMemory = false
     @AppStorage("showsMenuBar") private var showsMenuBar = true
     @AppStorage("menuBarDisplay") private var menuBarDisplay = "iconAndSpeed"
     #if os(macOS)
@@ -425,11 +426,29 @@ private struct PreferencesView: View {
 #if os(macOS)
                 menuBarSettings
 #endif
+
+                memoryManagementSettings
             }
             .padding(20)
             .frame(maxWidth: 760, alignment: .leading)
         }
         .navigationTitle("Preferences")
+    }
+
+    private var memoryManagementSettings: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Experimental", systemImage: "flask")
+                .font(.title3.weight(.semibold))
+
+            Toggle("Automatically reclaim memory", isOn: $automaticallyReclaimsMemory)
+
+            Text("When critical memory pressure occurs, asks mihomo to release unused memory. This may increase garbage collection frequency and battery use. Applies the next time you connect.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .liquidGlassCard(cornerRadius: 20)
     }
 
     @ViewBuilder

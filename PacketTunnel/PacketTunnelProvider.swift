@@ -3,6 +3,8 @@ import NetworkExtension
 
 final class PacketTunnelProvider: NEPacketTunnelProvider {
     private var core: (any MihomoCoreEngine)?
+    private var memoryPressureSource: DispatchSourceMemoryPressure?
+    private let memoryPressureQueue = DispatchQueue(label: "com.swihomo.memory-pressure")
 
     override func startTunnel(options: [String: NSObject]?) async throws {
         guard let configuration = protocolConfiguration as? NETunnelProviderProtocol,
@@ -15,6 +17,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             throw ClientError.missingProfile
         }
         let dnsEnabled = (configuration.providerConfiguration?["dnsEnabled"] as? NSNumber)?.boolValue ?? true
+        let automaticallyReclaimsMemory = (configuration.providerConfiguration?["automaticallyReclaimsMemory"] as? NSNumber)?.boolValue ?? false
 
         // Download required geodata before the default route reaches the core's packet flow.
         let geoDataRequirements = MihomoGeoDataRequirements(profileYAML: profileYAML)
@@ -43,10 +46,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             throw tunnelError
         }
         self.core = core
+        if automaticallyReclaimsMemory {
+            startMemoryPressureMonitoring()
+        }
     }
 
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
         Task {
+            stopMemoryPressureMonitoring()
             await core?.stop()
             core = nil
             completionHandler()
@@ -214,5 +221,22 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             settings.dnsSettings = NEDNSSettings(servers: ["1.1.1.1", "2606:4700:4700::1111"])
         }
         return settings
+    }
+
+    private func startMemoryPressureMonitoring() {
+        stopMemoryPressureMonitoring()
+        let source = DispatchSource.makeMemoryPressureSource(eventMask: .critical, queue: memoryPressureQueue)
+        source.setEventHandler { [weak self] in
+            guard let self, self.memoryPressureSource === source else { return }
+            CoreLogStore.append(level: .warning, message: "Critical memory pressure detected; reclaiming mihomo memory.")
+            self.core?.reclaimMemory()
+        }
+        memoryPressureSource = source
+        source.resume()
+    }
+
+    private func stopMemoryPressureMonitoring() {
+        memoryPressureSource?.cancel()
+        memoryPressureSource = nil
     }
 }

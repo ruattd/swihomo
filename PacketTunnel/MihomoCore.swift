@@ -4,6 +4,7 @@ import NetworkExtension
 protocol MihomoCoreEngine: AnyObject {
     func start(configuration: MihomoRuntimeConfiguration, packetFlow: NEPacketTunnelFlow) async throws
     func stop() async
+    func reclaimMemory()
 }
 
 enum MihomoCoreFactory {
@@ -55,6 +56,10 @@ private final class EmbeddedMihomoCore: MihomoCoreEngine {
             PacketFlowBridgeRegistry.clear(bridge)
         }
         bridge = nil
+    }
+
+    func reclaimMemory() {
+        SwihomoCoreFreeMemory()
     }
 
     static func homeDirectory() throws -> URL {

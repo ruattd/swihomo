@@ -8,6 +8,7 @@ int SwihomoCoreStart(
 );
 int SwihomoCoreInputPacket(uint8_t *packet, size_t length, int family);
 void SwihomoCoreStop(void);
+void SwihomoCoreFreeMemory(void);
 char *SwihomoCoreLastError(void);
 char *SwihomoCoreExternalResources(void);
 char *SwihomoCoreProxyGroupOrder(void);

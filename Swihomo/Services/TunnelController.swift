@@ -49,7 +49,8 @@ final class TunnelController {
         tunnelProtocol.providerConfiguration = [
             "profileID": profileID.uuidString,
             "profileYAML": configuration.profileYAML,
-            "dnsEnabled": NSNumber(value: dnsEnabled)
+            "dnsEnabled": NSNumber(value: dnsEnabled),
+            "automaticallyReclaimsMemory": NSNumber(value: automaticallyReclaimsMemory)
         ]
         manager.protocolConfiguration = tunnelProtocol
         manager.localizedDescription = "Swihomo"
@@ -66,6 +67,10 @@ final class TunnelController {
             isStarting = false
             throw error
         }
+    }
+
+    private var automaticallyReclaimsMemory: Bool {
+        UserDefaults.standard.object(forKey: "automaticallyReclaimsMemory") as? Bool ?? false
     }
 
     func disconnect() {
