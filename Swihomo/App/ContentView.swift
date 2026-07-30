@@ -7,6 +7,15 @@ import AppKit
 struct ContentView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage("appTheme") private var selectedTheme = AppTheme.system.rawValue
+    @AppStorage("showsMenuBar") private var showsMenuBar = true
+    #if os(macOS)
+    @AppStorage("hidesDockIcon") private var hidesDockIcon = false
+    #endif
+
+    private var preferredColorScheme: ColorScheme? {
+        AppTheme(rawValue: selectedTheme)?.colorScheme
+    }
 
     var body: some View {
         NavigationSplitView {
@@ -22,6 +31,7 @@ struct ContentView: View {
             FeatureDetailView(section: .connection)
         }
         .navigationSplitViewStyle(.balanced)
+        .preferredColorScheme(preferredColorScheme)
 #if os(macOS)
         .background(WindowToolbarBaselineHider())
 #endif
@@ -34,6 +44,21 @@ struct ContentView: View {
             }
         }
         .animation(reduceMotion ? nil : .snappy, value: model.errorMessage)
+#if os(macOS)
+        .onAppear {
+            DockIconVisibility.update(showsMenuBar: showsMenuBar, hidesDockIcon: hidesDockIcon)
+            DockIconVisibility.activateWindowIfNeeded(
+                showsMenuBar: showsMenuBar,
+                hidesDockIcon: hidesDockIcon
+            )
+        }
+        .onChange(of: showsMenuBar) { _, _ in
+            DockIconVisibility.update(showsMenuBar: showsMenuBar, hidesDockIcon: hidesDockIcon)
+        }
+        .onChange(of: hidesDockIcon) { _, _ in
+            DockIconVisibility.update(showsMenuBar: showsMenuBar, hidesDockIcon: hidesDockIcon)
+        }
+#endif
     }
 }
 
@@ -106,6 +131,63 @@ private final class ToolbarBaselineView: NSView {
 }
 #endif
 
+#if os(macOS)
+private enum DockIconVisibility {
+    static func update(showsMenuBar: Bool, hidesDockIcon: Bool) {
+        NSApplication.shared.setActivationPolicy(showsMenuBar && hidesDockIcon ? .accessory : .regular)
+    }
+
+    static func activateWindowIfNeeded(showsMenuBar: Bool, hidesDockIcon: Bool) {
+        guard showsMenuBar && hidesDockIcon else { return }
+
+        DispatchQueue.main.async {
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            NSApplication.shared.windows.first(where: \.canBecomeKey)?.makeKeyAndOrderFront(nil)
+        }
+    }
+}
+#endif
+
+private enum AppTheme: String, CaseIterable, Identifiable {
+    case light
+    case dark
+    case system
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .light: "Light"
+        case .dark: "Dark"
+        case .system: "System"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .light: "Always light"
+        case .dark: "Always dark"
+        case .system: "Match device"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .light: "sun.max.fill"
+        case .dark: "moon.stars.fill"
+        case .system: "circle.lefthalf.filled"
+        }
+    }
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .light: .light
+        case .dark: .dark
+        case .system: nil
+        }
+    }
+}
+
 private enum HomeSection: String, CaseIterable, Hashable, Identifiable {
     case connection
     case profiles
@@ -113,12 +195,14 @@ private enum HomeSection: String, CaseIterable, Hashable, Identifiable {
     case overrides
     case externalResources
     case logs
+    case preference
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .externalResources: "Resources"
+        case .preference: "Preferences"
         default: rawValue.capitalized
         }
     }
@@ -131,6 +215,7 @@ private enum HomeSection: String, CaseIterable, Hashable, Identifiable {
         case .overrides: "slider.horizontal.3"
         case .externalResources: "externaldrive.connected.to.line.below"
         case .logs: "doc.text.magnifyingglass"
+        case .preference: "paintpalette"
         }
     }
 
@@ -142,12 +227,14 @@ private enum HomeSection: String, CaseIterable, Hashable, Identifiable {
         case .overrides: .pink
         case .externalResources: .purple
         case .logs: .teal
+        case .preference: .gray
         }
     }
 }
 
 private struct HomeView: View {
     @EnvironmentObject private var model: AppModel
+    @AppStorage("appTheme") private var selectedTheme = AppTheme.system.rawValue
 
     var body: some View {
         ScrollView {
@@ -200,6 +287,8 @@ private struct HomeView: View {
             "\(model.externalResources.count) files"
         case .logs:
             "\(model.logEntries.count) entries"
+        case .preference:
+            AppTheme(rawValue: selectedTheme)?.title ?? AppTheme.system.title
         }
     }
 
@@ -217,6 +306,8 @@ private struct HomeView: View {
             model.isConnected ? "Edit provider files managed by mihomo" : "Connect a profile to inspect provider files"
         case .logs:
             "App activity and mihomo core events"
+        case .preference:
+            "Appearance and color mode"
         }
     }
 }
@@ -277,8 +368,186 @@ private struct FeatureDetailView: View {
                 ExternalResourcesView()
             case .logs:
                 LogsView()
+            case .preference:
+                PreferencesView()
             }
         }
+    }
+}
+
+private struct PreferencesView: View {
+    @AppStorage("appTheme") private var selectedTheme = AppTheme.system.rawValue
+    @AppStorage("showsMenuBar") private var showsMenuBar = true
+    @AppStorage("menuBarDisplay") private var menuBarDisplay = "iconAndSpeed"
+    #if os(macOS)
+    @AppStorage("hidesDockIcon") private var hidesDockIcon = false
+    #endif
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Appearance")
+                        .font(.title2.bold())
+                    Text("Choose how Swihomo appears on this device.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) {
+                        themeOptions
+                    }
+
+                    VStack(spacing: 12) {
+                        themeOptions
+                    }
+                }
+
+#if os(macOS)
+                menuBarSettings
+#endif
+            }
+            .padding(20)
+            .frame(maxWidth: 760, alignment: .leading)
+        }
+        .navigationTitle("Preferences")
+    }
+
+    @ViewBuilder
+    private var themeOptions: some View {
+        ForEach(AppTheme.allCases) { theme in
+            ThemeOptionCard(
+                theme: theme,
+                isSelected: selectedTheme == theme.rawValue
+            ) {
+                selectedTheme = theme.rawValue
+            }
+        }
+    }
+
+#if os(macOS)
+    private var menuBarSettings: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label("Menu Bar", systemImage: "menubar.rectangle")
+                .font(.title3.weight(.semibold))
+
+            Toggle("Show Swihomo in the menu bar", isOn: $showsMenuBar)
+
+            Divider()
+
+            Picker("Display", selection: $menuBarDisplay) {
+                ForEach(MenuBarDisplay.allCases) { display in
+                    Text(display.title).tag(display.rawValue)
+                }
+            }
+            .pickerStyle(.segmented)
+            .disabled(!showsMenuBar)
+
+            Toggle("Hide Dock icon", isOn: $hidesDockIcon)
+                .disabled(!showsMenuBar)
+
+            if !showsMenuBar {
+                Text("Enable the menu bar item before hiding the Dock icon.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(20)
+        .liquidGlassCard(cornerRadius: 20)
+    }
+#endif
+}
+
+private struct ThemeOptionCard: View {
+    let theme: AppTheme
+    let isSelected: Bool
+    let select: () -> Void
+
+    var body: some View {
+        Button(action: select) {
+            VStack(alignment: .leading, spacing: 12) {
+                preview
+                    .frame(height: 96)
+
+                HStack(alignment: .top, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(theme.title)
+                            .font(.headline)
+                        Text(theme.subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .font(.title3)
+                        .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                        .accessibilityHidden(true)
+                }
+            }
+            .padding(12)
+            .frame(minWidth: 144, maxWidth: .infinity, alignment: .leading)
+            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .liquidGlassCard(cornerRadius: 20)
+            .overlay {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(isSelected ? Color.accentColor : .clear, lineWidth: 2)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(theme.title) appearance")
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+    }
+
+    private var preview: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(previewBackground)
+
+            VStack(spacing: 7) {
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(.cyan)
+                        .frame(width: 14, height: 14)
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(previewText)
+                        .frame(width: 54, height: 7)
+                    Spacer(minLength: 0)
+                }
+
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(previewCard)
+                    .frame(height: 36)
+            }
+            .padding(12)
+        }
+    }
+
+    private var previewBackground: AnyShapeStyle {
+        switch theme {
+        case .light:
+            AnyShapeStyle(.white)
+        case .dark:
+            AnyShapeStyle(Color(red: 0.12, green: 0.13, blue: 0.16))
+        case .system:
+            AnyShapeStyle(
+                LinearGradient(
+                    colors: [.white, Color(red: 0.12, green: 0.13, blue: 0.16)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+        }
+    }
+
+    private var previewText: Color {
+        theme == .light ? Color.black.opacity(0.7) : .white.opacity(0.8)
+    }
+
+    private var previewCard: Color {
+        theme == .light ? Color.black.opacity(0.08) : .white.opacity(0.12)
     }
 }
 

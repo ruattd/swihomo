@@ -2,17 +2,63 @@
 import AppKit
 import SwiftUI
 
+enum MenuBarDisplay: String, CaseIterable, Identifiable {
+    case icon
+    case speed
+    case iconAndSpeed
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .icon: "Icon Only"
+        case .speed: "Speed Only"
+        case .iconAndSpeed: "Icon + Speed"
+        }
+    }
+}
+
 struct MenuBarLabelView: View {
     @ObservedObject var model: AppModel
+    @AppStorage("menuBarDisplay") private var menuBarDisplay = MenuBarDisplay.iconAndSpeed.rawValue
 
-    var body: some View {
-        Image(nsImage: Self.image(
-            upload: byteRate(model.trafficUploadSpeed),
-            download: byteRate(model.trafficDownloadSpeed)
-        ))
+    private var display: MenuBarDisplay {
+        MenuBarDisplay(rawValue: menuBarDisplay) ?? .iconAndSpeed
     }
 
-    private static func image(upload: String, download: String) -> NSImage {
+    @ViewBuilder
+    var body: some View {
+        switch display {
+        case .icon:
+            Image(nsImage: Self.image(
+                upload: byteRate(model.trafficUploadSpeed),
+                download: byteRate(model.trafficDownloadSpeed),
+                showsText: false,
+                showsIcon: true
+            ))
+        case .speed:
+            Image(nsImage: Self.image(
+                upload: byteRate(model.trafficUploadSpeed),
+                download: byteRate(model.trafficDownloadSpeed),
+                showsText: true,
+                showsIcon: false
+            ))
+        case .iconAndSpeed:
+            Image(nsImage: Self.image(
+                upload: byteRate(model.trafficUploadSpeed),
+                download: byteRate(model.trafficDownloadSpeed),
+                showsText: true,
+                showsIcon: true
+            ))
+        }
+    }
+
+    private static func image(
+        upload: String,
+        download: String,
+        showsText: Bool,
+        showsIcon: Bool
+    ) -> NSImage {
         let font = NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .regular)
         let textAttributes: [NSAttributedString.Key: Any] = [
             .font: font,
@@ -28,19 +74,23 @@ struct MenuBarLabelView: View {
         let iconWidth = ceil(iconHeight * 1.2)
         let spacing: CGFloat = 6
         let size = NSSize(
-            width: textWidth + spacing + iconWidth,
+            width: (showsText ? textWidth : 0) + (showsText && showsIcon ? spacing : 0) + (showsIcon ? iconWidth : 0),
             height: height
         )
 
         let image = NSImage(size: size, flipped: true) { _ in
-            for (index, line) in lines.enumerated() {
-                (line as NSString).draw(
-                    at: NSPoint(x: 0, y: CGFloat(index) * lineHeight),
-                    withAttributes: textAttributes
-                )
+            if showsText {
+                for (index, line) in lines.enumerated() {
+                    (line as NSString).draw(
+                        at: NSPoint(x: 0, y: CGFloat(index) * lineHeight),
+                        withAttributes: textAttributes
+                    )
+                }
             }
 
-            let iconX = textWidth + spacing
+            guard showsIcon else { return true }
+
+            let iconX = showsText ? textWidth + spacing : 0
             let iconY = (height - iconHeight) / 2
             let stemWidth = max(iconHeight * 0.22, 1)
             let diagonalWidth = max(iconHeight * 0.16, 1)
