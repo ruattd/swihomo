@@ -1,5 +1,6 @@
 import Foundation
 import NetworkExtension
+import Network
 
 final class PacketTunnelProvider: NEPacketTunnelProvider {
     private var core: (any MihomoCoreEngine)?
@@ -18,11 +19,25 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
         let dnsEnabled = (configuration.providerConfiguration?["dnsEnabled"] as? NSNumber)?.boolValue ?? true
         let automaticallyReclaimsMemory = (configuration.providerConfiguration?["automaticallyReclaimsMemory"] as? NSNumber)?.boolValue ?? false
+        let bypassesPrivateNetworks = (configuration.providerConfiguration?["bypassesPrivateNetworks"] as? NSNumber)?.boolValue ?? false
+        let bypassedCIDRs = configuration.providerConfiguration?["bypassedCIDRs"] as? [String] ?? []
+        let mtu = (configuration.providerConfiguration?["mtu"] as? NSNumber)?.intValue ?? 1500
+        let customDNSServers = configuration.providerConfiguration?["customDNSServers"] as? [String] ?? []
+        let ipv6Enabled = (configuration.providerConfiguration?["ipv6Enabled"] as? NSNumber)?.boolValue ?? true
 
         // Download required geodata before the default route reaches the core's packet flow.
         let geoDataRequirements = MihomoGeoDataRequirements(profileYAML: profileYAML)
         try await MihomoCoreFactory.prewarmGeoData(requiring: geoDataRequirements)
-        try await setTunnelNetworkSettings(networkSettings(dnsEnabled: dnsEnabled))
+        try await setTunnelNetworkSettings(
+            networkSettings(
+                dnsEnabled: dnsEnabled,
+                bypassesPrivateNetworks: bypassesPrivateNetworks,
+                bypassedCIDRs: bypassedCIDRs,
+                mtu: mtu,
+                customDNSServers: customDNSServers,
+                ipv6Enabled: ipv6Enabled
+            )
+        )
 
         let core = MihomoCoreFactory.make()
         do {
@@ -202,25 +217,100 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         return (data, response.statusCode)
     }
 
-    private func networkSettings(dnsEnabled: Bool) -> NEPacketTunnelNetworkSettings {
+    private func networkSettings(
+        dnsEnabled: Bool,
+        bypassesPrivateNetworks: Bool,
+        bypassedCIDRs: [String],
+        mtu: Int,
+        customDNSServers: [String],
+        ipv6Enabled: Bool
+    ) -> NEPacketTunnelNetworkSettings {
         let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "127.0.0.1")
         let ipv4 = NEIPv4Settings(addresses: ["198.18.0.1"], subnetMasks: ["255.255.255.0"])
         ipv4.includedRoutes = [NEIPv4Route.default()]
         settings.ipv4Settings = ipv4
 
-        let ipv6 = NEIPv6Settings(
-            addresses: ["fd00::1"],
-            networkPrefixLengths: [NSNumber(value: 64)]
+        let excludedRoutes = excludedRoutes(
+            from: bypassedCIDRs,
+            includingPrivateNetworks: bypassesPrivateNetworks
         )
-        ipv6.includedRoutes = [NEIPv6Route.default()]
-        settings.ipv6Settings = ipv6
-        settings.mtu = 1500
+        ipv4.excludedRoutes = excludedRoutes.ipv4
+        if ipv6Enabled {
+            let ipv6 = NEIPv6Settings(
+                addresses: ["fd00::1"],
+                networkPrefixLengths: [NSNumber(value: 64)]
+            )
+            ipv6.includedRoutes = [NEIPv6Route.default()]
+            ipv6.excludedRoutes = excludedRoutes.ipv6
+            settings.ipv6Settings = ipv6
+        }
+        settings.mtu = NSNumber(value: min(max(mtu, 1280), 1500))
 
-        if dnsEnabled {
+        let dnsServers = validDNSServers(from: customDNSServers, allowsIPv6: ipv6Enabled)
+        if !dnsServers.isEmpty {
+            settings.dnsSettings = NEDNSSettings(servers: dnsServers)
+        } else if dnsEnabled {
             // The default route sends these resolver queries through mihomo's packet flow.
-            settings.dnsSettings = NEDNSSettings(servers: ["1.1.1.1", "2606:4700:4700::1111"])
+            settings.dnsSettings = NEDNSSettings(
+                servers: ipv6Enabled ? ["1.1.1.1", "2606:4700:4700::1111"] : ["1.1.1.1"]
+            )
         }
         return settings
+    }
+
+    private func validDNSServers(from servers: [String], allowsIPv6: Bool) -> [String] {
+        var seenServers = Set<String>()
+        return servers.filter { server in
+            guard IPv4Address(server) != nil || (allowsIPv6 && IPv6Address(server) != nil) else {
+                return false
+            }
+            return seenServers.insert(server).inserted
+        }
+    }
+
+    private func excludedRoutes(
+        from cidrs: [String],
+        includingPrivateNetworks: Bool
+    ) -> (ipv4: [NEIPv4Route], ipv6: [NEIPv6Route]) {
+        let privateNetworkCIDRs = includingPrivateNetworks
+            ? ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "fc00::/7", "fe80::/10"]
+            : []
+        var ipv4Routes: [NEIPv4Route] = []
+        var ipv6Routes: [NEIPv6Route] = []
+        var seenCIDRs = Set<String>()
+
+        for cidr in privateNetworkCIDRs + cidrs {
+            let components = cidr.split(separator: "/", maxSplits: 1)
+            guard components.count == 2,
+                  let prefixLength = Int(components[1]) else {
+                continue
+            }
+
+            let address = String(components[0])
+            let normalizedCIDR = "\(address)/\(prefixLength)"
+            guard seenCIDRs.insert(normalizedCIDR).inserted else { continue }
+
+            if IPv4Address(address) != nil, (0...32).contains(prefixLength) {
+                let subnetMask = ipv4SubnetMask(prefixLength: prefixLength)
+                ipv4Routes.append(NEIPv4Route(destinationAddress: address, subnetMask: subnetMask))
+            } else if IPv6Address(address) != nil, (0...128).contains(prefixLength) {
+                ipv6Routes.append(
+                    NEIPv6Route(
+                        destinationAddress: address,
+                        networkPrefixLength: NSNumber(value: prefixLength)
+                    )
+                )
+            }
+        }
+
+        return (ipv4Routes, ipv6Routes)
+    }
+
+    private func ipv4SubnetMask(prefixLength: Int) -> String {
+        let mask: UInt32 = prefixLength == 0 ? 0 : UInt32.max << (32 - prefixLength)
+        return [24, 16, 8, 0]
+            .map { String((mask >> $0) & 0xFF) }
+            .joined(separator: ".")
     }
 
     private func startMemoryPressureMonitoring() {

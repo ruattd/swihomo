@@ -81,6 +81,29 @@ actor SharedProfileRepository {
         return snapshot
     }
 
+    func profileContents(for id: UUID) throws -> String {
+        let snapshot = try loadSnapshot()
+        guard snapshot.profiles.contains(where: { $0.id == id }) else {
+            throw ClientError.missingProfile
+        }
+        return try String(contentsOf: configurationURL(for: id), encoding: .utf8)
+    }
+
+    func updateProfileContents(_ contents: String, for id: UUID) throws -> ClientSnapshot {
+        guard !contents.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ClientError.invalidProfile
+        }
+
+        var snapshot = try loadSnapshot()
+        guard let index = snapshot.profiles.firstIndex(where: { $0.id == id }) else {
+            throw ClientError.missingProfile
+        }
+        try writeProfileContents(contents, for: id)
+        snapshot.profiles[index].updatedAt = .now
+        try save(snapshot)
+        return snapshot
+    }
+
     func setCustomOverridesEnabled(_ isEnabled: Bool, for id: UUID) throws -> ClientSnapshot {
         var snapshot = try loadSnapshot()
         guard let index = snapshot.profiles.firstIndex(where: { $0.id == id }) else {

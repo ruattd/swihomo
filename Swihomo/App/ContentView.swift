@@ -1,5 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import CodeEditorView
+import LanguageSupport
 #if os(macOS)
 import AppKit
 #else
@@ -400,6 +402,11 @@ private struct PreferencesView: View {
     @AppStorage("showsMenuBar") private var showsMenuBar = true
     @AppStorage("menuBarDisplay") private var menuBarDisplay = "iconAndSpeed"
     @AppStorage("appLogLevel") private var appLogLevel = LogLevel.info.rawValue
+    @AppStorage("packetTunnelBypassesPrivateNetworks") private var packetTunnelBypassesPrivateNetworks = false
+    @AppStorage("packetTunnelBypassCIDRs") private var packetTunnelBypassCIDRs = ""
+    @AppStorage("packetTunnelMTU") private var packetTunnelMTU = 1500
+    @AppStorage("packetTunnelCustomDNSServers") private var packetTunnelCustomDNSServers = ""
+    @AppStorage("packetTunnelIPv6Enabled") private var packetTunnelIPv6Enabled = true
     #if os(macOS)
     @AppStorage("hidesDockIcon") private var hidesDockIcon = false
     #endif
@@ -445,6 +452,7 @@ private struct PreferencesView: View {
 #endif
 
                 applicationSettings
+                packetTunnelSettings
                 memoryManagementSettings
             }
             .padding(20)
@@ -486,6 +494,63 @@ private struct PreferencesView: View {
             }
 
             Text("Controls Swihomo app logs only. Configure mihomo core logging in Overrides.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .liquidGlassCard(cornerRadius: 20)
+    }
+
+    private var packetTunnelSettings: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label("Packet Tunnel", systemImage: "point.3.connected.trianglepath.dotted")
+                .font(.title3.weight(.semibold))
+
+            HStack {
+                Text("MTU")
+                Spacer()
+                Picker("MTU", selection: $packetTunnelMTU) {
+                    ForEach([1280, 1360, 1420, 1500], id: \.self) { mtu in
+                        Text("\(mtu)").tag(mtu)
+                    }
+                }
+                .labelsHidden()
+            }
+
+            Toggle("Route IPv6 through tunnel", isOn: $packetTunnelIPv6Enabled)
+
+            Text("Turn this off only if your network does not support IPv6 through the tunnel. IPv6 traffic may bypass mihomo when disabled.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Divider()
+
+            Text("Custom DNS Servers")
+                .font(.subheadline.weight(.medium))
+
+            MultilineCodeEditor(text: $packetTunnelCustomDNSServers, minHeight: 100)
+
+            Text("Enter one IPv4 or IPv6 resolver address per line. Custom servers apply independently of the DNS setting in Overrides.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Divider()
+
+            Toggle("Bypass local networks", isOn: $packetTunnelBypassesPrivateNetworks)
+
+            Text("Excludes private and link-local addresses from the tunnel.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Divider()
+
+            Text("Bypass IP Ranges")
+                .font(.subheadline.weight(.medium))
+
+            MultilineCodeEditor(text: $packetTunnelBypassCIDRs, minHeight: 120)
+
+            Text("Enter one IPv4 or IPv6 CIDR per line, for example 192.168.1.0/24 or 2001:db8::/32. Changes apply the next time you connect.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -1334,6 +1399,7 @@ private struct ProfileCard: View {
     @EnvironmentObject private var model: AppModel
     let profile: Profile
     @State private var showingRemoteEditor = false
+    @State private var showingContentEditor = false
     @State private var showingProfileOverrideEditor = false
     @State private var showingDeleteConfirmation = false
 
@@ -1385,6 +1451,12 @@ private struct ProfileCard: View {
                         } label: {
                             Label("Edit Profile", systemImage: "pencil")
                         }
+                    }
+
+                    Button {
+                        showingContentEditor = true
+                    } label: {
+                        Label("Edit Content", systemImage: "doc.text")
                     }
                     Button(role: .destructive) {
                         showingDeleteConfirmation = true
@@ -1452,6 +1524,9 @@ private struct ProfileCard: View {
                 showingRemoteEditor = false
             }
         }
+        .sheet(isPresented: $showingContentEditor) {
+            ProfileContentEditor(profile: profile)
+        }
         .sheet(isPresented: $showingProfileOverrideEditor) {
             ProfileOverrideSheet(profile: profile) { contents, globalOverridesEnabled in
                 Task {
@@ -1476,6 +1551,64 @@ private struct ProfileCard: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This removes the profile and its stored configuration. This action can't be undone.")
+        }
+    }
+}
+
+private struct ProfileContentEditor: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    let profile: Profile
+    @State private var contents = ""
+    @State private var originalContents = ""
+    @State private var isLoading = true
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if isLoading {
+                    ProgressView("Loading \(profile.name)")
+                } else {
+                    MultilineCodeEditor(
+                        text: $contents,
+                        language: .yaml,
+                        minHeight: 360,
+                        releasesResourcesOnDisappear: true
+                    )
+                }
+            }
+            .navigationTitle(profile.name)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        Task {
+                            if await model.saveProfileContents(contents, for: profile) {
+                                dismiss()
+                            }
+                        }
+                    }
+                    .disabled(isLoading || contents == originalContents)
+                }
+            }
+            .task {
+                guard let text = await model.profileContents(profile) else {
+                    isLoading = false
+                    return
+                }
+                contents = text
+                originalContents = text
+                isLoading = false
+            }
+        }
+#if os(macOS)
+        .frame(minWidth: 520, minHeight: 420)
+#endif
+        .onDisappear {
+            contents.removeAll(keepingCapacity: false)
+            originalContents.removeAll(keepingCapacity: false)
         }
     }
 }
@@ -1527,26 +1660,12 @@ private struct ProfileOverrideSheet: View {
                         }
                     }
 
-                    ZStack(alignment: .topLeading) {
-                        TextEditor(text: $contents)
-                            .font(.body.monospaced())
-                            .textSelection(.enabled)
-                            .scrollContentBackground(.hidden)
-                            .padding(8)
-                        if contents.isEmpty {
-                            Text("# dns!:\n#   enable: false\n# +rules:\n#   - DOMAIN,example.com,DIRECT")
-                                .font(.body.monospaced())
-                                .foregroundStyle(.tertiary)
-                                .padding(16)
-                                .allowsHitTesting(false)
-                        }
-                    }
-                    .frame(minHeight: 320)
-                    .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(Color.primary.opacity(0.09), lineWidth: 1)
-                    }
+                    MultilineCodeEditor(
+                        text: $contents,
+                        language: .yaml,
+                        minHeight: 320,
+                        releasesResourcesOnDisappear: true
+                    )
 
                     Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
                         GridRow {
@@ -1588,6 +1707,9 @@ private struct ProfileOverrideSheet: View {
 #if os(macOS)
         .frame(minWidth: 520, minHeight: 500)
 #endif
+        .onDisappear {
+            contents.removeAll(keepingCapacity: false)
+        }
     }
 }
 
@@ -2272,26 +2394,11 @@ private struct OverridesView: View {
                             .help("Open ClashParty YAML override reference")
                         }
 
-                        ZStack(alignment: .topLeading) {
-                            TextEditor(text: $draft.customYAML)
-                                .font(.body.monospaced())
-                                .textSelection(.enabled)
-                                .scrollContentBackground(.hidden)
-                                .padding(8)
-                            if draft.customYAML.isEmpty {
-                                Text("# dns!:\n#   enable: false\n# +rules:\n#   - DOMAIN,example.com,DIRECT")
-                                    .font(.body.monospaced())
-                                    .foregroundStyle(.tertiary)
-                                    .padding(16)
-                                    .allowsHitTesting(false)
-                            }
-                        }
-                        .frame(minHeight: 320)
-                        .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .stroke(Color.primary.opacity(0.09), lineWidth: 1)
-                        }
+                        MultilineCodeEditor(
+                            text: $draft.customYAML,
+                            language: .yaml,
+                            minHeight: 320
+                        )
 
                         Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
                             GridRow {
@@ -2612,10 +2719,12 @@ private struct ExternalResourceEditor: View {
                         description: Text("This resource is not UTF-8 text. Replace it with a file instead.")
                     )
                 } else {
-                    TextEditor(text: $contents)
-                        .font(.body.monospaced())
-                        .textSelection(.enabled)
-                        .padding(8)
+                    MultilineCodeEditor(
+                        text: $contents,
+                        language: .yaml,
+                        minHeight: 360,
+                        releasesResourcesOnDisappear: true
+                    )
                 }
             }
             .navigationTitle(resource.name)
@@ -2652,7 +2761,92 @@ private struct ExternalResourceEditor: View {
 #if os(macOS)
         .frame(minWidth: 520, minHeight: 420)
 #endif
+        .onDisappear {
+            contents.removeAll(keepingCapacity: false)
+            originalContents.removeAll(keepingCapacity: false)
+        }
     }
+}
+
+private struct MultilineCodeEditor: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Binding private var text: String
+    private let language: LanguageConfiguration
+    private let minHeight: CGFloat
+    private let releasesResourcesOnDisappear: Bool
+    @State private var position = CodeEditor.Position()
+    @State private var messages = Set<TextLocated<Message>>()
+    @State private var isEditorActive = true
+    @State private var editorID = UUID()
+
+    init(
+        text: Binding<String>,
+        language: LanguageConfiguration = .none,
+        minHeight: CGFloat,
+        releasesResourcesOnDisappear: Bool = false
+    ) {
+        _text = text
+        self.language = language
+        self.minHeight = minHeight
+        self.releasesResourcesOnDisappear = releasesResourcesOnDisappear
+    }
+
+    var body: some View {
+        Group {
+            if isEditorActive {
+                CodeEditor(
+                    text: $text,
+                    position: $position,
+                    messages: $messages,
+                    language: language
+                )
+                .id(editorID)
+                .environment(
+                    \.codeEditorTheme,
+                    colorScheme == .dark ? Theme.defaultDark : Theme.defaultLight
+                )
+                .environment(
+                    \.codeEditorLayoutConfiguration,
+                    CodeEditor.LayoutConfiguration(showMinimap: false, wrapText: true)
+                )
+            }
+        }
+        .frame(minHeight: minHeight)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.primary.opacity(0.09), lineWidth: 1)
+        }
+        .onAppear {
+            isEditorActive = true
+        }
+        .onDisappear {
+            guard releasesResourcesOnDisappear else { return }
+            isEditorActive = false
+            editorID = UUID()
+            position = CodeEditor.Position()
+            messages.removeAll(keepingCapacity: false)
+        }
+    }
+}
+
+private extension LanguageConfiguration {
+    static let yaml = LanguageConfiguration(
+        name: "YAML",
+        supportsSquareBrackets: true,
+        supportsCurlyBrackets: true,
+        caseInsensitiveReservedIdentifiers: true,
+        indentationSensitiveScoping: true,
+        stringRegex: /"(?:[^"\\]|\\.)*"|'(?:[^']|'')*'/,
+        characterRegex: nil,
+        numberRegex: /-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?/,
+        singleLineComment: "#",
+        nestedComment: nil,
+        identifierRegex: /[A-Za-z_][A-Za-z0-9_-]*/,
+        operatorRegex: nil,
+        reservedIdentifiers: ["true", "false", "null", "yes", "no", "on", "off"],
+        reservedOperators: []
+    )
 }
 
 private enum LogFilter: String, CaseIterable, Identifiable {

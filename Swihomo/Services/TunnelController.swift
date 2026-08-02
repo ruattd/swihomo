@@ -50,7 +50,12 @@ final class TunnelController {
             "profileID": profileID.uuidString,
             "profileYAML": configuration.profileYAML,
             "dnsEnabled": NSNumber(value: dnsEnabled),
-            "automaticallyReclaimsMemory": NSNumber(value: automaticallyReclaimsMemory)
+            "automaticallyReclaimsMemory": NSNumber(value: automaticallyReclaimsMemory),
+            "bypassesPrivateNetworks": NSNumber(value: bypassesPrivateNetworks),
+            "bypassedCIDRs": bypassedCIDRs,
+            "mtu": NSNumber(value: mtu),
+            "customDNSServers": customDNSServers,
+            "ipv6Enabled": NSNumber(value: ipv6Enabled)
         ]
         manager.protocolConfiguration = tunnelProtocol
         manager.localizedDescription = "Swihomo"
@@ -71,6 +76,35 @@ final class TunnelController {
 
     private var automaticallyReclaimsMemory: Bool {
         UserDefaults.standard.object(forKey: "automaticallyReclaimsMemory") as? Bool ?? false
+    }
+
+    private var bypassesPrivateNetworks: Bool {
+        UserDefaults.standard.object(forKey: "packetTunnelBypassesPrivateNetworks") as? Bool ?? false
+    }
+
+    private var bypassedCIDRs: [String] {
+        let rawValue = UserDefaults.standard.string(forKey: "packetTunnelBypassCIDRs") ?? ""
+        return rawValue
+            .split(whereSeparator: { $0.isNewline || $0 == "," })
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private var mtu: Int {
+        let value = UserDefaults.standard.object(forKey: "packetTunnelMTU") as? Int ?? 1500
+        return [1280, 1360, 1420, 1500].contains(value) ? value : 1500
+    }
+
+    private var customDNSServers: [String] {
+        let rawValue = UserDefaults.standard.string(forKey: "packetTunnelCustomDNSServers") ?? ""
+        return rawValue
+            .split(whereSeparator: { $0.isNewline || $0 == "," })
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private var ipv6Enabled: Bool {
+        UserDefaults.standard.object(forKey: "packetTunnelIPv6Enabled") as? Bool ?? true
     }
 
     func disconnect() {

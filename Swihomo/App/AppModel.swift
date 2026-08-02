@@ -173,6 +173,26 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func profileContents(_ profile: Profile) async -> String? {
+        do {
+            return try await profiles.profileContents(for: profile.id)
+        } catch {
+            present(error, module: "Profiles")
+            return nil
+        }
+    }
+
+    func saveProfileContents(_ contents: String, for profile: Profile) async -> Bool {
+        do {
+            snapshot = try await profiles.updateProfileContents(contents, for: profile.id)
+            record(.info, module: "Profiles", "Saved profile contents for \(profile.name).")
+            return true
+        } catch {
+            present(error, module: "Profiles")
+            return false
+        }
+    }
+
     func setCustomOverridesEnabled(_ isEnabled: Bool, for profile: Profile) async {
         let action = isEnabled ? "Enabled" : "Disabled"
         await perform(module: "Profiles", "\(action) custom overrides for \(profile.name).") { [self] in
