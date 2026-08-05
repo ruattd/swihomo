@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: post
 title: Privacy Policy
 permalink: /privacy-policy/
 ---
@@ -80,4 +80,4 @@ published on this page with an updated date.
 
 If you have questions about this Privacy Policy, contact:
 
-**[Insert Contact Email or Support URL]**
+[ruattqwq@gmail.com](mailto:ruattqwq@gmail.com)

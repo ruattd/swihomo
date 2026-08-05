@@ -34,7 +34,7 @@ The app stores profile metadata and YAML in its private Application Support cont
 
 The extension applies the Network Extension settings, starts the core, and owns loopback controller access. The app requests controller operations, proxy ordering, core logs, and provider-resource operations through provider messages, keeping the controller secret inside the extension boundary.
 
-More implementation details are in [docs/MIHOMO_BRIDGE.md](docs/MIHOMO_BRIDGE.md).
+More implementation details are in [Mihomo bridge documentation](https://ruattd.github.io/swihomo/pages/architecture/mihomo-bridge/).
 
 ## Repository Layout
 

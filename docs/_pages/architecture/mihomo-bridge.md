@@ -1,7 +1,12 @@
+---
+layout: post
+title: Embedded Mihomo Bridge
+permalink: /pages/architecture/mihomo-bridge/
+---
+
 # Embedded Mihomo Bridge
 
-Swihomo vendors `MetaCubeX/mihomo` commit
-`95f7a0c5127c6f10716ae6004a75160c26b4c0c0` from the `Alpha` branch at
+Swihomo vendors `MetaCubeX/mihomo` from the `Alpha` branch at
 `Vendor/mihomo`. It is compiled as the static `Vendor/MihomoCore.xcframework`
 and linked only by the Packet Tunnel extension.
 

@@ -1,6 +1,36 @@
+remote_theme: sighingnow/jekyll-gitbook
+
 title: Swihomo
-description: Privacy Policy for Swihomo
+longtitle: Swihomo - Another mihomo client for iOS & macOS
+description: Another mihomo client for iOS & macOS
+author: ruattd
 url: https://ruattd.github.io
 baseurl: /swihomo
-theme: jekyll-theme-minimal
+
 markdown: kramdown
+markdown_ext: markdown,mkdown,mkdn,md
+
+collections:
+  pages:
+    output: true
+    permalink: /:collection/:path/
+
+ordered_collections:
+  - pages
+
+toc:
+  enabled: true
+  h_min: 1
+  h_max: 3
+
+readme_index:
+  enabled: true
+  readme_pattern: "/index\\.md$/"
+  remove_originals: false
+  with_frontmatter: false
+
+plugins:
+  - jekyll-remote-theme
+  - jekyll-feed
+  - jekyll-readme-index
+  - jemoji
