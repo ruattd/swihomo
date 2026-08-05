@@ -16,6 +16,14 @@ enum MenuBarDisplay: String, CaseIterable, Identifiable {
         case .iconAndSpeed: "Icon + Speed"
         }
     }
+
+    var titleKey: LocalizedStringKey {
+        switch self {
+        case .icon: "preferences.menuBar.display.icon"
+        case .speed: "preferences.menuBar.display.speed"
+        case .iconAndSpeed: "preferences.menuBar.display.iconAndSpeed"
+        }
+    }
 }
 
 struct MenuBarLabelView: View {
@@ -159,11 +167,11 @@ struct MenuBarContentView: View {
     }
 
     var body: some View {
-        Text("\(model.connectionStatusTitle) · \(trafficSummary)")
+        Text(LocalizedStringKey(model.connectionStatusLocalizationKey)) + Text(" · ") + Text(verbatim: trafficSummary)
 
         Divider()
 
-        Button(model.isConnected ? "Disconnect" : "Connect") {
+        Button(LocalizedStringKey(model.isConnected ? "common.disconnect" : "common.connect")) {
             if model.isConnected {
                 model.disconnect()
             } else if let profile = model.snapshot.activeProfile {
@@ -172,14 +180,14 @@ struct MenuBarContentView: View {
         }
         .disabled(!model.isConnected && model.snapshot.activeProfile == nil)
 
-        Button("Open Swihomo") {
+        Button("menubar.openApp") {
             openWindow(id: "main")
             NSApplication.shared.activate()
         }
 
         Divider()
 
-        Button("Quit Swihomo") {
+        Button("menubar.quitApp") {
             NSApplication.shared.terminate(nil)
         }
         .keyboardShortcut("q")

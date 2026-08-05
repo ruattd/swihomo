@@ -29,7 +29,10 @@
 		100000000000000000000024 /* MihomoCoreVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000022 /* MihomoCoreVersion.swift */; };
 		100000000000000000000025 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000024 /* Assets.xcassets */; };
 		100000000000000000000026 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000025 /* MenuBarView.swift */; };
+		100000000000000000000028 /* AppLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000028 /* AppLanguage.swift */; };
+		100000000000000000000031 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 400000000000000000000010 /* Localizable.strings */; };
 		100000000000000000000027 /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000026 /* Formatting.swift */; };
+		100000000000000000000029 /* SharedText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000029 /* SharedText.swift */; };
 		D000000000000000000000001 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = D000000000000000000000003 /* Yams */; };
 		D000000000000000000000004 /* CodeEditorView in Frameworks */ = {isa = PBXBuildFile; productRef = D000000000000000000000006 /* CodeEditorView */; };
 		D000000000000000000000005 /* LanguageSupport in Frameworks */ = {isa = PBXBuildFile; productRef = D000000000000000000000007 /* LanguageSupport */; };
@@ -85,6 +88,10 @@
 		200000000000000000000024 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		200000000000000000000025 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
 		200000000000000000000026 /* Formatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Formatting.swift; sourceTree = "<group>"; };
+		200000000000000000000028 /* AppLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLanguage.swift; sourceTree = "<group>"; };
+		200000000000000000000032 /* en Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = Swihomo/en.lproj/Localizable.strings; sourceTree = SOURCE_ROOT; };
+		200000000000000000000033 /* zh-Hans Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = Swihomo/zh-Hans.lproj/Localizable.strings; sourceTree = SOURCE_ROOT; };
+		200000000000000000000029 /* SharedText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedText.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -131,6 +138,7 @@
 				200000000000000000000024 /* Assets.xcassets */,
 				200000000000000000000010 /* Swihomo-iOS.entitlements */,
 				200000000000000000000011 /* Swihomo-macOS.entitlements */,
+				400000000000000000000010 /* Localizable.strings */,
 			);
 			path = Swihomo;
 			sourceTree = "<group>";
@@ -142,6 +150,7 @@
 				200000000000000000000002 /* ContentView.swift */,
 				200000000000000000000003 /* AppModel.swift */,
 				200000000000000000000025 /* MenuBarView.swift */,
+				200000000000000000000028 /* AppLanguage.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -155,6 +164,7 @@
 				200000000000000000000021 /* PersistentLogStore.swift */,
 				200000000000000000000022 /* MihomoCoreVersion.swift */,
 				200000000000000000000026 /* Formatting.swift */,
+				200000000000000000000029 /* SharedText.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -207,6 +217,18 @@
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
+
+/* Begin PBXVariantGroup section */
+		400000000000000000000010 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				200000000000000000000032 /* en Localizable.strings */,
+				200000000000000000000033 /* zh-Hans Localizable.strings */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin PBXNativeTarget section */
 		500000000000000000000001 /* Swihomo */ = {
@@ -272,7 +294,7 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
-				Base,
+				zh-Hans,
 			);
 			mainGroup = 400000000000000000000001;
 			packageReferences = (
@@ -332,6 +354,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				100000000000000000000025 /* Assets.xcassets in Resources */,
+				100000000000000000000031 /* Localizable.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -354,6 +377,8 @@
 				100000000000000000000023 /* MihomoCoreVersion.swift in Sources */,
 				100000000000000000000026 /* MenuBarView.swift in Sources */,
 				100000000000000000000027 /* Formatting.swift in Sources */,
+				100000000000000000000028 /* AppLanguage.swift in Sources */,
+				100000000000000000000029 /* SharedText.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

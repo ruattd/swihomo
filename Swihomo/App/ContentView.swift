@@ -78,7 +78,7 @@ private struct ErrorBanner: View {
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("Couldn't Complete Request")
+                Text("accessibility.requestFailed")
                     .font(.subheadline.weight(.semibold))
                 Text(message)
                     .font(.footnote)
@@ -96,7 +96,7 @@ private struct ErrorBanner: View {
                     .background(Color.primary.opacity(0.08), in: Circle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Dismiss error")
+            .accessibilityLabel("accessibility.dismissError")
         }
         .padding(14)
         .liquidGlassCard(cornerRadius: 20)
@@ -167,11 +167,27 @@ private enum AppTheme: String, CaseIterable, Identifiable {
         }
     }
 
+    var titleKey: LocalizedStringKey {
+        switch self {
+        case .light: "preferences.appearance.light"
+        case .dark: "preferences.appearance.dark"
+        case .system: "preferences.appearance.system"
+        }
+    }
+
     var subtitle: String {
         switch self {
         case .light: "Always light"
         case .dark: "Always dark"
         case .system: "Match device"
+        }
+    }
+
+    var subtitleKey: LocalizedStringKey {
+        switch self {
+        case .light: "preferences.appearance.lightDescription"
+        case .dark: "preferences.appearance.darkDescription"
+        case .system: "preferences.appearance.systemDescription"
         }
     }
 
@@ -213,6 +229,19 @@ private enum HomeSection: String, CaseIterable, Hashable, Identifiable {
         }
     }
 
+    var titleKey: LocalizedStringKey {
+        switch self {
+        case .connection: "navigation.connection"
+        case .profiles: "navigation.profiles"
+        case .proxies: "navigation.proxies"
+        case .overrides: "navigation.overrides"
+        case .externalResources: "navigation.resources"
+        case .logs: "navigation.logs"
+        case .preference: "navigation.preferences"
+        case .about: "navigation.about"
+        }
+    }
+
     var icon: String {
         switch self {
         case .connection: "bolt.shield"
@@ -249,7 +278,7 @@ private struct HomeView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Swihomo")
                         .font(.title.bold())
-                    Text("Control center")
+                    Text("home.controlCenter")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -267,7 +296,9 @@ private struct HomeView: View {
                             HomeFeatureCard(
                                 section: section,
                                 value: value(for: section),
+                                valueKey: valueKey(for: section),
                                 subtitle: subtitle(for: section),
+                                subtitleKey: subtitleKey(for: section),
                                 isHighlighted: section == .connection && model.isConnected
                             )
                         }
@@ -277,7 +308,7 @@ private struct HomeView: View {
             }
             .padding()
         }
-        .navigationTitle("Home")
+        .navigationTitle(Text(LocalizedStringKey("navigation.home")))
     }
 
     private func value(for section: HomeSection) -> String {
@@ -298,6 +329,19 @@ private struct HomeView: View {
             "App settings"
         case .about:
             appVersion
+        }
+    }
+
+    private func valueKey(for section: HomeSection) -> String? {
+        switch section {
+        case .connection:
+            model.connectionStatusLocalizationKey
+        case .overrides:
+            model.snapshot.overrides.mode.localizationKey
+        case .preference:
+            "home.appSettings"
+        default:
+            nil
         }
     }
 
@@ -322,6 +366,27 @@ private struct HomeView: View {
         }
     }
 
+    private func subtitleKey(for section: HomeSection) -> String? {
+        switch section {
+        case .connection:
+            model.snapshot.activeProfile == nil ? "home.chooseProfile" : nil
+        case .profiles:
+            "home.profilesSubtitle"
+        case .proxies:
+            model.isConnected ? "home.proxies.connectedSubtitle" : "home.proxies.disconnectedSubtitle"
+        case .overrides:
+            "home.overridesSubtitle"
+        case .externalResources:
+            model.isConnected ? "home.resources.connectedSubtitle" : "home.resources.disconnectedSubtitle"
+        case .logs:
+            "home.logsSubtitle"
+        case .preference:
+            "home.preferencesSubtitle"
+        case .about:
+            "home.aboutSubtitle"
+        }
+    }
+
     private var appVersion: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
@@ -332,7 +397,9 @@ private struct HomeView: View {
 private struct HomeFeatureCard: View {
     let section: HomeSection
     let value: String
+    let valueKey: String?
     let subtitle: String
+    let subtitleKey: String?
     let isHighlighted: Bool
 
     var body: some View {
@@ -344,23 +411,53 @@ private struct HomeFeatureCard: View {
                 .frame(width: 32, height: 32)
 
             VStack(alignment: .leading, spacing: 5) {
-                Text(section.title)
+                Text(section.titleKey)
                     .font(.subheadline.weight(.semibold))
-                Text(value)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(isHighlighted ? .green : .secondary)
+                if let valueKey {
+                    Text(LocalizedStringKey(valueKey))
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(isHighlighted ? .green : .secondary)
+                } else {
+                    Text(value)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(isHighlighted ? .green : .secondary)
+                }
             }
         }
         .padding(10)
         .frame(maxWidth: .infinity, minHeight: 112, maxHeight: 112, alignment: .topLeading)
         .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .liquidGlassCard(interactive: true)
-#if os(macOS)
-        .help(subtitle)
-#endif
+        .modifier(HomeFeatureCardHelp(text: subtitle, key: subtitleKey))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(section.title), \(value)")
+        .accessibilityLabel(Text(section.titleKey) + Text(verbatim: ", ") + valueText)
         .accessibilityHint(subtitle)
+    }
+
+    private var valueText: Text {
+        if let valueKey {
+            Text(LocalizedStringKey(valueKey))
+        } else {
+            Text(verbatim: value)
+        }
+    }
+}
+
+private struct HomeFeatureCardHelp: ViewModifier {
+    let text: String
+    let key: String?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+#if os(macOS)
+        if let key {
+            content.help(LocalizedStringKey(key))
+        } else {
+            content.help(text)
+        }
+#else
+        content
+#endif
     }
 }
 
@@ -373,7 +470,7 @@ private struct FeatureDetailView: View {
             case .connection:
                 NavigationStack {
                     DashboardView()
-                        .navigationTitle("Connection")
+                        .navigationTitle(Text(LocalizedStringKey("navigation.connection")))
                 }
             case .profiles:
                 ProfilesView()
@@ -402,6 +499,7 @@ private struct PreferencesView: View {
     @AppStorage("showsMenuBar") private var showsMenuBar = true
     @AppStorage("menuBarDisplay") private var menuBarDisplay = "iconAndSpeed"
     @AppStorage("appLogLevel") private var appLogLevel = LogLevel.info.rawValue
+    @AppStorage("appLanguage") private var selectedLanguage = AppLanguage.system.rawValue
     @AppStorage("packetTunnelBypassesPrivateNetworks") private var packetTunnelBypassesPrivateNetworks = false
     @AppStorage("packetTunnelBypassCIDRs") private var packetTunnelBypassCIDRs = ""
     @AppStorage("packetTunnelMTU") private var packetTunnelMTU = 1500
@@ -416,17 +514,17 @@ private struct PreferencesView: View {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Appearance")
+                        Text("preferences.appearance.title")
                             .font(.title2.bold())
-                        Text("Choose how Swihomo appears on this device.")
+                        Text("preferences.appearance.description")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     }
 
                     if horizontalSizeClass == .compact {
-                        Picker("Appearance", selection: themeSelection) {
+                        Picker("preferences.appearance.title", selection: themeSelection) {
                             ForEach(AppTheme.allCases) { theme in
-                                Text(theme.title).tag(theme.rawValue)
+                                Text(theme.titleKey).tag(theme.rawValue)
                             }
                         }
                         .labelsHidden()
@@ -458,17 +556,17 @@ private struct PreferencesView: View {
             .padding(20)
             .frame(maxWidth: 760, alignment: .leading)
         }
-        .navigationTitle("Preferences")
+        .navigationTitle(Text(LocalizedStringKey("navigation.preferences")))
     }
 
     private var memoryManagementSettings: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Label("Experimental", systemImage: "flask")
+            Label("preferences.experimental", systemImage: "flask")
                 .font(.title3.weight(.semibold))
 
-            Toggle("Automatically reclaim memory", isOn: $automaticallyReclaimsMemory)
+            Toggle("preferences.experimental.autoReclaimMemory", isOn: $automaticallyReclaimsMemory)
 
-            Text("When critical memory pressure occurs, asks mihomo to release unused memory. This may increase garbage collection frequency and battery use. Applies the next time you connect.")
+            Text("preferences.experimental.autoReclaimMemory.description")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -479,78 +577,100 @@ private struct PreferencesView: View {
 
     private var applicationSettings: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Label("Application", systemImage: "app.badge")
+            Label("preferences.application.title", systemImage: "app.badge")
                 .font(.title3.weight(.semibold))
 
             HStack {
-                Text("App Log Level")
+                Text("preferences.application.logLevel")
                 Spacer()
-                Picker("App Log Level", selection: $appLogLevel) {
+                Picker("preferences.application.logLevel", selection: $appLogLevel) {
                     ForEach(LogLevel.allCases, id: \.rawValue) { level in
-                        Text(level.displayName).tag(level.rawValue)
+                        Text(LocalizedStringKey(level.localizationKey)).tag(level.rawValue)
                     }
                 }
                 .labelsHidden()
             }
 
-            Text("Controls Swihomo app logs only. Configure mihomo core logging in Overrides.")
+            Text("preferences.application.logLevel.description")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            HStack {
+                Text("preferences.application.language")
+                Spacer()
+                Picker("preferences.application.language", selection: $selectedLanguage) {
+                    ForEach(AppLanguage.allCases) { language in
+                        languageLabel(for: language).tag(language.rawValue)
+                    }
+                }
+                .labelsHidden()
+            }
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .liquidGlassCard(cornerRadius: 20)
     }
 
+    @ViewBuilder
+    private func languageLabel(for language: AppLanguage) -> some View {
+        if let titleKey = language.titleKey {
+            Text(titleKey)
+        } else if let endonym = language.endonym {
+            Text(verbatim: endonym)
+        }
+    }
+
     private var packetTunnelSettings: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Label("Packet Tunnel", systemImage: "point.3.connected.trianglepath.dotted")
+            Label("preferences.packetTunnel.title", systemImage: "point.3.connected.trianglepath.dotted")
                 .font(.title3.weight(.semibold))
 
             HStack {
-                Text("MTU")
+                Text(verbatim: SharedText.mtu)
                 Spacer()
-                Picker("MTU", selection: $packetTunnelMTU) {
+                Picker(selection: $packetTunnelMTU) {
                     ForEach([1280, 1360, 1420, 1500], id: \.self) { mtu in
                         Text("\(mtu)").tag(mtu)
                     }
+                } label: {
+                    Text(verbatim: SharedText.mtu)
                 }
                 .labelsHidden()
             }
 
-            Toggle("Route IPv6 through tunnel", isOn: $packetTunnelIPv6Enabled)
+            Toggle("preferences.packetTunnel.routeIPv6", isOn: $packetTunnelIPv6Enabled)
 
-            Text("Turn this off only if your network does not support IPv6 through the tunnel. IPv6 traffic may bypass mihomo when disabled.")
+            Text("preferences.packetTunnel.routeIPv6.description")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             Divider()
 
-            Text("Custom DNS Servers")
+            Text("preferences.packetTunnel.customDNS")
                 .font(.subheadline.weight(.medium))
 
             MultilineCodeEditor(text: $packetTunnelCustomDNSServers, minHeight: 100)
 
-            Text("Enter one IPv4 or IPv6 resolver address per line. Custom servers apply independently of the DNS setting in Overrides.")
+            Text("preferences.packetTunnel.customDNS.description")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             Divider()
 
-            Toggle("Bypass local networks", isOn: $packetTunnelBypassesPrivateNetworks)
+            Toggle("preferences.packetTunnel.bypassLocalNetworks", isOn: $packetTunnelBypassesPrivateNetworks)
 
-            Text("Excludes private and link-local addresses from the tunnel.")
+            Text("preferences.packetTunnel.bypassLocalNetworks.description")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             Divider()
 
-            Text("Bypass IP Ranges")
+            Text("preferences.packetTunnel.bypassIPRanges")
                 .font(.subheadline.weight(.medium))
 
             MultilineCodeEditor(text: $packetTunnelBypassCIDRs, minHeight: 120)
 
-            Text("Enter one IPv4 or IPv6 CIDR per line, for example 192.168.1.0/24 or 2001:db8::/32. Changes apply the next time you connect.")
+            Text("preferences.packetTunnel.bypassIPRanges.description")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -607,32 +727,32 @@ private struct PreferencesView: View {
 #if os(macOS)
     private var menuBarSettings: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Label("Menu Bar", systemImage: "menubar.rectangle")
+            Label("preferences.menuBar.title", systemImage: "menubar.rectangle")
                 .font(.title3.weight(.semibold))
 
-            Toggle("Show Swihomo in the menu bar", isOn: $showsMenuBar)
+            Toggle("preferences.menuBar.show", isOn: $showsMenuBar)
 
             Divider()
 
-            Picker("Display", selection: $menuBarDisplay) {
+            Picker("preferences.menuBar.display", selection: $menuBarDisplay) {
                 ForEach(MenuBarDisplay.allCases) { display in
-                    Text(display.title).tag(display.rawValue)
+                    Text(display.titleKey).tag(display.rawValue)
                 }
             }
             .pickerStyle(.segmented)
             .disabled(!showsMenuBar)
 
             if menuBarDisplay == MenuBarDisplay.icon.rawValue {
-                Text("When Icon Only is selected, the menu shows live transfer speeds instead of total traffic.")
+                Text("preferences.menuBar.display.iconOnlyDescription")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Toggle("Hide Dock icon", isOn: $hidesDockIcon)
+            Toggle("preferences.menuBar.hideDockIcon", isOn: $hidesDockIcon)
                 .disabled(!showsMenuBar)
 
             if !showsMenuBar {
-                Text("Enable the menu bar item before hiding the Dock icon.")
+                Text("preferences.menuBar.hideDockIcon.description")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -661,31 +781,31 @@ private struct AboutView: View {
 
                     Text("Swihomo")
                         .font(.title.bold())
-                    Text("A native SwiftUI client for mihomo")
+                    Text("about.subtitle")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
                 .padding(.top, 16)
 
                 VStack(spacing: 0) {
-                    AboutDetailRow(title: "Version", value: appVersion)
+                    AboutDetailRow(title: "about.version", value: appVersion)
                     Divider()
-                    AboutDetailRow(title: "Build", value: buildNumber)
+                    AboutDetailRow(title: "about.build", value: buildNumber)
                     Divider()
-                    AboutDetailRow(title: "Mihomo Core", value: MihomoCoreVersion.version)
+                    AboutDetailRow(title: "about.mihomoCore", value: MihomoCoreVersion.version)
                     Divider()
-                    AboutDetailRow(title: "License", value: "AGPL-3.0")
+                    AboutDetailRow(title: "about.license", value: "AGPL-3.0")
                 }
                 .liquidGlassCard(cornerRadius: 20)
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Open Source")
+                    Text("about.openSource")
                         .font(.headline)
-                    Text("Swihomo embeds mihomo to provide a native Packet Tunnel experience on iOS and macOS.")
+                    Text("about.openSource.description")
                         .font(.callout)
                         .foregroundStyle(.secondary)
-                    Link("View Swihomo on GitHub", destination: URL(string: "https://github.com/ruattd/swihomo")!)
-                    Link("View mihomo on GitHub", destination: URL(string: "https://github.com/MetaCubeX/mihomo")!)
+                    Link("about.openSource.viewSwihomo", destination: URL(string: "https://github.com/ruattd/swihomo")!)
+                    Link("about.openSource.viewMihomo", destination: URL(string: "https://github.com/MetaCubeX/mihomo")!)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(20)
@@ -694,7 +814,7 @@ private struct AboutView: View {
             .padding(20)
             .frame(maxWidth: 560)
         }
-        .navigationTitle("About")
+        .navigationTitle(Text(LocalizedStringKey("navigation.about")))
     }
 
     @ViewBuilder
@@ -711,7 +831,7 @@ private struct AboutView: View {
 }
 
 private struct AboutDetailRow: View {
-    let title: String
+    let title: LocalizedStringKey
     let value: String
 
     var body: some View {
@@ -741,9 +861,9 @@ private struct ThemeOptionCard: View {
 
                 HStack(alignment: .top, spacing: 8) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(theme.title)
+                        Text(theme.titleKey)
                             .font(.headline)
-                        Text(theme.subtitle)
+                        Text(theme.subtitleKey)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -766,8 +886,8 @@ private struct ThemeOptionCard: View {
             }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(theme.title) appearance")
-        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityLabel(Text(theme.titleKey) + Text("preferences.appearance.labelSuffix"))
+        .accessibilityValue(Text(LocalizedStringKey(isSelected ? "common.selected" : "common.notSelected")))
     }
 
     private var preview: some View {
@@ -877,13 +997,19 @@ private struct DashboardView: View {
                 .foregroundStyle(model.isConnected ? .green : .secondary)
                 .contentTransition(.symbolEffect(.replace))
                 .symbolEffect(.pulse, value: model.isConnected)
-            Text(model.connectionStatusTitle)
+            Text(LocalizedStringKey(model.connectionStatusLocalizationKey))
                 .font(showsConnections ? .title2.bold() : .largeTitle.bold())
-            Text(model.snapshot.activeProfile?.name ?? "Choose a configuration profile to begin")
+            Group {
+                if let profile = model.snapshot.activeProfile {
+                    Text(profile.name)
+                } else {
+                    Text("home.chooseConfiguration")
+                }
+            }
                 .font(showsConnections ? .footnote : .body)
                 .foregroundStyle(.secondary)
             if let profile = model.snapshot.activeProfile {
-                Button(model.isConnected ? "Disconnect" : "Connect") {
+                Button(LocalizedStringKey(model.isConnected ? "common.disconnect" : "common.connect")) {
                     if model.isConnected {
                         model.disconnect()
                     } else {
@@ -893,15 +1019,15 @@ private struct DashboardView: View {
                 .liquidGlassButton(prominent: true)
                 .controlSize(showsConnections ? .regular : .large)
             } else {
-                Text("Import a local YAML file or add an online subscription in Profiles.")
+                Text("home.importProfiles")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
             Divider().frame(maxWidth: showsConnections ? 620 : 480)
             HStack(spacing: showsConnections ? 22 : 28) {
-                Metric(label: "Mode", value: model.snapshot.overrides.mode.displayName, compact: showsConnections)
-                Metric(label: "Profiles", value: "\(model.snapshot.profiles.count)", compact: showsConnections)
-                Metric(label: "Groups", value: "\(model.proxyGroups.count)", compact: showsConnections)
+                Metric(label: "home.mode", value: model.snapshot.overrides.mode.displayName, valueKey: model.snapshot.overrides.mode.localizationKey, compact: showsConnections)
+                Metric(label: "navigation.profiles", value: "\(model.snapshot.profiles.count)", compact: showsConnections)
+                Metric(label: "home.groups", value: "\(model.proxyGroups.count)", compact: showsConnections)
             }
         }
     }
@@ -941,7 +1067,7 @@ private struct DashboardView: View {
                     showsBackToTopButton = shouldShow
                 }
             }
-            .searchable(text: $connectionSearchText, prompt: "Search process or destination")
+            .searchable(text: $connectionSearchText, prompt: "connections.search")
             .overlay(alignment: .bottomTrailing) {
                 if showsBackToTopButton {
                     Button {
@@ -949,12 +1075,12 @@ private struct DashboardView: View {
                             proxy.scrollTo("connection-dashboard-top", anchor: .top)
                         }
                     } label: {
-                        Label("Back to Top", systemImage: "arrow.up")
+                        Label("common.backToTop", systemImage: "arrow.up")
                             .labelStyle(.iconOnly)
                             .frame(width: 42, height: 42)
                     }
                     .liquidGlassButton()
-                    .accessibilityLabel("Back to Top")
+                    .accessibilityLabel("common.backToTop")
                     .padding(20)
                     .transition(.scale.combined(with: .opacity))
                 }
@@ -972,13 +1098,27 @@ private struct ConnectionDashboardScrollOffsetKey: PreferenceKey {
 }
 
 private struct Metric: View {
-    let label: String
+    let label: LocalizedStringKey
     let value: String
+    let valueKey: String?
     var compact = false
+
+    init(label: LocalizedStringKey, value: String, valueKey: String? = nil, compact: Bool = false) {
+        self.label = label
+        self.value = value
+        self.valueKey = valueKey
+        self.compact = compact
+    }
 
     var body: some View {
         VStack(spacing: 4) {
-            Text(value).font(compact ? .body.weight(.semibold) : .title3.weight(.semibold))
+            if let valueKey {
+                Text(LocalizedStringKey(valueKey))
+                    .font(compact ? .body.weight(.semibold) : .title3.weight(.semibold))
+            } else {
+                Text(value)
+                    .font(compact ? .body.weight(.semibold) : .title3.weight(.semibold))
+            }
             Text(label).font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -1015,9 +1155,9 @@ private struct LiveConnectionsView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Live Connections")
+                    Text("connections.live.title")
                         .font(.headline)
-                    Text("Updates every second from mihomo")
+                    Text("connections.live.description")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -1034,32 +1174,32 @@ private struct LiveConnectionsView: View {
                 Button(role: .destructive) {
                     showingCloseAllConfirmation = true
                 } label: {
-                    Label("Close All", systemImage: "xmark.circle")
+                    Label("connection.closeAll", systemImage: "xmark.circle")
                 }
                 .liquidGlassButton()
                 .disabled(connections.isEmpty || model.isClosingAllConnections)
                 Spacer()
                 Menu {
-                    Section("Sort by") {
+                    Section("common.sortBy") {
                         ForEach(ConnectionSortCriterion.allCases) { criterion in
                             Button {
                                 sortCriterion = criterion
                                 sortDirection = criterion == .speed ? .descending : .ascending
                             } label: {
                                 Label(
-                                    criterion.displayName,
+                                    LocalizedStringKey(criterion.localizationKey),
                                     systemImage: sortCriterion == criterion ? "checkmark" : "circle"
                                 )
                             }
                         }
                     }
-                    Section("Direction") {
+                    Section("common.direction") {
                         ForEach(ProxySortDirection.allCases) { direction in
                             Button {
                                 sortDirection = direction
                             } label: {
                                 Label(
-                                    direction.displayName,
+                                    LocalizedStringKey(direction.localizationKey),
                                     systemImage: sortDirection == direction ? "checkmark" : direction.systemImage
                                 )
                             }
@@ -1067,7 +1207,7 @@ private struct LiveConnectionsView: View {
                     }
                 } label: {
                     Label(
-                        sortCriterion.displayName,
+                        LocalizedStringKey(sortCriterion.localizationKey),
                         systemImage: sortDirection.systemImage
                     )
                         .font(.subheadline.weight(.medium))
@@ -1077,9 +1217,9 @@ private struct LiveConnectionsView: View {
 
             if filteredConnections.isEmpty {
                 ContentUnavailableView(
-                    connections.isEmpty ? "No Active Connections" : "No Matching Connections",
+                    LocalizedStringKey(connections.isEmpty ? "connections.empty" : "connections.noMatch"),
                     systemImage: "point.3.connected.trianglepath.dotted",
-                    description: Text(connections.isEmpty ? "New traffic will appear here automatically." : "Try a process name, domain, or IP address.")
+                    description: Text(LocalizedStringKey(connections.isEmpty ? "connections.empty.description" : "connections.noMatch.description"))
                 )
                 .frame(maxWidth: .infinity, minHeight: 260)
             } else {
@@ -1102,15 +1242,15 @@ private struct LiveConnectionsView: View {
                 .stroke(Color.primary.opacity(0.08), lineWidth: 1)
         }
         .confirmationDialog(
-            "Close All Connections?",
+            Text(LocalizedStringKey("connection.closeAll.confirmationTitle")),
             isPresented: $showingCloseAllConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Close All", role: .destructive) {
+            Button("connection.closeAll", role: .destructive) {
                 Task { await model.closeAllConnections() }
             }
         } message: {
-            Text("This immediately closes every connection managed by mihomo.")
+            Text(LocalizedStringKey("connection.closeAll.confirmationMessage"))
         }
     }
 }
@@ -1140,7 +1280,13 @@ private struct ConnectionRow: View {
                     .foregroundStyle(.tertiary)
             }
 
-            Text(activity.connection.routingDescription.isEmpty ? "No matching rule reported" : activity.connection.routingDescription)
+            Group {
+                if activity.connection.routingDescription.isEmpty {
+                    Text("connection.noMatchingRule")
+                } else {
+                    Text(activity.connection.routingDescription)
+                }
+            }
                 .font(.caption2)
                 .foregroundStyle(.cyan)
                 .lineLimit(2)
@@ -1161,7 +1307,7 @@ private struct ConnectionRow: View {
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(activity.connection.processName), \(byteRate(activity.totalSpeed)), \(activity.connection.routingDescription)")
-        .accessibilityHint("Show connection details")
+        .accessibilityHint("accessibility.connectionDetails")
     }
 }
 
@@ -1194,47 +1340,47 @@ private struct ConnectionDetailView: View {
                 }
             }
 
-            Section("Live Speed") {
-                DetailValueRow(label: "Download", value: byteRate(currentActivity.downloadSpeed))
-                DetailValueRow(label: "Upload", value: byteRate(currentActivity.uploadSpeed))
-                DetailValueRow(label: "Total", value: byteRate(currentActivity.totalSpeed))
+            Section("connections.liveSpeed") {
+                DetailValueRow(label: "traffic.download", value: byteRate(currentActivity.downloadSpeed))
+                DetailValueRow(label: "traffic.upload", value: byteRate(currentActivity.uploadSpeed))
+                DetailValueRow(label: "traffic.total", value: byteRate(currentActivity.totalSpeed))
             }
 
-            Section("Traffic") {
-                DetailValueRow(label: "Downloaded", value: byteCount(connection.download))
-                DetailValueRow(label: "Uploaded", value: byteCount(connection.upload))
+            Section("connections.traffic") {
+                DetailValueRow(label: "traffic.downloaded", value: byteCount(connection.download))
+                DetailValueRow(label: "traffic.uploaded", value: byteCount(connection.upload))
                 if let startedAt = connection.startedAt {
-                    DetailValueRow(label: "Started", value: startedAt)
+                    DetailValueRow(label: "traffic.started", value: startedAt)
                 }
             }
 
-            Section("Routing") {
-                DetailValueRow(label: "Rule", value: connection.rule.isEmpty ? "Not reported" : connection.rule)
-                DetailValueRow(label: "Rule Payload", value: connection.rulePayload.isEmpty ? "Not reported" : connection.rulePayload)
+            Section("routing.title") {
+                DetailValueRow(label: "routing.rule", value: connection.rule)
+                DetailValueRow(label: "routing.rulePayload", value: connection.rulePayload)
                 if !connection.proxyChainDescription.isEmpty {
-                    DetailValueRow(label: "Proxy Chain", value: connection.proxyChainDescription)
+                    DetailValueRow(label: "routing.proxyChain", value: connection.proxyChainDescription)
                 }
                 if !connection.providerChainDescription.isEmpty {
-                    DetailValueRow(label: "Provider Chain", value: connection.providerChainDescription)
+                    DetailValueRow(label: "routing.providerChain", value: connection.providerChainDescription)
                 }
             }
 
-            Section("Connection") {
-                DetailValueRow(label: "Protocol", value: [metadata.network, metadata.type].filter { !$0.isEmpty }.joined(separator: " / "))
-                DetailValueRow(label: "Source", value: address(metadata.sourceIP, port: metadata.sourcePort))
-                DetailValueRow(label: "Destination", value: address(metadata.destinationIP, port: metadata.destinationPort))
+            Section("navigation.connection") {
+                DetailValueRow(label: "connection.protocol", value: [metadata.network, metadata.type].filter { !$0.isEmpty }.joined(separator: " / "))
+                DetailValueRow(label: "common.source", value: address(metadata.sourceIP, port: metadata.sourcePort))
+                DetailValueRow(label: "connection.destination", value: address(metadata.destinationIP, port: metadata.destinationPort))
                 if !metadata.host.isEmpty {
-                    DetailValueRow(label: "Host", value: metadata.host)
+                    DetailValueRow(label: "connection.host", value: metadata.host)
                 }
                 if !metadata.remoteDestination.isEmpty {
-                    DetailValueRow(label: "Remote Destination", value: metadata.remoteDestination)
+                    DetailValueRow(label: "connection.remoteDestination", value: metadata.remoteDestination)
                 }
                 if !metadata.processPath.isEmpty {
-                    DetailValueRow(label: "Process Path", value: metadata.processPath)
+                    DetailValueRow(label: "connection.processPath", value: metadata.processPath)
                 }
             }
         }
-        .navigationTitle("Connection Details")
+        .navigationTitle(Text(LocalizedStringKey("connection.details")))
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button(role: .destructive) {
@@ -1244,26 +1390,32 @@ private struct ConnectionDetailView: View {
                         }
                     }
                 } label: {
-                    Label("Close", systemImage: "xmark.circle")
+                    Label("common.close", systemImage: "xmark.circle")
                 }
                 .disabled(model.closingConnectionIDs.contains(activity.id))
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Done") { dismiss() }
+                Button("common.done") { dismiss() }
             }
         }
     }
 }
 
 private struct DetailValueRow: View {
-    let label: String
+    let label: LocalizedStringKey
     let value: String
 
     var body: some View {
         LabeledContent(label) {
-            Text(value.isEmpty ? "Not reported" : value)
-                .multilineTextAlignment(.trailing)
-                .textSelection(.enabled)
+            if value.isEmpty {
+                Text("common.notReported")
+                    .multilineTextAlignment(.trailing)
+                    .textSelection(.enabled)
+            } else {
+                Text(value)
+                    .multilineTextAlignment(.trailing)
+                    .textSelection(.enabled)
+            }
         }
     }
 }
@@ -1312,12 +1464,12 @@ private func subscriptionSummary(_ subscriptionInfo: MihomoSubscriptionInfo) -> 
     if let usageFraction = subscriptionInfo.usageFraction {
         summary = summary + Text(" (\(Int((usageFraction * 100).rounded()))%")
         if let expirationDate = subscriptionInfo.expirationDate {
-            summary = summary + Text(", expires ") + Text(expirationDate, format: .dateTime.year().month().day())
+            summary = summary + Text(", ") + Text("resources.expires") + Text(expirationDate, format: .dateTime.year().month().day())
         }
         return summary + Text(")")
     }
     if let expirationDate = subscriptionInfo.expirationDate {
-        return summary + Text(" (expires ") + Text(expirationDate, format: .dateTime.year().month().day()) + Text(")")
+        return summary + Text(" (") + Text("resources.expires") + Text(expirationDate, format: .dateTime.year().month().day()) + Text(")")
     }
     return summary
 }
@@ -1348,22 +1500,22 @@ private struct ProfilesView: View {
             .overlay {
                 if model.snapshot.profiles.isEmpty {
                     ContentUnavailableView(
-                        "No Profiles",
+                        LocalizedStringKey("profiles.empty"),
                         systemImage: "doc.badge.plus",
-                        description: Text("Import a YAML configuration or add a subscription URL.")
+                        description: Text(LocalizedStringKey("profiles.empty.description"))
                     )
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
                 }
             }
             .animation(reduceMotion ? nil : .snappy, value: model.snapshot.profiles)
-            .navigationTitle("Profiles")
+            .navigationTitle(Text(LocalizedStringKey("navigation.profiles")))
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
                     Button { showingImporter = true } label: {
-                        Label("Import", systemImage: "square.and.arrow.down")
+                        Label("profiles.import", systemImage: "square.and.arrow.down")
                     }
                     Button { showingRemoteSheet = true } label: {
-                        Label("Online Profile", systemImage: "link.badge.plus")
+                        Label("profiles.online", systemImage: "link.badge.plus")
                     }
                 }
             }
@@ -1397,6 +1549,7 @@ private struct ProfilesView: View {
 
 private struct ProfileCard: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.locale) private var locale
     let profile: Profile
     @State private var showingRemoteEditor = false
     @State private var showingContentEditor = false
@@ -1405,6 +1558,11 @@ private struct ProfileCard: View {
 
     private var isActive: Bool {
         model.snapshot.activeProfileID == profile.id
+    }
+
+    private var deletionConfirmationTitle: Text {
+        let localizedFormat = String(localized: "profiles.delete.confirmationTitle", locale: locale)
+        return Text(verbatim: String(format: localizedFormat, locale: locale, arguments: [profile.name]))
     }
 
     var body: some View {
@@ -1423,14 +1581,20 @@ private struct ProfileCard: View {
                     Text(profile.name)
                         .font(.headline)
                         .lineLimit(1)
-                    Text(profile.detail)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    if profile.source == .local || profile.remoteURL?.host == nil {
+                        Text(LocalizedStringKey(profile.source.detailLocalizationKey))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(profile.detail)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
 
                 if isActive {
-                    Text("ACTIVE")
+                    Text("profiles.active")
                         .font(.caption2.bold())
                         .foregroundStyle(.green)
                         .padding(.horizontal, 7)
@@ -1442,45 +1606,46 @@ private struct ProfileCard: View {
                     Button {
                         showingProfileOverrideEditor = true
                     } label: {
-                        Label("Overrides...", systemImage: "curlybraces.square")
+                        Label("profiles.overrides", systemImage: "curlybraces.square")
                     }
 
                     if profile.source == .remote {
                         Button {
                             showingRemoteEditor = true
                         } label: {
-                            Label("Edit Profile", systemImage: "pencil")
+                            Label("profiles.edit", systemImage: "pencil")
                         }
                     }
 
                     Button {
                         showingContentEditor = true
                     } label: {
-                        Label("Edit Content", systemImage: "doc.text")
+                        Label("profiles.editContent", systemImage: "doc.text")
                     }
                     Button(role: .destructive) {
                         showingDeleteConfirmation = true
                     } label: {
-                        Label("Delete Profile", systemImage: "trash")
+                        Label("profiles.delete", systemImage: "trash")
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Profile actions for \(profile.name)")
+                .accessibilityLabel(Text("accessibility.profileActions") + Text(verbatim: " \(profile.name)"))
             }
 
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 7) {
-                    Text(profile.source.displayName.uppercased())
-                    Text("Updated \(profile.updatedAt, format: .dateTime.month().day().hour().minute())")
+                    Text(LocalizedStringKey(profile.source.localizationKey))
+                        .textCase(.uppercase)
+                    Text("profiles.updated") + Text(profile.updatedAt, format: .dateTime.month().day().hour().minute())
                 }
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
 
                 if let subscriptionInfo = profile.subscriptionInfo {
                     HStack(spacing: 7) {
-                        Label("Subscription", systemImage: "chart.pie.fill")
+                        Label("common.subscription", systemImage: "chart.pie.fill")
                         Spacer()
                         subscriptionSummary(subscriptionInfo)
                             .lineLimit(1)
@@ -1496,14 +1661,14 @@ private struct ProfileCard: View {
                     Button {
                         Task { await model.refreshProfile(profile) }
                     } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
+                        Label("common.refresh", systemImage: "arrow.clockwise")
                     }
                     .liquidGlassButton()
                 }
 
                 Spacer()
 
-                Button(isActive && model.isConnected ? "Connected" : "Connect") {
+                Button(LocalizedStringKey(isActive && model.isConnected ? "status.connected" : "common.connect")) {
                     Task { await model.connect(profile: profile) }
                 }
                 .liquidGlassButton(prominent: !isActive || !model.isConnected)
@@ -1541,16 +1706,16 @@ private struct ProfileCard: View {
             }
         }
         .confirmationDialog(
-            "Delete \(profile.name)?",
+            deletionConfirmationTitle,
             isPresented: $showingDeleteConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Delete", role: .destructive) {
+            Button("common.delete", role: .destructive) {
                 Task { await model.deleteProfile(profile) }
             }
-            Button("Cancel", role: .cancel) {}
+            Button("common.cancel", role: .cancel) {}
         } message: {
-            Text("This removes the profile and its stored configuration. This action can't be undone.")
+            Text(LocalizedStringKey("profiles.delete.description"))
         }
     }
 }
@@ -1567,7 +1732,9 @@ private struct ProfileContentEditor: View {
         NavigationStack {
             Group {
                 if isLoading {
-                    ProgressView("Loading \(profile.name)")
+                    ProgressView {
+                        Text("common.loading") + Text(verbatim: " \(profile.name)")
+                    }
                 } else {
                     MultilineCodeEditor(
                         text: $contents,
@@ -1577,13 +1744,13 @@ private struct ProfileContentEditor: View {
                     )
                 }
             }
-            .navigationTitle(profile.name)
+            .navigationTitle(Text(verbatim: profile.name))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("common.cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button("common.save") {
                         Task {
                             if await model.saveProfileContents(contents, for: profile) {
                                 dismiss()
@@ -1643,9 +1810,9 @@ private struct ProfileOverrideSheet: View {
                             .frame(width: 58, height: 58)
                             .background(Color.purple.opacity(0.14), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Profile Custom Override")
+                            Text("profiles.customOverride.title")
                                 .font(.title3.weight(.semibold))
-                            Text("Applied after global custom YAML and before standard overrides.")
+                            Text("profiles.customOverride.description")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
@@ -1653,8 +1820,8 @@ private struct ProfileOverrideSheet: View {
 
                     Toggle(isOn: $globalOverridesEnabled) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Enable Global Overrides")
-                            Text("Applies global custom YAML when this profile connects. Edit it from the Overrides page.")
+                            Text("profiles.customOverride.enableGlobal")
+                            Text("profiles.customOverride.enableGlobal.description")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -1671,17 +1838,17 @@ private struct ProfileOverrideSheet: View {
                         GridRow {
                             Text("key!")
                                 .foregroundStyle(.purple)
-                            Text("Replace the existing object")
+                            Text("overrides.replaceObject")
                         }
                         GridRow {
                             Text("+key / key+")
                                 .foregroundStyle(.purple)
-                            Text("Prepend or append array items")
+                            Text("overrides.arrayItems")
                         }
                         GridRow {
                             Text("<key>")
                                 .foregroundStyle(.purple)
-                            Text("Escape a literal plus-prefixed or plus-suffixed key")
+                            Text("overrides.escapeKey")
                         }
                     }
                     .font(.caption)
@@ -1692,13 +1859,13 @@ private struct ProfileOverrideSheet: View {
                 .padding(.horizontal, pagePadding)
                 .padding(.vertical, pagePadding)
             }
-            .navigationTitle(profile.name)
+            .navigationTitle(Text(verbatim: profile.name))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("common.cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button("common.save") {
                         save(contents, globalOverridesEnabled)
                     }
                 }
@@ -1764,18 +1931,20 @@ private struct RemoteProfileSheet: View {
                             .frame(width: 58, height: 58)
                             .background(Color.indigo.opacity(0.14), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(isEditing ? "Edit Online Profile" : "Add Online Profile")
+                            Text(LocalizedStringKey(isEditing ? "profiles.editOnline" : "profiles.addOnline"))
                                 .font(.title3.weight(.semibold))
-                            Text(isEditing ? "Update the subscription details used for future refreshes." : "Import a mihomo subscription directly from its URL.")
+                            Text(LocalizedStringKey(isEditing ? "profiles.editOnline.description" : "profiles.addOnline.description"))
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Label("Subscription URL", systemImage: "link")
+                        Label("profiles.subscriptionURL", systemImage: "link")
                             .font(.subheadline.weight(.semibold))
-                        TextField("https://example.com/subscription", text: $address)
+                        TextField(text: $address, prompt: Text(verbatim: SharedText.subscriptionURLPlaceholder)) {
+                            Text(verbatim: SharedText.subscriptionURLPlaceholder)
+                        }
                             .textFieldStyle(.plain)
                             .focused($focusedField, equals: .address)
                     #if os(iOS)
@@ -1790,34 +1959,39 @@ private struct RemoteProfileSheet: View {
                                 .font(.caption)
                                 .foregroundStyle(.green)
                         } else {
-                            Label("Use a valid HTTP or HTTPS URL.", systemImage: "info.circle")
+                            Label("profiles.subscriptionURL.invalid", systemImage: "info.circle")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Label("Profile Name", systemImage: "text.cursor")
+                        Label("profiles.name", systemImage: "text.cursor")
                             .font(.subheadline.weight(.semibold))
-                        TextField("Optional, uses the subscription host by default", text: $name)
+                        TextField("profiles.name.placeholder", text: $name)
                             .textFieldStyle(.plain)
                             .focused($focusedField, equals: .name)
                             .padding(14)
                             .liquidGlassCard()
-                        Text("The name only identifies this profile in Swihomo.")
+                        Text("profiles.name.description")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Label("Custom User-Agent", systemImage: "network")
+                        Label("profiles.userAgent", systemImage: "network")
                             .font(.subheadline.weight(.semibold))
-                        TextField("Optional. Defaults to \(MihomoCoreVersion.userAgent)", text: $customUserAgent)
+                        TextField(
+                            "profiles.userAgent",
+                            text: $customUserAgent,
+                            prompt: Text("profiles.userAgent.placeholder") + Text(verbatim: " \(MihomoCoreVersion.userAgent)")
+                        )
                             .textFieldStyle(.plain)
                             .focused($focusedField, equals: .customUserAgent)
                             .padding(14)
                             .liquidGlassCard()
-                        Text(isEditing ? "Used for future subscription refreshes. Leave empty to use \(MihomoCoreVersion.userAgent)." : "Used for the initial subscription request and every refresh. Leave empty to use \(MihomoCoreVersion.userAgent).")
+                        Text(LocalizedStringKey(isEditing ? "profiles.userAgent.editDescription" : "profiles.userAgent.addDescription"))
+                            + Text(verbatim: " \(MihomoCoreVersion.userAgent).")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -1825,13 +1999,13 @@ private struct RemoteProfileSheet: View {
                 .padding(.horizontal, pagePadding)
                 .padding(.vertical, pagePadding)
             }
-            .navigationTitle(isEditing ? "Edit Online Profile" : "Online Profile")
+            .navigationTitle(Text(LocalizedStringKey(isEditing ? "profiles.editOnline" : "profiles.online")))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("common.cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(isEditing ? "Save Changes" : "Add Profile") {
+                    Button(LocalizedStringKey(isEditing ? "profiles.saveChanges" : "profiles.add")) {
                         guard let subscriptionURL else { return }
                         let profileName = name.trimmingCharacters(in: .whitespacesAndNewlines)
                         let userAgent = customUserAgent.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1884,84 +2058,84 @@ private struct ProxiesView: View {
                     .overlay {
                         if model.proxyGroups.isEmpty {
                             ContentUnavailableView(
-                                "No Proxy Groups",
+                                LocalizedStringKey("proxies.empty"),
                                 systemImage: "point.3.connected.trianglepath.dotted",
-                                description: Text("Waiting for mihomo's controller to report proxy groups.")
+                                description: Text(LocalizedStringKey("proxies.empty.description"))
                             )
                             .transition(.opacity)
                         }
                     }
                 } else {
                     ContentUnavailableView(
-                        "Connect to Use Proxies",
+                        LocalizedStringKey("proxies.connectToUse"),
                         systemImage: "point.3.connected.trianglepath.dotted",
-                        description: Text("Connect a profile before viewing proxy groups or selecting nodes.")
+                        description: Text(LocalizedStringKey("proxies.connectToUse.description"))
                     )
                 }
             }
             .animation(reduceMotion ? nil : .snappy, value: model.proxyGroups)
             .animation(reduceMotion ? nil : .smooth, value: model.delays)
-            .navigationTitle("Proxies")
+            .navigationTitle(Text(LocalizedStringKey("navigation.proxies")))
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
                     Menu {
-                        Section("Proxy Group Cards: Sort by") {
+                        Section("proxies.sort.groupCards.sortBy") {
                             ForEach(ProxyGroupSortCriterion.allCases) { criterion in
                                 Button {
                                     groupSortCriterion = criterion
                                 } label: {
                                     Label(
-                                        criterion.displayName,
+                                        LocalizedStringKey(criterion.localizationKey),
                                         systemImage: groupSortCriterion == criterion ? "checkmark" : "circle"
                                     )
                                 }
                             }
                         }
-                        Section("Proxy Group Cards: Direction") {
+                        Section("proxies.sort.groupCards.direction") {
                             ForEach(ProxySortDirection.allCases) { direction in
                                 Button {
                                     groupSortDirection = direction
                                 } label: {
                                     Label(
-                                        direction.displayName,
+                                        LocalizedStringKey(direction.localizationKey),
                                         systemImage: groupSortDirection == direction ? "checkmark" : direction.systemImage
                                     )
                                 }
                             }
                         }
-                        Section("Nodes Within Groups: Sort by") {
+                        Section("proxies.sort.nodes.sortBy") {
                             ForEach(ProxyNodeSortCriterion.allCases) { criterion in
                                 Button {
                                     nodeSortCriterion = criterion
                                 } label: {
                                     Label(
-                                        criterion.displayName,
+                                        LocalizedStringKey(criterion.localizationKey),
                                         systemImage: nodeSortCriterion == criterion ? "checkmark" : "circle"
                                     )
                                 }
                             }
                         }
-                        Section("Nodes Within Groups: Direction") {
+                        Section("proxies.sort.nodes.direction") {
                             ForEach(ProxySortDirection.allCases) { direction in
                                 Button {
                                     nodeSortDirection = direction
                                 } label: {
                                     Label(
-                                        direction.displayName,
+                                        LocalizedStringKey(direction.localizationKey),
                                         systemImage: nodeSortDirection == direction ? "checkmark" : direction.systemImage
                                     )
                                 }
                             }
                         }
                     } label: {
-                        Label(groupSortCriterion.displayName, systemImage: groupSortDirection.systemImage)
+                        Label(LocalizedStringKey(groupSortCriterion.localizationKey), systemImage: groupSortDirection.systemImage)
                             .font(.subheadline.weight(.medium))
                     }
 
                     Button {
                         Task { await model.reloadProxyGroups() }
                     } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
+                        Label("common.refresh", systemImage: "arrow.clockwise")
                     }
                     .disabled(model.tunnelStatus != .connected)
                 }
@@ -2045,10 +2219,17 @@ private struct ProxyGroupSection: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(group.name)
                                 .font(.headline)
-                            Text(group.selected ?? "No selection")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
+                            if let selected = group.selected {
+                                Text(selected)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            } else {
+                                Text("common.noSelection")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
                         }
                         Spacer()
                         Text("\(group.candidates.count)")
@@ -2065,13 +2246,13 @@ private struct ProxyGroupSection: View {
                         ProgressView()
                             .controlSize(.small)
                     } else {
-                        Label("Test group delay", systemImage: "timer")
+                        Label("proxies.testGroupDelay", systemImage: "timer")
                             .labelStyle(.iconOnly)
                     }
                 }
                 .liquidGlassButton()
                 .disabled(isTesting)
-                .accessibilityLabel("Test all delays in \(group.name)")
+                .accessibilityLabel(Text("accessibility.testAllDelays") + Text(verbatim: " \(group.name)"))
             }
 
             if isExpanded {
@@ -2136,7 +2317,7 @@ private struct ProxyNodeCard: View {
                         .font(.caption.monospacedDigit().weight(.semibold))
                         .foregroundStyle(delay < 300 ? .green : .orange)
                 } else {
-                    Text(usesCompactLayout ? "No result" : "No delay result")
+                    Text(LocalizedStringKey(usesCompactLayout ? "proxies.noResult" : "proxies.noDelayResult"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -2144,7 +2325,7 @@ private struct ProxyNodeCard: View {
                 Button {
                     Task { await model.testDelay(for: node) }
                 } label: {
-                    Label("Test delay", systemImage: "timer")
+                    Label("proxies.testDelay", systemImage: "timer")
                         .labelStyle(.iconOnly)
                 }
                 .liquidGlassButton()
@@ -2166,7 +2347,7 @@ private struct ProxyNodeCard: View {
             Task { await model.select(node: node, in: group) }
         }
         .accessibilityAddTraits(.isButton)
-        .accessibilityHint(isSelected ? "Currently selected" : "Select this node")
+        .accessibilityHint(LocalizedStringKey(isSelected ? "accessibility.currentlySelected" : "accessibility.selectNode"))
     }
 }
 
@@ -2212,13 +2393,13 @@ private struct OverridesView: View {
                 showingReconnectConfirmation = true
             }
         } label: {
-            Label("Save Overrides", systemImage: "checkmark")
+            Label("overrides.save", systemImage: "checkmark")
         }
         .liquidGlassButton(prominent: true)
         .disabled(draft == model.snapshot.overrides)
     }
 
-    private func portField(_ title: String, value: Binding<Int>) -> some View {
+    private func portField(_ title: LocalizedStringKey, value: Binding<Int>) -> some View {
         LabeledContent(title) {
             HStack(spacing: 6) {
                 TextField(title, value: value, format: .number.grouping(.never))
@@ -2246,21 +2427,25 @@ private struct OverridesView: View {
 
     private var controllerPortField: some View {
         HStack(spacing: 8) {
-            portField("Controller Port", value: $draft.controllerPort)
+            portField("overrides.controllerPort", value: $draft.controllerPort)
             Menu {
-                Section("Export to...") {
+                Section("common.exportTo") {
                     Button {
                         openURL(sparxieInstallURL)
                     } label: {
-                        Label("Sparxie", systemImage: "arrow.up.right.square")
+                        Label {
+                            Text(verbatim: SharedText.sparxie)
+                        } icon: {
+                            Image(systemName: "arrow.up.right.square")
+                        }
                     }
                 }
             } label: {
                 Image(systemName: "square.and.arrow.up")
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Export controller configuration")
-            .help("Export controller configuration")
+            .accessibilityLabel("accessibility.exportControllerConfiguration")
+            .help("accessibility.exportControllerConfiguration")
         }
     }
 
@@ -2276,9 +2461,9 @@ private struct OverridesView: View {
                                 .frame(width: 38, height: 38)
                                 .background(Color.pink.opacity(0.14), in: Circle())
                             VStack(alignment: .leading, spacing: 3) {
-                                Text("Basic Settings")
+                                Text("overrides.basicSettings")
                                     .font(.headline)
-                                Text("Applied after your custom YAML, so these values always take priority.")
+                                Text("overrides.basicSettings.description")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -2288,21 +2473,21 @@ private struct OverridesView: View {
 
                         VStack(alignment: .leading, spacing: 10) {
                             if usesCompactLayout {
-                                Label("Routing Mode", systemImage: "arrow.triangle.branch")
-                                Picker("Routing Mode", selection: $draft.mode) {
+                                Label("overrides.routingMode", systemImage: "arrow.triangle.branch")
+                                Picker("overrides.routingMode", selection: $draft.mode) {
                                     ForEach(ProxyMode.allCases) { mode in
-                                        Text(mode.displayName).tag(mode)
+                                        Text(LocalizedStringKey(mode.localizationKey)).tag(mode)
                                     }
                                 }
                                 .labelsHidden()
                                 .pickerStyle(.segmented)
                             } else {
                                 HStack {
-                                    Label("Routing Mode", systemImage: "arrow.triangle.branch")
+                                    Label("overrides.routingMode", systemImage: "arrow.triangle.branch")
                                     Spacer()
-                                    Picker("Routing Mode", selection: $draft.mode) {
+                                    Picker("overrides.routingMode", selection: $draft.mode) {
                                         ForEach(ProxyMode.allCases) { mode in
-                                            Text(mode.displayName).tag(mode)
+                                            Text(LocalizedStringKey(mode.localizationKey)).tag(mode)
                                         }
                                     }
                                     .labelsHidden()
@@ -2311,11 +2496,11 @@ private struct OverridesView: View {
                             }
 
                             HStack {
-                                Label("Mihomo Log Level", systemImage: "text.line.first.and.arrowtriangle.forward")
+                                Label("overrides.mihomoLogLevel", systemImage: "text.line.first.and.arrowtriangle.forward")
                                 Spacer()
-                                Picker("Mihomo Log Level", selection: $draft.logLevel) {
+                                Picker("overrides.mihomoLogLevel", selection: $draft.logLevel) {
                                     ForEach(MihomoLogLevel.allCases) { level in
-                                        Text(level.displayName).tag(level)
+                                        Text(LocalizedStringKey(level.localizationKey)).tag(level)
                                     }
                                 }
                                 .labelsHidden()
@@ -2326,22 +2511,22 @@ private struct OverridesView: View {
                         Divider()
 
                         VStack(alignment: .leading, spacing: 12) {
-                            Toggle("Allow LAN connections", isOn: $draft.allowLAN)
-                            Toggle("Enable IPv6", isOn: $draft.ipv6Enabled)
-                            Toggle("Enable DNS", isOn: $draft.dnsEnabled)
+                            Toggle("overrides.allowLAN", isOn: $draft.allowLAN)
+                            Toggle("overrides.enableIPv6", isOn: $draft.ipv6Enabled)
+                            Toggle("overrides.enableDNS", isOn: $draft.dnsEnabled)
                         }
 
                         Divider()
 
                         ViewThatFits(in: .horizontal) {
                             HStack(spacing: 28) {
-                                portField("Mixed Port", value: $draft.mixedPort)
+                                portField("overrides.mixedPort", value: $draft.mixedPort)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                 controllerPortField
                                     .frame(maxWidth: .infinity, alignment: .trailing)
                             }
                             VStack(alignment: .leading, spacing: 12) {
-                                portField("Mixed Port", value: $draft.mixedPort)
+                                portField("overrides.mixedPort", value: $draft.mixedPort)
                                 controllerPortField
                             }
                         }
@@ -2350,9 +2535,9 @@ private struct OverridesView: View {
                             Image(systemName: "key.fill")
                                 .foregroundStyle(.secondary)
                             if isControllerSecretVisible {
-                                TextField("Controller secret", text: $draft.controllerSecret)
+                                TextField("overrides.controllerSecret", text: $draft.controllerSecret)
                             } else {
-                                SecureField("Controller secret", text: $draft.controllerSecret)
+                                SecureField("overrides.controllerSecret", text: $draft.controllerSecret)
                             }
                             Button {
                                 isControllerSecretVisible.toggle()
@@ -2361,8 +2546,8 @@ private struct OverridesView: View {
                             }
                             .buttonStyle(.plain)
                             .foregroundStyle(.secondary)
-                            .accessibilityLabel(isControllerSecretVisible ? "Hide controller secret" : "Show controller secret")
-                            .help(isControllerSecretVisible ? "Hide controller secret" : "Show controller secret")
+                            .accessibilityLabel(LocalizedStringKey(isControllerSecretVisible ? "accessibility.hideControllerSecret" : "accessibility.showControllerSecret"))
+                            .help(LocalizedStringKey(isControllerSecretVisible ? "accessibility.hideControllerSecret" : "accessibility.showControllerSecret"))
                             .frame(width: 20)
                             .contentShape(Rectangle())
                             .padding(4)
@@ -2381,9 +2566,9 @@ private struct OverridesView: View {
                                 .frame(width: 38, height: 38)
                                 .background(Color.purple.opacity(0.14), in: Circle())
                             VStack(alignment: .leading, spacing: 3) {
-                                Text("Custom YAML Override")
+                                Text("overrides.customYAML")
                                     .font(.headline)
-                                Text("Deep-merge profile fields without modifying the source subscription.")
+                                Text("overrides.customYAML.description")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -2391,7 +2576,7 @@ private struct OverridesView: View {
                             Link(destination: URL(string: "https://clashparty.org/docs/guide/override/yaml")!) {
                                 Image(systemName: "arrow.up.right.square")
                             }
-                            .help("Open ClashParty YAML override reference")
+                            .help("accessibility.openOverrideReference")
                         }
 
                         MultilineCodeEditor(
@@ -2404,17 +2589,17 @@ private struct OverridesView: View {
                             GridRow {
                                 Text("key!")
                                     .foregroundStyle(.purple)
-                                Text("Replace the existing object")
+                                Text("overrides.replaceObject")
                             }
                             GridRow {
                                 Text("+key / key+")
                                     .foregroundStyle(.purple)
-                                Text("Prepend or append array items")
+                                Text("overrides.arrayItems")
                             }
                             GridRow {
                                 Text("<key>")
                                     .foregroundStyle(.purple)
-                                Text("Escape a literal plus-prefixed or plus-suffixed key")
+                                Text("overrides.escapeKey")
                             }
                         }
                         .font(.caption)
@@ -2436,10 +2621,10 @@ private struct OverridesView: View {
                 Group {
                     if usesCompactLayout {
                         VStack(alignment: .leading, spacing: 10) {
-                            Text(draft == model.snapshot.overrides ? "All changes saved" : "Unsaved changes")
+                            Text(LocalizedStringKey(draft == model.snapshot.overrides ? "overrides.allSaved" : "overrides.unsavedChanges"))
                                 .font(.subheadline.weight(.semibold))
                             HStack(alignment: .bottom, spacing: 12) {
-                                Text("Routing mode and log level update live. Other changes apply after reconnect; invalid YAML prevents mihomo from starting.")
+                                Text("overrides.saveDescription")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(2)
@@ -2450,9 +2635,9 @@ private struct OverridesView: View {
                     } else {
                         HStack(alignment: .center, spacing: 16) {
                             VStack(alignment: .leading, spacing: 3) {
-                                Text(draft == model.snapshot.overrides ? "All changes saved" : "Unsaved changes")
+                                Text(LocalizedStringKey(draft == model.snapshot.overrides ? "overrides.allSaved" : "overrides.unsavedChanges"))
                                     .font(.subheadline.weight(.semibold))
-                                Text("Routing mode and log level update live. Other changes apply after reconnect; invalid YAML prevents mihomo from starting.")
+                                Text("overrides.saveDescription")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
@@ -2470,22 +2655,22 @@ private struct OverridesView: View {
                 .padding(.trailing, verticalScrollerInset)
                 .padding(.bottom, 10)
             }
-            .navigationTitle("Overrides")
+            .navigationTitle(Text(LocalizedStringKey("navigation.overrides")))
             .onAppear { draft = model.snapshot.overrides }
             .onChange(of: model.snapshot.overrides) { _, overrides in
                 draft = overrides
             }
             .confirmationDialog(
-                "Reconnect to Apply Changes?",
+                Text(LocalizedStringKey("overrides.reconnect.confirmationTitle")),
                 isPresented: $showingReconnectConfirmation,
                 titleVisibility: .visible
             ) {
-                Button("Reconnect") {
+                Button("common.reconnect") {
                     model.reconnect()
                 }
-                Button("Not Now", role: .cancel) {}
+                Button("common.notNow", role: .cancel) {}
             } message: {
-                Text("Your saved network, controller, DNS, or custom YAML changes require reconnecting to take effect.")
+                Text(LocalizedStringKey("overrides.reconnect.description"))
             }
         }
     }
@@ -2501,7 +2686,7 @@ private struct ExternalResourcesView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
-                    Text("Provider cache files and the GeoIP or GeoSite databases required by this profile appear here. Update refreshes enabled geodata databases; replace a file, then reconnect to load it.")
+                    Text("resources.description")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .padding(14)
@@ -2525,23 +2710,19 @@ private struct ExternalResourcesView: View {
             .overlay {
                 if model.externalResources.isEmpty {
                     ContentUnavailableView(
-                        model.isConnected ? "No Resources" : "Connect to View Resources",
+                        LocalizedStringKey(model.isConnected ? "resources.empty" : "resources.connectToView"),
                         systemImage: "externaldrive.connected.to.line.below",
-                        description: Text(
-                            model.isConnected
-                                ? "The active profile has no managed providers or GeoIP and GeoSite rules."
-                                : "Connect a profile to inspect the provider files managed by mihomo."
-                        )
+                        description: Text(LocalizedStringKey(model.isConnected ? "resources.empty.description" : "resources.connectToView.description"))
                     )
                 }
             }
-            .navigationTitle("Resources")
+            .navigationTitle(Text(LocalizedStringKey("navigation.resources")))
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         Task { await model.reloadExternalResources() }
                     } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
+                        Label("common.refresh", systemImage: "arrow.clockwise")
                     }
                     .disabled(!model.isConnected)
                 }
@@ -2605,7 +2786,7 @@ private struct ExternalResourceCard: View {
                             .font(.headline)
                             .lineLimit(1)
                         HStack(spacing: 6) {
-                            Text(resource.kind.displayName)
+                            Text(LocalizedStringKey(resource.kind.localizationKey))
                             Text(resource.providerType.uppercased())
                             if let behavior = resource.behavior, !behavior.isEmpty {
                                 Text(behavior.uppercased())
@@ -2615,7 +2796,7 @@ private struct ExternalResourceCard: View {
                         .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Text(resource.isPresent ? "READY" : "MISSING")
+                    Text(LocalizedStringKey(resource.isPresent ? "resources.ready" : "resources.missing"))
                         .font(.caption2.bold())
                         .foregroundStyle(resource.isPresent ? .green : .orange)
                 }
@@ -2623,33 +2804,33 @@ private struct ExternalResourceCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                     if resource.kind == .geoData {
                         Label(
-                            resource.isPresent ? "Cached in MihomoCore" : "Not cached yet",
+                            LocalizedStringKey(resource.isPresent ? "resources.cached" : "resources.notCached"),
                             systemImage: resource.isPresent ? "internaldrive.fill" : "exclamationmark.triangle"
                         )
                     }
 
                     HStack(spacing: 8) {
-                        Label("Last updated", systemImage: "clock")
+                        Label("resources.lastUpdated", systemImage: "clock")
                         Spacer()
                         if let updatedAt = resource.updatedAt {
                             Text(updatedAt, format: .dateTime.year().month().day().hour().minute())
                         } else {
-                            Text("Unavailable")
+                            Text("common.unavailable")
                         }
                     }
 
                     if resource.kind != .geoData, let subscriptionInfo {
                         HStack(spacing: 8) {
-                            Label("Subscription", systemImage: "chart.pie.fill")
+                            Label("common.subscription", systemImage: "chart.pie.fill")
                             Spacer()
                             subscriptionSummary(subscriptionInfo)
                                 .lineLimit(1)
                         }
                     } else if resource.kind != .geoData, let ruleCount = resource.ruleCount {
                         HStack(spacing: 8) {
-                            Label("Rules", systemImage: "list.number")
+                            Label("resources.rules", systemImage: "list.number")
                             Spacer()
-                            Text("\(ruleCount) rules")
+                            Text("\(ruleCount) ") + Text("resources.ruleCountSuffix")
                         }
                     }
                 }
@@ -2665,7 +2846,7 @@ private struct ExternalResourceCard: View {
                             ProgressView()
                                 .controlSize(.small)
                         } else {
-                            Label("Update", systemImage: "arrow.down.circle")
+                            Label("common.update", systemImage: "arrow.down.circle")
                                 .foregroundStyle(.white)
                         }
                     }
@@ -2673,11 +2854,11 @@ private struct ExternalResourceCard: View {
                     .disabled(!model.isConnected || isUpdating)
 
                     if resource.kind != .geoData {
-                        Button("Edit", action: edit)
+                        Button("common.edit", action: edit)
                             .liquidGlassButton()
                             .disabled(!resource.isPresent || isUpdating)
                     }
-                    Button("Replace", action: replace)
+                    Button("common.replace", action: replace)
                         .liquidGlassButton()
                         .disabled(isUpdating)
                 }
@@ -2711,12 +2892,14 @@ private struct ExternalResourceEditor: View {
         NavigationStack {
             Group {
                 if isLoading {
-                    ProgressView("Loading \(resource.name)")
+                    ProgressView {
+                        Text("common.loading") + Text(verbatim: " \(resource.name)")
+                    }
                 } else if !isText {
                     ContentUnavailableView(
-                        "Unsupported Encoding",
+                        LocalizedStringKey("resources.unsupportedEncoding"),
                         systemImage: "doc.questionmark",
-                        description: Text("This resource is not UTF-8 text. Replace it with a file instead.")
+                        description: Text(LocalizedStringKey("resources.unsupportedEncoding.description"))
                     )
                 } else {
                     MultilineCodeEditor(
@@ -2727,13 +2910,13 @@ private struct ExternalResourceEditor: View {
                     )
                 }
             }
-            .navigationTitle(resource.name)
+            .navigationTitle(Text(verbatim: resource.name))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("common.cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button("common.save") {
                         Task {
                             if await model.saveExternalResource(resource, contents: Data(contents.utf8)) {
                                 dismiss()
@@ -2863,6 +3046,14 @@ private enum LogFilter: String, CaseIterable, Identifiable {
         case .core: "Core"
         }
     }
+
+    var titleKey: LocalizedStringKey {
+        switch self {
+        case .all: "common.all"
+        case .app: "common.app"
+        case .core: "common.core"
+        }
+    }
 }
 
 private enum LogLevelFilter: String, CaseIterable, Identifiable {
@@ -2881,6 +3072,16 @@ private enum LogLevelFilter: String, CaseIterable, Identifiable {
         case .info: "Info"
         case .warning: "Warning"
         case .error: "Error"
+        }
+    }
+
+    var titleKey: LocalizedStringKey {
+        switch self {
+        case .all: "logs.allLevels"
+        case .debug: "common.debug"
+        case .info: "common.info"
+        case .warning: "common.warning"
+        case .error: "common.error"
         }
     }
 
@@ -2914,16 +3115,16 @@ private struct LogsView: View {
         NavigationStack {
             List {
                 Section {
-                    Picker("Source", selection: $filter) {
+                    Picker("common.source", selection: $filter) {
                         ForEach(LogFilter.allCases) { filter in
-                            Text(filter.title).tag(filter)
+                            Text(filter.titleKey).tag(filter)
                         }
                     }
                     .pickerStyle(.segmented)
 
-                    Picker("Level", selection: $levelFilter) {
+                    Picker("common.level", selection: $levelFilter) {
                         ForEach(LogLevelFilter.allCases) { level in
-                            Text(level.title).tag(level)
+                            Text(level.titleKey).tag(level)
                         }
                     }
                 }
@@ -2935,51 +3136,51 @@ private struct LogsView: View {
             .overlay {
                 if entries.isEmpty {
                     ContentUnavailableView(
-                        "No Logs",
+                        LocalizedStringKey("logs.empty"),
                         systemImage: "doc.text.magnifyingglass",
-                        description: Text("App and mihomo core events will appear here.")
+                        description: Text(LocalizedStringKey("logs.empty.description"))
                     )
                 }
             }
-            .navigationTitle("Logs")
-            .searchable(text: $searchText, prompt: "Search module, message, or level")
+            .navigationTitle(Text(LocalizedStringKey("navigation.logs")))
+            .searchable(text: $searchText, prompt: "logs.search")
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
                     Menu {
                         Button(role: .destructive) {
                             showingClearLogsConfirmation = true
                         } label: {
-                            Label("Clear Logs", systemImage: "trash")
+                            Label("logs.clearLogs", systemImage: "trash")
                         }
                     } label: {
-                        Label("More", systemImage: "ellipsis.circle")
+                        Label("common.more", systemImage: "ellipsis.circle")
                     }
 
                     Button {
                         Task { await model.reloadLogs() }
                     } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
+                        Label("common.refresh", systemImage: "arrow.clockwise")
                     }
                     .disabled(!model.isConnected)
                 }
             }
             .confirmationDialog(
-                "Clear Logs?",
+                Text(LocalizedStringKey("logs.clearLogs.confirmationTitle")),
                 isPresented: $showingClearLogsConfirmation,
                 titleVisibility: .visible
             ) {
-                Button("Clear App Logs", role: .destructive) {
+                Button("logs.clearApp", role: .destructive) {
                     Task { await model.clearLogs(source: .app) }
                 }
-                Button("Clear Core Logs", role: .destructive) {
+                Button("logs.clearCore", role: .destructive) {
                     Task { await model.clearLogs(source: .core) }
                 }
-                Button("Clear All Logs", role: .destructive) {
+                Button("logs.clearAll", role: .destructive) {
                     Task { await model.clearLogs() }
                 }
-                Button("Cancel", role: .cancel) {}
+                Button("common.cancel", role: .cancel) {}
             } message: {
-                Text("Choose which logs to permanently remove.")
+                Text(LocalizedStringKey("logs.clearLogs.description"))
             }
             .task { await model.reloadLogs() }
         }
@@ -2995,13 +3196,15 @@ private struct LogEntryRow: View {
                 Text(entry.timestamp, format: .dateTime.hour().minute().second())
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
-                Text(entry.source.displayName.uppercased())
+                Text(LocalizedStringKey(entry.source.localizationKey))
+                    .textCase(.uppercase)
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(entry.source == .app ? .blue : .teal)
                 Text("[\(entry.module)]")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(.secondary)
-                Text(entry.level.displayName.uppercased())
+                Text(LocalizedStringKey(entry.level.localizationKey))
+                    .textCase(.uppercase)
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(levelColor)
             }

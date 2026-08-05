@@ -12,6 +12,20 @@ enum ProfileSource: String, Codable, CaseIterable, Identifiable {
         case .remote: "Online"
         }
     }
+
+    var localizationKey: String {
+        switch self {
+        case .local: "profiles.source.local"
+        case .remote: "profiles.source.online"
+        }
+    }
+
+    var detailLocalizationKey: String {
+        switch self {
+        case .local: "profiles.detail.importedConfiguration"
+        case .remote: "profiles.detail.onlineConfiguration"
+        }
+    }
 }
 
 struct Profile: Codable, Identifiable, Hashable {
@@ -100,6 +114,8 @@ enum ProxyMode: String, Codable, CaseIterable, Identifiable {
     var id: Self { self }
 
     var displayName: String { rawValue.capitalized }
+
+    var localizationKey: String { "overrides.routingMode.\(rawValue)" }
 }
 
 enum MihomoLogLevel: String, Codable, CaseIterable, Identifiable {
@@ -111,6 +127,8 @@ enum MihomoLogLevel: String, Codable, CaseIterable, Identifiable {
 
     var id: Self { self }
     var displayName: String { rawValue.capitalized }
+
+    var localizationKey: String { "overrides.logLevel.\(rawValue)" }
 }
 
 struct ProxyOverrides: Codable, Equatable {
@@ -295,6 +313,13 @@ enum ProxyGroupSortCriterion: String, CaseIterable, Identifiable {
         case .name: "Name"
         }
     }
+
+    var localizationKey: String {
+        switch self {
+        case .original: "proxies.sort.original"
+        case .name: "proxies.sort.name"
+        }
+    }
 }
 
 enum ProxyNodeSortCriterion: String, CaseIterable, Identifiable {
@@ -309,6 +334,14 @@ enum ProxyNodeSortCriterion: String, CaseIterable, Identifiable {
         case .original: "Original"
         case .name: "Name"
         case .delay: "Delay"
+        }
+    }
+
+    var localizationKey: String {
+        switch self {
+        case .original: "proxies.sort.original"
+        case .name: "proxies.sort.name"
+        case .delay: "proxies.sort.delay"
         }
     }
 }
@@ -327,6 +360,14 @@ enum ConnectionSortCriterion: String, CaseIterable, Identifiable {
         case .rule: "Rule"
         }
     }
+
+    var localizationKey: String {
+        switch self {
+        case .process: "connections.sort.process"
+        case .speed: "connections.sort.liveSpeed"
+        case .rule: "connections.sort.rule"
+        }
+    }
 }
 
 enum ProxySortDirection: String, CaseIterable, Identifiable {
@@ -339,6 +380,13 @@ enum ProxySortDirection: String, CaseIterable, Identifiable {
         switch self {
         case .ascending: "Ascending"
         case .descending: "Descending"
+        }
+    }
+
+    var localizationKey: String {
+        switch self {
+        case .ascending: "common.ascending"
+        case .descending: "common.descending"
         }
     }
 
@@ -521,6 +569,8 @@ enum LogSource: String, Codable, CaseIterable {
     case core
 
     var displayName: String { rawValue.capitalized }
+
+    var localizationKey: String { "logs.source.\(rawValue)" }
 }
 
 enum LogLevel: String, Codable, CaseIterable {
@@ -537,6 +587,8 @@ enum LogLevel: String, Codable, CaseIterable {
         case .error: "Error"
         }
     }
+
+    var localizationKey: String { "common.\(rawValue)" }
 
     func includes(_ level: LogLevel) -> Bool {
         priority <= level.priority
@@ -606,6 +658,14 @@ enum ExternalResourceKind: String, Codable, CaseIterable {
         case .proxyProvider: "Proxy Providers"
         case .ruleProvider: "Rule Providers"
         case .geoData: "Geo Data"
+        }
+    }
+
+    var localizationKey: String {
+        switch self {
+        case .proxyProvider: "resources.kind.proxyProviders"
+        case .ruleProvider: "resources.kind.ruleProviders"
+        case .geoData: "resources.kind.geoData"
         }
     }
 }

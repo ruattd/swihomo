@@ -112,6 +112,15 @@ final class AppModel: ObservableObject {
         }
     }
 
+    var connectionStatusLocalizationKey: String {
+        switch tunnelStatus {
+        case .connected: "status.connected"
+        case .connecting, .reasserting: "status.connecting"
+        case .disconnecting: "status.disconnecting"
+        default: "status.notConnected"
+        }
+    }
+
     func load() async {
         if logStore == nil {
             let store = await Task.detached(priority: .utility) {

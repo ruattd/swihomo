@@ -5,6 +5,7 @@
 
 # Xcode
 DerivedData/
+DerivedData-*/
 build/
 .build/
 .build-ios/
