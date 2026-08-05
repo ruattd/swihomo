@@ -1001,7 +1001,7 @@ private struct AboutView: View {
         Image(nsImage: NSApplication.shared.applicationIconImage)
             .resizable()
         #else
-        Image(uiImage: UIImage(named: "AppIcon60x60") ?? UIImage())
+        Image(uiImage: UIImage(named: "AboutIcon") ?? UIImage())
             .resizable()
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         #endif

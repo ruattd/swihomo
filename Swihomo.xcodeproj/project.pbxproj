@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		100000000000000000000034 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000034 /* AppIcon.icon */; };
 		100000000000000000000001 /* SwihomoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000001 /* SwihomoApp.swift */; };
 		100000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000002 /* ContentView.swift */; };
 		100000000000000000000003 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000003 /* AppModel.swift */; };
@@ -91,6 +92,7 @@
 		200000000000000000000028 /* AppLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLanguage.swift; sourceTree = "<group>"; };
 		200000000000000000000032 /* en Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = Swihomo/en.lproj/Localizable.strings; sourceTree = SOURCE_ROOT; };
 		200000000000000000000033 /* zh-Hans Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = Swihomo/zh-Hans.lproj/Localizable.strings; sourceTree = SOURCE_ROOT; };
+		200000000000000000000034 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		200000000000000000000029 /* SharedText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedText.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -136,6 +138,7 @@
 				400000000000000000000004 /* Shared */,
 				400000000000000000000005 /* Services */,
 				200000000000000000000024 /* Assets.xcassets */,
+				200000000000000000000034 /* AppIcon.icon */,
 				200000000000000000000010 /* Swihomo-iOS.entitlements */,
 				200000000000000000000011 /* Swihomo-macOS.entitlements */,
 				400000000000000000000010 /* Localizable.strings */,
@@ -354,6 +357,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				100000000000000000000025 /* Assets.xcassets in Resources */,
+				100000000000000000000034 /* AppIcon.icon in Resources */,
 				100000000000000000000031 /* Localizable.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
