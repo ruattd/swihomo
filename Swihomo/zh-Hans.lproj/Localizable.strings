@@ -107,6 +107,7 @@
 "preferences.application.language" = "语言";
 "preferences.application.logLevel.description" = "仅控制 Swihomo 应用日志, mihomo 核心日志请在覆盖设置中配置";
 "preferences.packetTunnel.title" = "数据包隧道";
+"preferences.packetTunnel.mtu.description" = "请输入 1280 到 4064 之间的值。错误的 MTU 可能导致连接或网络问题。";
 "preferences.packetTunnel.routeIPv6" = "通过隧道传输 IPv6";
 "preferences.packetTunnel.routeIPv6.description" = "仅当网络不支持通过隧道传输 IPv6 时关闭此选项, 禁用后 IPv6 流量可能绕过 mihomo";
 "preferences.packetTunnel.customDNS" = "自定义 DNS 服务器";
@@ -115,6 +116,8 @@
 "preferences.packetTunnel.bypassLocalNetworks.description" = "从隧道中排除私有地址和链路本地地址";
 "preferences.packetTunnel.bypassIPRanges" = "绕过 IP 范围";
 "preferences.packetTunnel.bypassIPRanges.description" = "每行输入一个 IPv4 或 IPv6 CIDR, 例如 192.168.1.0/24 或 2001:db8::/32, 更改会在下次连接时生效";
+"preferences.packetTunnel.edit" = "编辑...";
+"preferences.packetTunnel.summary.empty" = "尚未配置条目";
 "preferences.menuBar.title" = "菜单栏";
 "preferences.menuBar.display" = "显示";
 "preferences.menuBar.display.icon" = "仅图标";

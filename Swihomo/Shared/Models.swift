@@ -131,6 +131,12 @@ enum MihomoLogLevel: String, Codable, CaseIterable, Identifiable {
     var localizationKey: String { "overrides.logLevel.\(rawValue)" }
 }
 
+enum PacketTunnelMTULimits {
+    static let defaultValue = 1500
+    static let minimum = 1280
+    static let maximum = 4064
+}
+
 struct ProxyOverrides: Codable, Equatable {
     var mode: ProxyMode
     var logLevel: MihomoLogLevel

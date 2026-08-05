@@ -18,7 +18,7 @@
 "accessibility.hideControllerSecret" = "Hide controller secret";
 "accessibility.showControllerSecret" = "Show controller secret";
 "accessibility.exportControllerConfiguration" = "Export controller configuration";
-"accessibility.openOverrideReference" = "Open ClashParty YAML override reference";
+"accessibility.openOverrideReference" = "Open Mihomo Party YAML override reference";
 
 "common.connect" = "Connect";
 "common.disconnect" = "Disconnect";
@@ -107,6 +107,7 @@
 "preferences.application.language" = "Language";
 "preferences.application.logLevel.description" = "Controls Swihomo app logs only. Configure mihomo core logging in Overrides.";
 "preferences.packetTunnel.title" = "Packet Tunnel";
+"preferences.packetTunnel.mtu.description" = "Use a value between 1280 and 4064. An incorrect MTU may cause connection or network problems.";
 "preferences.packetTunnel.routeIPv6" = "Route IPv6 through tunnel";
 "preferences.packetTunnel.routeIPv6.description" = "Turn this off only if your network does not support IPv6 through the tunnel. IPv6 traffic may bypass mihomo when disabled.";
 "preferences.packetTunnel.customDNS" = "Custom DNS Servers";
@@ -115,6 +116,8 @@
 "preferences.packetTunnel.bypassLocalNetworks.description" = "Excludes private and link-local addresses from the tunnel.";
 "preferences.packetTunnel.bypassIPRanges" = "Bypass IP Ranges";
 "preferences.packetTunnel.bypassIPRanges.description" = "Enter one IPv4 or IPv6 CIDR per line, for example 192.168.1.0/24 or 2001:db8::/32. Changes apply the next time you connect.";
+"preferences.packetTunnel.edit" = "Edit...";
+"preferences.packetTunnel.summary.empty" = "No entries configured";
 "preferences.menuBar.title" = "Menu Bar";
 "preferences.menuBar.display" = "Display";
 "preferences.menuBar.display.icon" = "Icon Only";

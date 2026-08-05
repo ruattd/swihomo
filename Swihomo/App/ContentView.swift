@@ -502,9 +502,11 @@ private struct PreferencesView: View {
     @AppStorage("appLanguage") private var selectedLanguage = AppLanguage.system.rawValue
     @AppStorage("packetTunnelBypassesPrivateNetworks") private var packetTunnelBypassesPrivateNetworks = false
     @AppStorage("packetTunnelBypassCIDRs") private var packetTunnelBypassCIDRs = ""
-    @AppStorage("packetTunnelMTU") private var packetTunnelMTU = 1500
+    @AppStorage("packetTunnelMTU") private var packetTunnelMTU = PacketTunnelMTULimits.defaultValue
     @AppStorage("packetTunnelCustomDNSServers") private var packetTunnelCustomDNSServers = ""
     @AppStorage("packetTunnelIPv6Enabled") private var packetTunnelIPv6Enabled = true
+    @State private var editingPacketTunnelField: PacketTunnelTextField?
+    @State private var packetTunnelMTUInput: String?
     #if os(macOS)
     @AppStorage("hidesDockIcon") private var hidesDockIcon = false
     #endif
@@ -628,15 +630,28 @@ private struct PreferencesView: View {
             HStack {
                 Text(verbatim: SharedText.mtu)
                 Spacer()
-                Picker(selection: $packetTunnelMTU) {
-                    ForEach([1280, 1360, 1420, 1500], id: \.self) { mtu in
-                        Text("\(mtu)").tag(mtu)
+                TextField(SharedText.mtu, text: packetTunnelMTUInputBinding)
+                    .font(.body.monospacedDigit())
+                    .multilineTextAlignment(.trailing)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 76)
+                    #if os(iOS)
+                    .keyboardType(.numberPad)
+                    #endif
+                    .overlay {
+                        if packetTunnelMTUInputIsInvalid {
+                            RoundedRectangle(cornerRadius: 5)
+                                .stroke(.red, lineWidth: 1)
+                        }
                     }
-                } label: {
-                    Text(verbatim: SharedText.mtu)
-                }
-                .labelsHidden()
+                    .onChange(of: packetTunnelMTUInput) { _, _ in
+                        validatePacketTunnelMTUInput()
+                    }
             }
+
+            Text("preferences.packetTunnel.mtu.description")
+                .font(.caption)
+                .foregroundStyle(packetTunnelMTUInputIsInvalid ? .red : .secondary)
 
             Toggle("preferences.packetTunnel.routeIPv6", isOn: $packetTunnelIPv6Enabled)
 
@@ -646,14 +661,13 @@ private struct PreferencesView: View {
 
             Divider()
 
-            Text("preferences.packetTunnel.customDNS")
-                .font(.subheadline.weight(.medium))
-
-            MultilineCodeEditor(text: $packetTunnelCustomDNSServers, minHeight: 100)
-
-            Text("preferences.packetTunnel.customDNS.description")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            packetTunnelEditorSection(
+                titleKey: "preferences.packetTunnel.customDNS",
+                descriptionKey: "preferences.packetTunnel.customDNS.description",
+                text: $packetTunnelCustomDNSServers,
+                minHeight: 100,
+                field: .customDNS
+            )
 
             Divider()
 
@@ -665,18 +679,121 @@ private struct PreferencesView: View {
 
             Divider()
 
-            Text("preferences.packetTunnel.bypassIPRanges")
-                .font(.subheadline.weight(.medium))
-
-            MultilineCodeEditor(text: $packetTunnelBypassCIDRs, minHeight: 120)
-
-            Text("preferences.packetTunnel.bypassIPRanges.description")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            packetTunnelEditorSection(
+                titleKey: "preferences.packetTunnel.bypassIPRanges",
+                descriptionKey: "preferences.packetTunnel.bypassIPRanges.description",
+                text: $packetTunnelBypassCIDRs,
+                minHeight: 120,
+                field: .bypassIPRanges
+            )
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .liquidGlassCard(cornerRadius: 20)
+        .sheet(item: $editingPacketTunnelField) { field in
+            NavigationStack {
+                switch field {
+                case .customDNS:
+                    PacketTunnelTextEditor(
+                        titleKey: "preferences.packetTunnel.customDNS",
+                        descriptionKey: "preferences.packetTunnel.customDNS.description",
+                        text: $packetTunnelCustomDNSServers,
+                        minHeight: 220
+                    )
+                case .bypassIPRanges:
+                    PacketTunnelTextEditor(
+                        titleKey: "preferences.packetTunnel.bypassIPRanges",
+                        descriptionKey: "preferences.packetTunnel.bypassIPRanges.description",
+                        text: $packetTunnelBypassCIDRs,
+                        minHeight: 240
+                    )
+                }
+            }
+        }
+    }
+
+    private var packetTunnelMTUInputBinding: Binding<String> {
+        Binding(
+            get: { packetTunnelMTUInput ?? String(packetTunnelMTU) },
+            set: { packetTunnelMTUInput = $0 }
+        )
+    }
+
+    private var packetTunnelMTUInputIsInvalid: Bool {
+        guard let input = packetTunnelMTUInput else { return false }
+        guard let mtu = Int(input) else { return true }
+        return !((PacketTunnelMTULimits.minimum...PacketTunnelMTULimits.maximum).contains(mtu))
+    }
+
+    private func validatePacketTunnelMTUInput() {
+        guard let input = packetTunnelMTUInput,
+              let mtu = Int(input),
+              (PacketTunnelMTULimits.minimum...PacketTunnelMTULimits.maximum).contains(mtu) else {
+            return
+        }
+
+        packetTunnelMTU = mtu
+        packetTunnelMTUInput = nil
+    }
+
+    @ViewBuilder
+    private func packetTunnelEditorSection(
+        titleKey: LocalizedStringKey,
+        descriptionKey: LocalizedStringKey,
+        text: Binding<String>,
+        minHeight: CGFloat,
+        field: PacketTunnelTextField
+    ) -> some View {
+        Text(titleKey)
+            .font(.subheadline.weight(.medium))
+
+        if horizontalSizeClass == .compact {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    packetTunnelSummary(for: text.wrappedValue)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    Spacer(minLength: 8)
+
+                    Button {
+                        editingPacketTunnelField = field
+                    } label: {
+                        Label("preferences.packetTunnel.edit", systemImage: "pencil")
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                Text(descriptionKey)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } else {
+            MultilineCodeEditor(text: text, minHeight: minHeight)
+
+            Text(descriptionKey)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func packetTunnelSummary(for text: String) -> Text {
+        let nonEmptyLines = text
+            .split(whereSeparator: \.isNewline)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+        guard !nonEmptyLines.isEmpty else {
+            return Text("preferences.packetTunnel.summary.empty")
+        }
+
+        let preview = nonEmptyLines
+            .prefix(3)
+            .map(String.init)
+            .joined(separator: ", ")
+        let suffix = nonEmptyLines.count > 3 ? ", …" : ""
+        return Text(verbatim: preview + suffix)
     }
 
     @ViewBuilder
@@ -761,6 +878,45 @@ private struct PreferencesView: View {
         .liquidGlassCard(cornerRadius: 20)
     }
 #endif
+}
+
+private enum PacketTunnelTextField: String, Identifiable {
+    case customDNS
+    case bypassIPRanges
+
+    var id: String { rawValue }
+}
+
+private struct PacketTunnelTextEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    let titleKey: LocalizedStringKey
+    let descriptionKey: LocalizedStringKey
+    @Binding var text: String
+    let minHeight: CGFloat
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text(descriptionKey)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                MultilineCodeEditor(text: $text, minHeight: minHeight)
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .liquidGlassCard(cornerRadius: 20)
+            .padding(20)
+        }
+        .navigationTitle(Text(titleKey))
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("common.done") {
+                    dismiss()
+                }
+            }
+        }
+    }
 }
 
 private struct AboutView: View {
@@ -1990,8 +2146,8 @@ private struct RemoteProfileSheet: View {
                             .focused($focusedField, equals: .customUserAgent)
                             .padding(14)
                             .liquidGlassCard()
-                        Text(LocalizedStringKey(isEditing ? "profiles.userAgent.editDescription" : "profiles.userAgent.addDescription"))
-                            + Text(verbatim: " \(MihomoCoreVersion.userAgent).")
+                        (Text(LocalizedStringKey(isEditing ? "profiles.userAgent.editDescription" : "profiles.userAgent.addDescription"))
+                            + Text(verbatim: " \(MihomoCoreVersion.userAgent)."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

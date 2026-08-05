@@ -91,8 +91,8 @@ final class TunnelController {
     }
 
     private var mtu: Int {
-        let value = UserDefaults.standard.object(forKey: "packetTunnelMTU") as? Int ?? 1500
-        return [1280, 1360, 1420, 1500].contains(value) ? value : 1500
+        let value = UserDefaults.standard.object(forKey: "packetTunnelMTU") as? Int ?? PacketTunnelMTULimits.defaultValue
+        return min(max(value, PacketTunnelMTULimits.minimum), PacketTunnelMTULimits.maximum)
     }
 
     private var customDNSServers: [String] {

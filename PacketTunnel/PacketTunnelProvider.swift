@@ -21,7 +21,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let automaticallyReclaimsMemory = (configuration.providerConfiguration?["automaticallyReclaimsMemory"] as? NSNumber)?.boolValue ?? false
         let bypassesPrivateNetworks = (configuration.providerConfiguration?["bypassesPrivateNetworks"] as? NSNumber)?.boolValue ?? false
         let bypassedCIDRs = configuration.providerConfiguration?["bypassedCIDRs"] as? [String] ?? []
-        let mtu = (configuration.providerConfiguration?["mtu"] as? NSNumber)?.intValue ?? 1500
+        let mtu = (configuration.providerConfiguration?["mtu"] as? NSNumber)?.intValue ?? PacketTunnelMTULimits.defaultValue
         let customDNSServers = configuration.providerConfiguration?["customDNSServers"] as? [String] ?? []
         let ipv6Enabled = (configuration.providerConfiguration?["ipv6Enabled"] as? NSNumber)?.boolValue ?? true
 
@@ -244,7 +244,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             ipv6.excludedRoutes = excludedRoutes.ipv6
             settings.ipv6Settings = ipv6
         }
-        settings.mtu = NSNumber(value: min(max(mtu, 1280), 1500))
+        settings.mtu = NSNumber(value: min(max(mtu, PacketTunnelMTULimits.minimum), PacketTunnelMTULimits.maximum))
 
         let dnsServers = validDNSServers(from: customDNSServers, allowsIPv6: ipv6Enabled)
         if !dnsServers.isEmpty {
