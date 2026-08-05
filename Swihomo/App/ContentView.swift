@@ -501,6 +501,8 @@ private struct PreferencesView: View {
     @AppStorage("appLogLevel") private var appLogLevel = LogLevel.info.rawValue
     @AppStorage("appLanguage") private var selectedLanguage = AppLanguage.system.rawValue
     @AppStorage("packetTunnelBypassesPrivateNetworks") private var packetTunnelBypassesPrivateNetworks = false
+    @AppStorage("packetTunnelExcludeCellularServices") private var packetTunnelExcludeCellularServices = true
+    @AppStorage("packetTunnelIncludeAllNetworks") private var packetTunnelIncludeAllNetworks = false
     @AppStorage("packetTunnelBypassCIDRs") private var packetTunnelBypassCIDRs = ""
     @AppStorage("packetTunnelMTU") private var packetTunnelMTU = PacketTunnelMTULimits.defaultValue
     @AppStorage("packetTunnelCustomDNSServers") private var packetTunnelCustomDNSServers = ""
@@ -627,6 +629,10 @@ private struct PreferencesView: View {
             Label("preferences.packetTunnel.title", systemImage: "point.3.connected.trianglepath.dotted")
                 .font(.title3.weight(.semibold))
 
+            Text("preferences.packetTunnel.reconnectDescription")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
             HStack {
                 Text(verbatim: SharedText.mtu)
                 Spacer()
@@ -671,11 +677,27 @@ private struct PreferencesView: View {
 
             Divider()
 
+            Toggle("preferences.packetTunnel.includeAllNetworks", isOn: $packetTunnelIncludeAllNetworks)
+
+            Text("preferences.packetTunnel.includeAllNetworks.description")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Toggle("preferences.packetTunnel.excludeCellularServices", isOn: $packetTunnelExcludeCellularServices)
+                .disabled(!packetTunnelIncludeAllNetworks)
+
+            Text("preferences.packetTunnel.excludeCellularServices.description")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .disabled(!packetTunnelIncludeAllNetworks)
+
             Toggle("preferences.packetTunnel.bypassLocalNetworks", isOn: $packetTunnelBypassesPrivateNetworks)
+                .disabled(!packetTunnelIncludeAllNetworks)
 
             Text("preferences.packetTunnel.bypassLocalNetworks.description")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .disabled(!packetTunnelIncludeAllNetworks)
 
             Divider()
 

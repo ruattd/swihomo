@@ -19,7 +19,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
         let dnsEnabled = (configuration.providerConfiguration?["dnsEnabled"] as? NSNumber)?.boolValue ?? true
         let automaticallyReclaimsMemory = (configuration.providerConfiguration?["automaticallyReclaimsMemory"] as? NSNumber)?.boolValue ?? false
-        let bypassesPrivateNetworks = (configuration.providerConfiguration?["bypassesPrivateNetworks"] as? NSNumber)?.boolValue ?? false
         let bypassedCIDRs = configuration.providerConfiguration?["bypassedCIDRs"] as? [String] ?? []
         let mtu = (configuration.providerConfiguration?["mtu"] as? NSNumber)?.intValue ?? PacketTunnelMTULimits.defaultValue
         let customDNSServers = configuration.providerConfiguration?["customDNSServers"] as? [String] ?? []
@@ -31,7 +30,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         try await setTunnelNetworkSettings(
             networkSettings(
                 dnsEnabled: dnsEnabled,
-                bypassesPrivateNetworks: bypassesPrivateNetworks,
                 bypassedCIDRs: bypassedCIDRs,
                 mtu: mtu,
                 customDNSServers: customDNSServers,
@@ -219,7 +217,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     private func networkSettings(
         dnsEnabled: Bool,
-        bypassesPrivateNetworks: Bool,
         bypassedCIDRs: [String],
         mtu: Int,
         customDNSServers: [String],
@@ -231,8 +228,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         settings.ipv4Settings = ipv4
 
         let excludedRoutes = excludedRoutes(
-            from: bypassedCIDRs,
-            includingPrivateNetworks: bypassesPrivateNetworks
+            from: bypassedCIDRs
         )
         ipv4.excludedRoutes = excludedRoutes.ipv4
         if ipv6Enabled {
@@ -269,17 +265,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     private func excludedRoutes(
-        from cidrs: [String],
-        includingPrivateNetworks: Bool
+        from cidrs: [String]
     ) -> (ipv4: [NEIPv4Route], ipv6: [NEIPv6Route]) {
-        let privateNetworkCIDRs = includingPrivateNetworks
-            ? ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "fc00::/7", "fe80::/10"]
-            : []
         var ipv4Routes: [NEIPv4Route] = []
         var ipv6Routes: [NEIPv6Route] = []
         var seenCIDRs = Set<String>()
 
-        for cidr in privateNetworkCIDRs + cidrs {
+        for cidr in cidrs {
             let components = cidr.split(separator: "/", maxSplits: 1)
             guard components.count == 2,
                   let prefixLength = Int(components[1]) else {

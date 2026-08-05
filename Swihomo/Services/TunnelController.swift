@@ -46,12 +46,15 @@ final class TunnelController {
         let tunnelProtocol = NETunnelProviderProtocol()
         tunnelProtocol.providerBundleIdentifier = Self.providerBundleIdentifier
         tunnelProtocol.serverAddress = "Swihomo"
+        let includeAllNetworks = packetTunnelIncludeAllNetworks
+        tunnelProtocol.includeAllNetworks = includeAllNetworks
+        tunnelProtocol.excludeCellularServices = includeAllNetworks && packetTunnelExcludeCellularServices
+        tunnelProtocol.excludeLocalNetworks = includeAllNetworks && bypassesPrivateNetworks
         tunnelProtocol.providerConfiguration = [
             "profileID": profileID.uuidString,
             "profileYAML": configuration.profileYAML,
             "dnsEnabled": NSNumber(value: dnsEnabled),
             "automaticallyReclaimsMemory": NSNumber(value: automaticallyReclaimsMemory),
-            "bypassesPrivateNetworks": NSNumber(value: bypassesPrivateNetworks),
             "bypassedCIDRs": bypassedCIDRs,
             "mtu": NSNumber(value: mtu),
             "customDNSServers": customDNSServers,
@@ -105,6 +108,14 @@ final class TunnelController {
 
     private var ipv6Enabled: Bool {
         UserDefaults.standard.object(forKey: "packetTunnelIPv6Enabled") as? Bool ?? true
+    }
+
+    private var packetTunnelExcludeCellularServices: Bool {
+        UserDefaults.standard.object(forKey: "packetTunnelExcludeCellularServices") as? Bool ?? true
+    }
+
+    private var packetTunnelIncludeAllNetworks: Bool {
+        UserDefaults.standard.object(forKey: "packetTunnelIncludeAllNetworks") as? Bool ?? false
     }
 
     func disconnect() {
