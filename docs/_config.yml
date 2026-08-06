@@ -24,10 +24,8 @@ toc:
   h_max: 3
 
 readme_index:
-  enabled: true
-  readme_pattern: "/index\\.md$/"
-  remove_originals: false
-  with_frontmatter: false
+  remove_originals: true
+  with_frontmatter: true
 
 plugins:
   - jekyll-remote-theme
