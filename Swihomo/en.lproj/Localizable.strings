@@ -173,6 +173,8 @@
 "profiles.empty" = "No Profiles";
 "profiles.empty.description" = "Import a YAML configuration or add a subscription URL.";
 "profiles.import" = "Import";
+"profiles.import.qr" = "Scan QR Code";
+"profiles.networkSource" = "Network Source";
 "profiles.online" = "Online Profile";
 "profiles.active" = "ACTIVE";
 "profiles.overrides" = "Overrides...";
@@ -205,6 +207,21 @@
 "profiles.source.online" = "Online";
 "profiles.detail.importedConfiguration" = "Imported configuration";
 "profiles.detail.onlineConfiguration" = "Online configuration";
+"profiles.qr.title" = "Scan QR Code";
+"profiles.qr.description" = "Point your camera at a QR code containing an HTTP or HTTPS subscription URL.";
+"profiles.qr.cameraView" = "QR code camera view";
+"profiles.qr.scanning" = "Looking for a QR code";
+"profiles.qr.preparing" = "Preparing camera";
+"profiles.qr.preparing.description" = "Checking camera access and QR scanning support...";
+"profiles.qr.invalid.title" = "That QR code isn't a subscription URL";
+"profiles.qr.invalid.description" = "Scan a QR code containing a valid HTTP or HTTPS URL, then try again.";
+"profiles.qr.cameraDenied" = "Camera access is turned off";
+"profiles.qr.cameraRestricted" = "Camera access is restricted";
+"profiles.qr.unavailable" = "QR scanning is unavailable";
+"profiles.qr.failed" = "The camera couldn't start";
+"profiles.qr.help" = "Close this sheet and check camera access, then try again.";
+"profiles.qr.openSettings" = "Open Settings";
+"profiles.qr.tryAgain" = "Try Again";
 
 "proxies.empty" = "No Proxy Groups";
 "proxies.empty.description" = "Waiting for mihomo's controller to report proxy groups.";

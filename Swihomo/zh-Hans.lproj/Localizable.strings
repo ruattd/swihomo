@@ -173,6 +173,8 @@
 "profiles.empty" = "没有配置文件";
 "profiles.empty.description" = "导入 YAML 配置或添加订阅 URL";
 "profiles.import" = "导入";
+"profiles.import.qr" = "扫描二维码";
+"profiles.networkSource" = "网络源";
 "profiles.online" = "在线配置文件";
 "profiles.active" = "活动";
 "profiles.overrides" = "覆盖设置...";
@@ -205,6 +207,21 @@
 "profiles.source.online" = "在线";
 "profiles.detail.importedConfiguration" = "已导入的配置";
 "profiles.detail.onlineConfiguration" = "在线配置";
+"profiles.qr.title" = "扫描二维码";
+"profiles.qr.description" = "将相机对准包含 HTTP 或 HTTPS 订阅 URL 的二维码";
+"profiles.qr.cameraView" = "二维码相机视图";
+"profiles.qr.scanning" = "正在查找二维码";
+"profiles.qr.preparing" = "正在准备相机";
+"profiles.qr.preparing.description" = "正在检查相机权限和二维码扫描支持...";
+"profiles.qr.invalid.title" = "此二维码不是订阅 URL";
+"profiles.qr.invalid.description" = "请扫描包含有效 HTTP 或 HTTPS URL 的二维码, 然后重试";
+"profiles.qr.cameraDenied" = "相机访问已关闭";
+"profiles.qr.cameraRestricted" = "相机访问受限";
+"profiles.qr.unavailable" = "二维码扫描不可用";
+"profiles.qr.failed" = "相机无法启动";
+"profiles.qr.help" = "关闭此页面并检查相机权限, 然后重试";
+"profiles.qr.openSettings" = "打开设置";
+"profiles.qr.tryAgain" = "重试";
 
 "proxies.empty" = "没有代理组";
 "proxies.empty.description" = "等待 mihomo 的控制器报告代理组";

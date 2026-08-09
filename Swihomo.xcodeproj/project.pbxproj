@@ -50,6 +50,7 @@
 		100000000000000000000031 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 400000000000000000000010 /* Localizable.strings */; };
 		100000000000000000000027 /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000026 /* Formatting.swift */; };
 		100000000000000000000029 /* SharedText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000029 /* SharedText.swift */; };
+		100000000000000000000051 /* QRCodeScannerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000051 /* QRCodeScannerSheet.swift */; };
 		D000000000000000000000001 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = D000000000000000000000003 /* Yams */; };
 		D000000000000000000000004 /* CodeEditorView in Frameworks */ = {isa = PBXBuildFile; productRef = D000000000000000000000006 /* CodeEditorView */; };
 		D000000000000000000000005 /* LanguageSupport in Frameworks */ = {isa = PBXBuildFile; productRef = D000000000000000000000007 /* LanguageSupport */; };
@@ -126,6 +127,7 @@
 		200000000000000000000033 /* zh-Hans Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = Swihomo/zh-Hans.lproj/Localizable.strings; sourceTree = SOURCE_ROOT; };
 		200000000000000000000034 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		200000000000000000000029 /* SharedText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedText.swift; sourceTree = "<group>"; };
+		200000000000000000000051 /* QRCodeScannerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeScannerSheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -279,6 +281,7 @@
 				200000000000000000000048 /* GlassStyles.swift */,
 				200000000000000000000049 /* MultilineCodeEditor.swift */,
 				200000000000000000000050 /* ThemeOptionCard.swift */,
+				200000000000000000000051 /* QRCodeScannerSheet.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -451,6 +454,7 @@
 				100000000000000000000048 /* GlassStyles.swift in Sources */,
 				100000000000000000000049 /* MultilineCodeEditor.swift in Sources */,
 				100000000000000000000050 /* ThemeOptionCard.swift in Sources */,
+				100000000000000000000051 /* QRCodeScannerSheet.swift in Sources */,
 				100000000000000000000003 /* AppModel.swift in Sources */,
 				100000000000000000000004 /* Models.swift in Sources */,
 				100000000000000000000006 /* ProfileStore.swift in Sources */,
@@ -526,6 +530,7 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Scan QR codes to import subscription URLs.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -554,6 +559,7 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Scan QR codes to import subscription URLs.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;

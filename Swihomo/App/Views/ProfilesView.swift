@@ -7,6 +7,10 @@ struct ProfilesView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showingImporter = false
     @State private var showingRemoteSheet = false
+#if os(iOS)
+    @State private var showingQRCodeScanner = false
+    @State private var scannedSubscriptionURL: URL?
+#endif
 
     var body: some View {
         NavigationStack {
@@ -32,13 +36,25 @@ struct ProfilesView: View {
             .animation(reduceMotion ? nil : .snappy, value: model.snapshot.profiles)
             .navigationTitle(Text(LocalizedStringKey("navigation.profiles")))
             .toolbar {
-                ToolbarItemGroup(placement: .primaryAction) {
-                    Button { showingImporter = true } label: {
-                        Label("profiles.import", systemImage: "square.and.arrow.down")
-                    }
+                ToolbarItem(placement: .primaryAction) {
                     Button { showingRemoteSheet = true } label: {
-                        Label("profiles.online", systemImage: "link.badge.plus")
+                        Label("profiles.networkSource", systemImage: "link.badge.plus")
                     }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Button { showingImporter = true } label: {
+                            Label("profiles.import", systemImage: "doc.badge.plus")
+                        }
+#if os(iOS)
+                        Button { showingQRCodeScanner = true } label: {
+                            Label("profiles.import.qr", systemImage: "qrcode.viewfinder")
+                        }
+#endif
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .accessibilityLabel(Text("common.more"))
                 }
             }
         }
@@ -61,12 +77,51 @@ struct ProfilesView: View {
             }
         }
         .sheet(isPresented: $showingRemoteSheet) {
-            RemoteProfileSheet { name, url, customUserAgent in
+            RemoteProfileSheet(prefilledURL: remoteSheetPrefilledURL) { name, url, customUserAgent in
                 Task { await model.addRemoteProfile(name: name, url: url, customUserAgent: customUserAgent) }
                 showingRemoteSheet = false
             }
         }
+#if os(iOS)
+        .sheet(isPresented: $showingQRCodeScanner, onDismiss: {
+            if scannedSubscriptionURL != nil {
+                showingRemoteSheet = true
+            }
+        }) {
+            QRCodeScannerSheet { payload in
+                guard let url = Self.subscriptionURL(from: payload) else { return false }
+                scannedSubscriptionURL = url
+                return true
+            }
+        }
+        .onChange(of: showingRemoteSheet) { _, isPresented in
+            if !isPresented {
+                scannedSubscriptionURL = nil
+            }
+        }
+#endif
     }
+
+    private var remoteSheetPrefilledURL: URL? {
+#if os(iOS)
+        scannedSubscriptionURL
+#else
+        nil
+#endif
+    }
+
+#if os(iOS)
+    private static func subscriptionURL(from payload: String) -> URL? {
+        let trimmedPayload = payload.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmedPayload),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              url.host != nil else {
+            return nil
+        }
+        return url
+    }
+#endif
 }
 
 private struct ProfileCard: View {
@@ -425,11 +480,11 @@ private struct RemoteProfileSheet: View {
     private let profile: Profile?
     let save: (String, URL, String?) -> Void
 
-    init(profile: Profile? = nil, save: @escaping (String, URL, String?) -> Void) {
+    init(profile: Profile? = nil, prefilledURL: URL? = nil, save: @escaping (String, URL, String?) -> Void) {
         self.profile = profile
         self.save = save
         _name = State(initialValue: profile?.name ?? "")
-        _address = State(initialValue: profile?.remoteURL?.absoluteString ?? "")
+        _address = State(initialValue: profile?.remoteURL?.absoluteString ?? prefilledURL?.absoluteString ?? "")
         _customUserAgent = State(initialValue: profile?.customUserAgent ?? "")
     }
 
