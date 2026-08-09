@@ -1733,6 +1733,7 @@ private struct ProfileCard: View {
     @State private var showingContentEditor = false
     @State private var showingProfileOverrideEditor = false
     @State private var showingDeleteConfirmation = false
+    @State private var isRefreshing = false
 
     private var isActive: Bool {
         model.snapshot.activeProfileID == profile.id
@@ -1837,11 +1838,23 @@ private struct ProfileCard: View {
             HStack(spacing: 10) {
                 if profile.source == .remote {
                     Button {
-                        Task { await model.refreshProfile(profile) }
+                        guard !isRefreshing else { return }
+                        isRefreshing = true
+                        Task {
+                            defer { isRefreshing = false }
+                            await model.refreshProfile(profile)
+                        }
                     } label: {
-                        Label("common.refresh", systemImage: "arrow.clockwise")
+                        if isRefreshing {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Label("common.refresh", systemImage: "arrow.clockwise")
+                        }
                     }
                     .liquidGlassButton()
+                    .disabled(isRefreshing)
+                    .accessibilityLabel(Text(LocalizedStringKey(isRefreshing ? "common.loading" : "common.refresh")))
                 }
 
                 Spacer()
