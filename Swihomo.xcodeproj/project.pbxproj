@@ -10,6 +10,22 @@
 		100000000000000000000034 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000034 /* AppIcon.icon */; };
 		100000000000000000000001 /* SwihomoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000001 /* SwihomoApp.swift */; };
 		100000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000002 /* ContentView.swift */; };
+		100000000000000000000035 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000035 /* HomeView.swift */; };
+		100000000000000000000036 /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000036 /* PreferencesView.swift */; };
+		100000000000000000000037 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000037 /* AboutView.swift */; };
+		100000000000000000000038 /* ConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000038 /* ConnectionView.swift */; };
+		100000000000000000000039 /* ProfilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000039 /* ProfilesView.swift */; };
+		100000000000000000000040 /* ProxiesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000040 /* ProxiesView.swift */; };
+		100000000000000000000041 /* OverridesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000041 /* OverridesView.swift */; };
+		100000000000000000000042 /* ExternalResourcesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000042 /* ExternalResourcesView.swift */; };
+		100000000000000000000043 /* LogsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000043 /* LogsView.swift */; };
+		100000000000000000000044 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000044 /* AppTheme.swift */; };
+		100000000000000000000045 /* ErrorBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000045 /* ErrorBanner.swift */; };
+		100000000000000000000046 /* PlatformSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000046 /* PlatformSupport.swift */; };
+		100000000000000000000047 /* FormattingHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000047 /* FormattingHelpers.swift */; };
+		100000000000000000000048 /* GlassStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000048 /* GlassStyles.swift */; };
+		100000000000000000000049 /* MultilineCodeEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000049 /* MultilineCodeEditor.swift */; };
+		100000000000000000000050 /* ThemeOptionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000050 /* ThemeOptionCard.swift */; };
 		100000000000000000000003 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000003 /* AppModel.swift */; };
 		100000000000000000000004 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000004 /* Models.swift */; };
 		100000000000000000000006 /* ProfileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000006 /* ProfileStore.swift */; };
@@ -66,6 +82,22 @@
 /* Begin PBXFileReference section */
 		200000000000000000000001 /* SwihomoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwihomoApp.swift; sourceTree = "<group>"; };
 		200000000000000000000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		200000000000000000000035 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		200000000000000000000036 /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
+		200000000000000000000037 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
+		200000000000000000000038 /* ConnectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionView.swift; sourceTree = "<group>"; };
+		200000000000000000000039 /* ProfilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilesView.swift; sourceTree = "<group>"; };
+		200000000000000000000040 /* ProxiesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProxiesView.swift; sourceTree = "<group>"; };
+		200000000000000000000041 /* OverridesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverridesView.swift; sourceTree = "<group>"; };
+		200000000000000000000042 /* ExternalResourcesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalResourcesView.swift; sourceTree = "<group>"; };
+		200000000000000000000043 /* LogsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogsView.swift; sourceTree = "<group>"; };
+		200000000000000000000044 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
+		200000000000000000000045 /* ErrorBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorBanner.swift; sourceTree = "<group>"; };
+		200000000000000000000046 /* PlatformSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformSupport.swift; sourceTree = "<group>"; };
+		200000000000000000000047 /* FormattingHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormattingHelpers.swift; sourceTree = "<group>"; };
+		200000000000000000000048 /* GlassStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassStyles.swift; sourceTree = "<group>"; };
+		200000000000000000000049 /* MultilineCodeEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultilineCodeEditor.swift; sourceTree = "<group>"; };
+		200000000000000000000050 /* ThemeOptionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeOptionCard.swift; sourceTree = "<group>"; };
 		200000000000000000000003 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		200000000000000000000004 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		200000000000000000000006 /* ProfileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileStore.swift; sourceTree = "<group>"; };
@@ -154,6 +186,7 @@
 				200000000000000000000003 /* AppModel.swift */,
 				200000000000000000000025 /* MenuBarView.swift */,
 				200000000000000000000028 /* AppLanguage.swift */,
+				400000000000000000000011 /* Views */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -217,6 +250,37 @@
 				200000000000000000000023 /* Version.xcconfig */,
 			);
 			path = Config;
+			sourceTree = "<group>";
+		};
+		400000000000000000000011 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000035 /* HomeView.swift */,
+				200000000000000000000036 /* PreferencesView.swift */,
+				200000000000000000000037 /* AboutView.swift */,
+				200000000000000000000038 /* ConnectionView.swift */,
+				200000000000000000000039 /* ProfilesView.swift */,
+				200000000000000000000040 /* ProxiesView.swift */,
+				200000000000000000000041 /* OverridesView.swift */,
+				200000000000000000000042 /* ExternalResourcesView.swift */,
+				200000000000000000000043 /* LogsView.swift */,
+				400000000000000000000012 /* Shared */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		400000000000000000000012 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000044 /* AppTheme.swift */,
+				200000000000000000000045 /* ErrorBanner.swift */,
+				200000000000000000000046 /* PlatformSupport.swift */,
+				200000000000000000000047 /* FormattingHelpers.swift */,
+				200000000000000000000048 /* GlassStyles.swift */,
+				200000000000000000000049 /* MultilineCodeEditor.swift */,
+				200000000000000000000050 /* ThemeOptionCard.swift */,
+			);
+			path = Shared;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -371,6 +435,22 @@
 			files = (
 				100000000000000000000001 /* SwihomoApp.swift in Sources */,
 				100000000000000000000002 /* ContentView.swift in Sources */,
+				100000000000000000000035 /* HomeView.swift in Sources */,
+				100000000000000000000036 /* PreferencesView.swift in Sources */,
+				100000000000000000000037 /* AboutView.swift in Sources */,
+				100000000000000000000038 /* ConnectionView.swift in Sources */,
+				100000000000000000000039 /* ProfilesView.swift in Sources */,
+				100000000000000000000040 /* ProxiesView.swift in Sources */,
+				100000000000000000000041 /* OverridesView.swift in Sources */,
+				100000000000000000000042 /* ExternalResourcesView.swift in Sources */,
+				100000000000000000000043 /* LogsView.swift in Sources */,
+				100000000000000000000044 /* AppTheme.swift in Sources */,
+				100000000000000000000045 /* ErrorBanner.swift in Sources */,
+				100000000000000000000046 /* PlatformSupport.swift in Sources */,
+				100000000000000000000047 /* FormattingHelpers.swift in Sources */,
+				100000000000000000000048 /* GlassStyles.swift in Sources */,
+				100000000000000000000049 /* MultilineCodeEditor.swift in Sources */,
+				100000000000000000000050 /* ThemeOptionCard.swift in Sources */,
 				100000000000000000000003 /* AppModel.swift in Sources */,
 				100000000000000000000004 /* Models.swift in Sources */,
 				100000000000000000000006 /* ProfileStore.swift in Sources */,
