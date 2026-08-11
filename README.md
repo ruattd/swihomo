@@ -78,6 +78,10 @@ The core build creates device, simulator, and macOS slices in `Vendor/MihomoCore
 
 In Xcode, select your development team and update bundle identifiers as needed for both `Swihomo` and `PacketTunnel`. Build and test Packet Tunnel behavior on a signed macOS host or a physical iOS device; a simulator cannot validate a production Packet Tunnel installation.
 
+### Screenshot demo data
+
+For deterministic App Store screenshots, add `--screenshot-demo` to the app scheme's launch arguments. The app then uses bounded in-memory fixtures for profiles, proxies, connections, resources, logs, and traffic without loading the profile store, starting the tunnel, polling the controller, or making network requests. The argument is off by default.
+
 ## Profiles and Subscriptions
 
 Profiles can be imported from local YAML files or downloaded from HTTP(S) subscription URLs. Online profiles can specify an optional custom `User-Agent`. The value is stored with the profile and used for its first request and every later refresh.
