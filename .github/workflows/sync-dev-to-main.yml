@@ -1,0 +1,56 @@
+name: Sync dev to main
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Monday 06:00 CST / Sunday 22:00 UTC
+    - cron: '0 22 * * 0'
+
+permissions:
+  {}
+
+concurrency:
+  group: sync-dev-to-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Fast-forward main from dev
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate Swihomo Automation app token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.SWIHOMO_AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.SWIHOMO_AUTOMATION_PRIVATE_KEY }}
+
+      - name: Check out dev
+        uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          ref: dev
+          fetch-depth: 0
+
+      - name: Fetch origin main and dev
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main dev
+
+      - name: Verify fast-forward and update main
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git merge-base --is-ancestor origin/dev origin/main; then
+            printf '%s\n' 'origin/dev is already an ancestor of origin/main; no push is needed.'
+            exit 0
+          fi
+
+          if ! git merge-base --is-ancestor origin/main origin/dev; then
+            printf '::error::origin/main and origin/dev have diverged; refusing to merge, rebase, or force-push.\n'
+            exit 1
+          fi
+
+          printf '%s\n' 'origin/main is behind origin/dev; fast-forwarding main.'
+          git push origin origin/dev:refs/heads/main
