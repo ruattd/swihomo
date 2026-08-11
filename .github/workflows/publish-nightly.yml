@@ -1,0 +1,475 @@
+name: Publish (Nightly)
+
+on:
+  push:
+    branches: ['main']
+    paths:
+      - '**'
+      - '!**.md'
+      - '!**/*.md'
+      - '!**/.gitignore'
+      - '!.gitignore'
+      - '!.github/**'
+      - '.github/workflows/publish-nightly.yml'
+      - '!docs/**'
+      - '!LICENSE'
+      - '!LICENSE.*'
+      - '!LICENCE'
+      - '!LICENCE.*'
+      - '!COPYING'
+      - '!COPYING.*'
+      - '!NOTICE'
+      - '!NOTICE.*'
+      - '!PATENTS'
+      - '!PATENTS.*'
+
+# Required vars: SIGNING_API_ISSUER_ID, SIGNING_API_KEY_ID, ASC_UPLOAD_API_ISSUER_ID,
+# ASC_UPLOAD_API_KEY_ID, APPSTORE_USES_NON_EXEMPT_ENCRYPTION. Required secrets:
+# APPSTORE_CERTIFICATES_FILE_BASE64, APPSTORE_CERTIFICATES_PASSWORD, SIGNING_API_PRIVATE_KEY,
+# ASC_UPLOAD_API_PRIVATE_KEY, TESTFLIGHT_INTERNAL_GROUP_ID (intentionally a repository secret).
+# Protect the code-signing and app-store-connect environments.
+# This protects only this repository's read-max-plus-one allocation; GitHub retains one pending run.
+# Manual/external uploads and superseded pending pushes are outside this guarantee.
+permissions:
+  contents: read
+
+concurrency:
+  group: app-store-connect-build-number
+  cancel-in-progress: false
+
+jobs:
+  allocate-build-number:
+    name: Allocate App Store Connect build number
+    runs-on: macos-15
+    environment: app-store-connect
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      ios_build_number: ${{ steps.allocate.outputs.ios_build_number }}
+      macos_build_number: ${{ steps.allocate.outputs.macos_build_number }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          submodules: false
+          fetch-depth: 1
+
+      - name: Prepare App Store Connect private key
+        id: prepare-key
+        shell: bash
+        env:
+          ASC_UPLOAD_API_PRIVATE_KEY: ${{ secrets.ASC_UPLOAD_API_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          key_path="$RUNNER_TEMP/AppStoreConnectKey.p8"
+          umask 077
+          printf '%s' "$ASC_UPLOAD_API_PRIVATE_KEY" > "$key_path"
+          [[ -s "$key_path" ]] || {
+            printf '%s\n' 'ASC_UPLOAD_API_PRIVATE_KEY is empty.' >&2
+            exit 1
+          }
+          printf 'key-path=%s\n' "$key_path" >> "$GITHUB_OUTPUT"
+
+      - name: Allocate next platform build numbers
+        id: allocate
+        shell: bash
+        env:
+          ASC_ISSUER_ID: ${{ vars.ASC_UPLOAD_API_ISSUER_ID }}
+          ASC_KEY_ID: ${{ vars.ASC_UPLOAD_API_KEY_ID }}
+          ASC_PRIVATE_KEY_PATH: ${{ steps.prepare-key.outputs.key-path }}
+          BUNDLE_ID: com.swihomo.client
+        run: python3 scripts/manage_testflight_builds.py next-build-numbers
+
+      - name: Remove App Store Connect private key
+        if: ${{ always() }}
+        shell: bash
+        run: rm -f -- "$RUNNER_TEMP/AppStoreConnectKey.p8"
+
+  cleanup-artifact:
+    name: Delete signed packages artifact
+    if: ${{ always() }}
+    needs:
+      - build
+      - publish
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Delete signed packages
+        uses: geekyeggo/delete-artifact@2b29beac362fd85f267740d1cf3dd53861de3568 # v6.0.0
+        with:
+          name: signed-packages
+          useGlob: false
+          failOnError: false
+
+  build:
+    name: Build signed packages
+    needs: allocate-build-number
+    runs-on: macos-15
+    environment: code-signing
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      marketing-version: ${{ steps.version.outputs.marketing-version }}
+      ios-build-number: ${{ needs.allocate-build-number.outputs.ios_build_number }}
+      macos-build-number: ${{ needs.allocate-build-number.outputs.macos_build_number }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Restore submodules and prepare core
+        shell: bash
+        run: bash ci_scripts/ci_pre_xcodebuild.sh
+
+      - name: Import signing certificates
+        uses: Apple-Actions/import-codesign-certs@5142e029c445c10ffc7149d172e540235a065466 # v7
+        with:
+          p12-file-base64: ${{ secrets.APPSTORE_CERTIFICATES_FILE_BASE64 }}
+          p12-password: ${{ secrets.APPSTORE_CERTIFICATES_PASSWORD }}
+
+      - name: Install iOS app provisioning profile
+        uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594 # v6
+        with:
+          bundle-id: com.swihomo.client
+          profile-type: IOS_APP_STORE
+          issuer-id: ${{ vars.SIGNING_API_ISSUER_ID }}
+          api-key-id: ${{ vars.SIGNING_API_KEY_ID }}
+          api-private-key: ${{ secrets.SIGNING_API_PRIVATE_KEY }}
+
+      - name: Install iOS PacketTunnel provisioning profile
+        uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594 # v6
+        with:
+          bundle-id: com.swihomo.client.PacketTunnel
+          profile-type: IOS_APP_STORE
+          issuer-id: ${{ vars.SIGNING_API_ISSUER_ID }}
+          api-key-id: ${{ vars.SIGNING_API_KEY_ID }}
+          api-private-key: ${{ secrets.SIGNING_API_PRIVATE_KEY }}
+
+      - name: Install macOS app provisioning profile
+        uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594 # v6
+        with:
+          bundle-id: com.swihomo.client
+          profile-type: MAC_APP_STORE
+          issuer-id: ${{ vars.SIGNING_API_ISSUER_ID }}
+          api-key-id: ${{ vars.SIGNING_API_KEY_ID }}
+          api-private-key: ${{ secrets.SIGNING_API_PRIVATE_KEY }}
+
+      - name: Install macOS PacketTunnel provisioning profile
+        uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594 # v6
+        with:
+          bundle-id: com.swihomo.client.PacketTunnel
+          profile-type: MAC_APP_STORE
+          issuer-id: ${{ vars.SIGNING_API_ISSUER_ID }}
+          api-key-id: ${{ vars.SIGNING_API_KEY_ID }}
+          api-private-key: ${{ secrets.SIGNING_API_PRIVATE_KEY }}
+
+      - name: Read marketing version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          marketing_version="$(awk -F= '/^[[:space:]]*MARKETING_VERSION[[:space:]]*=/{gsub(/[[:space:]]/, "", $2); print $2; exit}' Config/Version.xcconfig)"
+
+          [[ -n "$marketing_version" ]] || {
+            printf '%s\n' 'MARKETING_VERSION is missing from Config/Version.xcconfig.' >&2
+            exit 1
+          }
+
+          printf 'marketing-version=%s\n' "$marketing_version" >> "$GITHUB_OUTPUT"
+
+      - name: Archive and export signed packages
+        shell: bash
+        env:
+          MARKETING_VERSION: ${{ steps.version.outputs.marketing-version }}
+          IOS_BUILD_NUMBER: ${{ needs.allocate-build-number.outputs.ios_build_number }}
+          MACOS_BUILD_NUMBER: ${{ needs.allocate-build-number.outputs.macos_build_number }}
+        run: |
+          set -euo pipefail
+
+          ios_archive="$RUNNER_TEMP/Swihomo-iOS.xcarchive"
+          macos_archive="$RUNNER_TEMP/Swihomo-macOS.xcarchive"
+          ios_export="$RUNNER_TEMP/Swihomo-iOS-export"
+          macos_export="$RUNNER_TEMP/Swihomo-macOS-export"
+          ios_options="$RUNNER_TEMP/Swihomo-iOS-ExportOptions.plist"
+          macos_options="$RUNNER_TEMP/Swihomo-macOS-ExportOptions.plist"
+
+          rm -rf "$ios_archive" "$macos_archive" "$ios_export" "$macos_export" dist
+          mkdir -p dist
+
+          cat > "$ios_options" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>teamID</key>
+            <string>7P8CLHDH5G</string>
+            <key>destination</key>
+            <string>export</string>
+            <key>manageAppVersionAndBuildNumber</key>
+            <false/>
+          </dict>
+          </plist>
+          PLIST
+
+          cat > "$macos_options" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>teamID</key>
+            <string>7P8CLHDH5G</string>
+            <key>destination</key>
+            <string>export</string>
+            <key>manageAppVersionAndBuildNumber</key>
+            <false/>
+          </dict>
+          </plist>
+          PLIST
+
+          xcodebuild archive \
+            -project Swihomo.xcodeproj \
+            -scheme Swihomo \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$ios_archive" \
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM=7P8CLHDH5G \
+            MARKETING_VERSION="$MARKETING_VERSION" \
+            CURRENT_PROJECT_VERSION="$IOS_BUILD_NUMBER"
+
+          xcodebuild -exportArchive \
+            -archivePath "$ios_archive" \
+            -exportPath "$ios_export" \
+            -exportOptionsPlist "$ios_options"
+
+          xcodebuild archive \
+            -project Swihomo.xcodeproj \
+            -scheme Swihomo \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -archivePath "$macos_archive" \
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM=7P8CLHDH5G \
+            MARKETING_VERSION="$MARKETING_VERSION" \
+            CURRENT_PROJECT_VERSION="$MACOS_BUILD_NUMBER"
+
+          xcodebuild -exportArchive \
+            -archivePath "$macos_archive" \
+            -exportPath "$macos_export" \
+            -exportOptionsPlist "$macos_options"
+
+          ios_packages=()
+          while IFS= read -r package; do
+            [[ -n "$package" ]] && ios_packages+=("$package")
+          done < <(find "$ios_export" -type f -name '*.ipa' -print)
+          [[ "${#ios_packages[@]}" -eq 1 ]] || {
+            printf 'Expected exactly one iOS IPA, found %s.\n' "${#ios_packages[@]}" >&2
+            exit 1
+          }
+          cp "${ios_packages[0]}" dist/Swihomo-iOS.ipa
+
+          macos_packages=()
+          while IFS= read -r package; do
+            [[ -n "$package" ]] && macos_packages+=("$package")
+          done < <(find "$macos_export" -type f -name '*.pkg' -print)
+          [[ "${#macos_packages[@]}" -eq 1 ]] || {
+            printf 'Expected exactly one macOS PKG, found %s.\n' "${#macos_packages[@]}" >&2
+            exit 1
+          }
+          cp "${macos_packages[0]}" dist/Swihomo-macOS.pkg
+
+      - name: Validate signatures and release metadata
+        shell: bash
+        env:
+          MARKETING_VERSION: ${{ steps.version.outputs.marketing-version }}
+          IOS_BUILD_NUMBER: ${{ needs.allocate-build-number.outputs.ios_build_number }}
+          MACOS_BUILD_NUMBER: ${{ needs.allocate-build-number.outputs.macos_build_number }}
+        run: |
+          set -euo pipefail
+
+          ios_app="$RUNNER_TEMP/Swihomo-iOS.xcarchive/Products/Applications/Swihomo.app"
+          ios_extension="$ios_app/PlugIns/PacketTunnel.appex"
+          macos_app="$RUNNER_TEMP/Swihomo-macOS.xcarchive/Products/Applications/Swihomo.app"
+          macos_extension="$macos_app/Contents/PlugIns/PacketTunnel.appex"
+
+          codesign --verify --deep --strict "$ios_app"
+          codesign --verify --deep --strict "$ios_extension"
+          codesign --verify --deep --strict "$macos_app"
+          codesign --verify --deep --strict "$macos_extension"
+          pkgutil --check-signature dist/Swihomo-macOS.pkg
+
+          assert_bundle_versions() {
+            local label="$1"
+            local plist_path="$2"
+            local expected_build_number="$3"
+            local actual_build_number
+            local actual_marketing_version
+
+            [[ -f "$plist_path" ]] || {
+              printf 'Missing %s Info.plist at %s.\n' "$label" "$plist_path" >&2
+              return 1
+            }
+            if ! actual_build_number="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist_path")"; then
+              printf 'Unable to read CFBundleVersion from %s Info.plist at %s.\n' "$label" "$plist_path" >&2
+              return 1
+            fi
+            if ! actual_marketing_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist_path")"; then
+              printf 'Unable to read CFBundleShortVersionString from %s Info.plist at %s.\n' "$label" "$plist_path" >&2
+              return 1
+            fi
+            [[ "$actual_build_number" == "$expected_build_number" ]] || {
+              printf '%s CFBundleVersion mismatch: expected %s, found %s.\n' "$label" "$expected_build_number" "$actual_build_number" >&2
+              return 1
+            }
+            [[ "$actual_marketing_version" == "$MARKETING_VERSION" ]] || {
+              printf '%s CFBundleShortVersionString mismatch: expected %s, found %s.\n' "$label" "$MARKETING_VERSION" "$actual_marketing_version" >&2
+              return 1
+            }
+          }
+
+          assert_bundle_versions 'iOS app' "$ios_app/Info.plist" "$IOS_BUILD_NUMBER"
+          assert_bundle_versions 'iOS PacketTunnel' "$ios_extension/Info.plist" "$IOS_BUILD_NUMBER"
+          assert_bundle_versions 'macOS app' "$macos_app/Contents/Info.plist" "$MACOS_BUILD_NUMBER"
+          assert_bundle_versions 'macOS PacketTunnel' "$macos_extension/Contents/Info.plist" "$MACOS_BUILD_NUMBER"
+
+          printf '{\n  "bundle_id": "com.swihomo.client",\n  "marketing_version": "%s",\n  "build_numbers": {"IOS": "%s", "MAC_OS": "%s"},\n  "platforms": ["IOS", "MAC_OS"]\n}\n' \
+            "$MARKETING_VERSION" "$IOS_BUILD_NUMBER" "$MACOS_BUILD_NUMBER" > dist/release-metadata.json
+
+      - name: Upload signed packages
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: signed-packages
+          path: |
+            dist/Swihomo-iOS.ipa
+            dist/Swihomo-macOS.pkg
+            dist/release-metadata.json
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish to App Store Connect
+    needs: build
+    runs-on: macos-15
+    environment: app-store-connect
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          submodules: false
+          fetch-depth: 1
+
+      - name: Download signed packages
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: signed-packages
+          path: dist
+
+      - name: Prepare App Store Connect private key
+        id: prepare-key
+        shell: bash
+        env:
+          ASC_UPLOAD_API_PRIVATE_KEY: ${{ secrets.ASC_UPLOAD_API_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          key_path="$RUNNER_TEMP/AppStoreConnectKey.p8"
+          umask 077
+          printf '%s' "$ASC_UPLOAD_API_PRIVATE_KEY" > "$key_path"
+          [[ -s "$key_path" ]] || {
+            printf '%s\n' 'ASC_UPLOAD_API_PRIVATE_KEY is empty.' >&2
+            exit 1
+          }
+          printf 'key-path=%s\n' "$key_path" >> "$GITHUB_OUTPUT"
+
+      - name: Validate App Store Connect settings
+        shell: bash
+        env:
+          APPSTORE_USES_NON_EXEMPT_ENCRYPTION: ${{ vars.APPSTORE_USES_NON_EXEMPT_ENCRYPTION }}
+        run: |
+          set -euo pipefail
+          case "$APPSTORE_USES_NON_EXEMPT_ENCRYPTION" in
+            true|false) ;;
+            *)
+              printf '%s\n' 'APPSTORE_USES_NON_EXEMPT_ENCRYPTION must be exactly true or false.' >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Preflight TestFlight builds
+        id: preflight
+        shell: bash
+        env:
+          ASC_ISSUER_ID: ${{ vars.ASC_UPLOAD_API_ISSUER_ID }}
+          ASC_KEY_ID: ${{ vars.ASC_UPLOAD_API_KEY_ID }}
+          ASC_PRIVATE_KEY_PATH: ${{ steps.prepare-key.outputs.key-path }}
+          TESTFLIGHT_INTERNAL_GROUP_ID: ${{ secrets.TESTFLIGHT_INTERNAL_GROUP_ID }}
+          BUNDLE_ID: com.swihomo.client
+          MARKETING_VERSION: ${{ needs.build.outputs.marketing-version }}
+          IOS_BUILD_NUMBER: ${{ needs.build.outputs.ios-build-number }}
+          MACOS_BUILD_NUMBER: ${{ needs.build.outputs.macos-build-number }}
+          RELEASE_METADATA_PATH: ${{ github.workspace }}/dist/release-metadata.json
+        run: python3 scripts/manage_testflight_builds.py preflight
+
+      - name: Upload iOS IPA to TestFlight
+        if: steps.preflight.outputs.ios_upload == 'true'
+        uses: Apple-Actions/upload-testflight-build@1ad58030672057aa084b4e96beb6f7a8c627f9e6 # v5
+        with:
+          app-path: dist/Swihomo-iOS.ipa
+          app-type: ios
+          backend: appstore-api
+          wait-for-processing: 'true'
+          uses-non-exempt-encryption: '${{ vars.APPSTORE_USES_NON_EXEMPT_ENCRYPTION }}'
+          issuer-id: ${{ vars.ASC_UPLOAD_API_ISSUER_ID }}
+          api-key-id: ${{ vars.ASC_UPLOAD_API_KEY_ID }}
+          api-private-key: ${{ secrets.ASC_UPLOAD_API_PRIVATE_KEY }}
+
+      - name: Upload macOS PKG to TestFlight
+        if: steps.preflight.outputs.macos_upload == 'true'
+        uses: Apple-Actions/upload-testflight-build@1ad58030672057aa084b4e96beb6f7a8c627f9e6 # v5
+        with:
+          app-path: dist/Swihomo-macOS.pkg
+          app-type: macos
+          backend: altool
+          wait-for-processing: 'true'
+          uses-non-exempt-encryption: '${{ vars.APPSTORE_USES_NON_EXEMPT_ENCRYPTION }}'
+          issuer-id: ${{ vars.ASC_UPLOAD_API_ISSUER_ID }}
+          api-key-id: ${{ vars.ASC_UPLOAD_API_KEY_ID }}
+          api-private-key: ${{ secrets.ASC_UPLOAD_API_PRIVATE_KEY }}
+
+      - name: Assign exact builds to internal TestFlight group
+        shell: bash
+        env:
+          ASC_ISSUER_ID: ${{ vars.ASC_UPLOAD_API_ISSUER_ID }}
+          ASC_KEY_ID: ${{ vars.ASC_UPLOAD_API_KEY_ID }}
+          ASC_PRIVATE_KEY_PATH: ${{ steps.prepare-key.outputs.key-path }}
+          TESTFLIGHT_INTERNAL_GROUP_ID: ${{ secrets.TESTFLIGHT_INTERNAL_GROUP_ID }}
+          BUNDLE_ID: com.swihomo.client
+          MARKETING_VERSION: ${{ needs.build.outputs.marketing-version }}
+          IOS_BUILD_NUMBER: ${{ needs.build.outputs.ios-build-number }}
+          MACOS_BUILD_NUMBER: ${{ needs.build.outputs.macos-build-number }}
+          RELEASE_METADATA_PATH: ${{ github.workspace }}/dist/release-metadata.json
+        run: python3 scripts/manage_testflight_builds.py assign
+
+      - name: Remove App Store Connect private key
+        if: ${{ always() }}
+        shell: bash
+        run: rm -f -- "$RUNNER_TEMP/AppStoreConnectKey.p8"

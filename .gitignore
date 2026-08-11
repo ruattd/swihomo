@@ -49,7 +49,10 @@ Vendor/mihomo/.build-mihomo/
 # Tooling and logs
 .orca/
 .codegraph/
-.orca/
 .idea/
 .vscode/
 *.log
+
+# Python bytecode caches
+__pycache__/
+*.py[cod]
