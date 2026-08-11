@@ -568,6 +568,8 @@
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "$(SWIHOMO_IOS_APP_PROFILE)";
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = "$(SWIHOMO_MACOS_APP_PROFILE)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.swihomo.client;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
@@ -619,7 +621,6 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = "PacketTunnel/PacketTunnel-iOS.entitlements";
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = "PacketTunnel/PacketTunnel-iOS.entitlements";
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "PacketTunnel/PacketTunnel-macOS.entitlements";
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 7P8CLHDH5G;
 				ENABLE_APP_SANDBOX = YES;
@@ -636,6 +637,8 @@
 				INFOPLIST_FILE = PacketTunnel/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "$(SWIHOMO_IOS_PACKET_TUNNEL_PROFILE)";
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = "$(SWIHOMO_MACOS_PACKET_TUNNEL_PROFILE)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.swihomo.client.PacketTunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
