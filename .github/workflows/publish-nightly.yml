@@ -40,7 +40,7 @@ concurrency:
 jobs:
   allocate-build-number:
     name: Allocate App Store Connect build number
-    runs-on: macos-15
+    runs-on: macos-latest
     environment: app-store-connect
     timeout-minutes: 15
     permissions:
@@ -107,7 +107,7 @@ jobs:
   build:
     name: Build signed packages
     needs: allocate-build-number
-    runs-on: macos-15
+    runs-on: macos-latest
     environment: code-signing
     timeout-minutes: 60
     permissions:
@@ -124,17 +124,81 @@ jobs:
           submodules: recursive
           fetch-depth: 1
 
-      - name: Restore submodules and prepare core
+      - name: Record Xcode version
+        id: xcode_version
         shell: bash
-        run: bash ci_scripts/ci_pre_xcodebuild.sh
+        run: |
+          set -euo pipefail
+          xcode_version="$(xcodebuild -version | tr -cs '[:alnum:]._-' '-')"
+          [[ -n "$xcode_version" ]] || {
+            printf '%s\n' 'xcodebuild -version returned an empty value.' >&2
+            exit 1
+          }
+          printf 'version=%s\n' "$xcode_version" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare mihomo submodule
+        shell: bash
+        run: bash scripts/prepare-mihomo-core.sh --submodule-only
+
+      - name: Calculate MihomoCore cache key
+        id: mihomo_cache_key
+        shell: bash
+        run: |
+          set -euo pipefail
+          commit="$(git -C Vendor/mihomo rev-parse HEAD)"
+          [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || {
+            printf 'MihomoCore cache key requires a lowercase 40-character submodule SHA, found: %s\n' "$commit" >&2
+            exit 1
+          }
+          printf 'key=mihomo-core-v3-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode_version.outputs.version }}-%s\n' "$commit" >> "$GITHUB_OUTPUT"
+
+      - name: Restore MihomoCore cache
+        id: mihomo_core_cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          key: ${{ steps.mihomo_cache_key.outputs.key }}
+          path: |
+            Vendor/MihomoCore.xcframework
+            Swihomo/Shared/MihomoCoreVersion.swift
+
+      - name: Build MihomoCore
+        if: steps.mihomo_core_cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: bash scripts/prepare-mihomo-core.sh
+
+      - name: Verify MihomoCore cache output
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -f Vendor/MihomoCore.xcframework/Info.plist ]] || {
+            printf '%s\n' 'MihomoCore cache/build output is missing Vendor/MihomoCore.xcframework/Info.plist.' >&2
+            exit 1
+          }
+          [[ -f Swihomo/Shared/MihomoCoreVersion.swift ]] || {
+            printf '%s\n' 'MihomoCore cache/build output is missing Swihomo/Shared/MihomoCoreVersion.swift.' >&2
+            exit 1
+          }
+
+      - name: Save MihomoCore cache
+        if: steps.mihomo_core_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          key: ${{ steps.mihomo_cache_key.outputs.key }}
+          path: |
+            Vendor/MihomoCore.xcframework
+            Swihomo/Shared/MihomoCoreVersion.swift
 
       - name: Import signing certificates
         uses: Apple-Actions/import-codesign-certs@5142e029c445c10ffc7149d172e540235a065466 # v7
         with:
           p12-file-base64: ${{ secrets.APPSTORE_CERTIFICATES_FILE_BASE64 }}
           p12-password: ${{ secrets.APPSTORE_CERTIFICATES_PASSWORD }}
+          keychain: ${{ runner.temp }}/swihomo-signing
+          create-keychain: true
 
       - name: Install iOS app provisioning profile
+        id: ios_app_profile
         uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594 # v6
         with:
           bundle-id: com.swihomo.client
@@ -144,6 +208,7 @@ jobs:
           api-private-key: ${{ secrets.SIGNING_API_PRIVATE_KEY }}
 
       - name: Install iOS PacketTunnel provisioning profile
+        id: ios_packet_tunnel_profile
         uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594 # v6
         with:
           bundle-id: com.swihomo.client.PacketTunnel
@@ -153,6 +218,7 @@ jobs:
           api-private-key: ${{ secrets.SIGNING_API_PRIVATE_KEY }}
 
       - name: Install macOS app provisioning profile
+        id: macos_app_profile
         uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594 # v6
         with:
           bundle-id: com.swihomo.client
@@ -162,6 +228,7 @@ jobs:
           api-private-key: ${{ secrets.SIGNING_API_PRIVATE_KEY }}
 
       - name: Install macOS PacketTunnel provisioning profile
+        id: macos_packet_tunnel_profile
         uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594 # v6
         with:
           bundle-id: com.swihomo.client.PacketTunnel
@@ -169,6 +236,206 @@ jobs:
           issuer-id: ${{ vars.SIGNING_API_ISSUER_ID }}
           api-key-id: ${{ vars.SIGNING_API_KEY_ID }}
           api-private-key: ${{ secrets.SIGNING_API_PRIVATE_KEY }}
+
+      - name: Resolve provisioning profiles
+        id: resolve_profiles
+        shell: bash
+        env:
+          IOS_APP_PROFILES: ${{ steps.ios_app_profile.outputs.profiles }}
+          IOS_PACKET_TUNNEL_PROFILES: ${{ steps.ios_packet_tunnel_profile.outputs.profiles }}
+          MACOS_APP_PROFILES: ${{ steps.macos_app_profile.outputs.profiles }}
+          MACOS_PACKET_TUNNEL_PROFILES: ${{ steps.macos_packet_tunnel_profile.outputs.profiles }}
+          SIGNING_KEYCHAIN: ${{ runner.temp }}/swihomo-signing.keychain
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import plistlib
+          import re
+          import subprocess
+          import uuid
+          from pathlib import Path
+
+          PROFILE_DIRECTORY = Path(os.environ["HOME"]) / "Library" / "MobileDevice" / "Provisioning Profiles"
+          UUID_PATTERN = re.compile(r"^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$")
+          IDENTITY_PATTERN = re.compile(r'^\s*\d+\)\s+([0-9A-Fa-f]{40})\s+"([^"]+)"')
+          specifications = (
+              ("IOS_APP_PROFILES", "iOS app", "ios_app_profile", "iOS", "com.swihomo.client", "application-identifier"),
+              ("IOS_PACKET_TUNNEL_PROFILES", "iOS PacketTunnel", "ios_packet_tunnel_profile", "iOS", "com.swihomo.client.PacketTunnel", "application-identifier"),
+              ("MACOS_APP_PROFILES", "macOS app", "macos_app_profile", "OSX", "com.swihomo.client", "com.apple.application-identifier"),
+              ("MACOS_PACKET_TUNNEL_PROFILES", "macOS PacketTunnel", "macos_packet_tunnel_profile", "OSX", "com.swihomo.client.PacketTunnel", "com.apple.application-identifier"),
+          )
+
+          def fail(message):
+              raise SystemExit(f"Resolve provisioning profiles failed: {message}")
+
+          def safe_scalar(value, field, label):
+              if not isinstance(value, str) or not value.strip():
+                  fail(f"{label} profile has an empty {field}")
+              if any(ord(character) < 32 or ord(character) == 127 for character in value):
+                  fail(f"{label} profile has an unsafe {field}")
+              return value
+
+          def canonical_uuid(value, label):
+              if not isinstance(value, str) or not UUID_PATTERN.fullmatch(value):
+                  fail(f"{label} profile has an invalid UUID")
+              try:
+                  return str(uuid.UUID(value)).upper()
+              except ValueError:
+                  fail(f"{label} profile has an invalid UUID")
+
+          def profile_paths(profile_uuid, raw_uuid):
+              spellings = []
+              for spelling in (raw_uuid, profile_uuid, raw_uuid.upper(), raw_uuid.lower(), profile_uuid.lower()):
+                  if spelling not in spellings:
+                      spellings.append(spelling)
+              paths = []
+              for spelling in spellings:
+                  for suffix in (".mobileprovision", ".provisionprofile"):
+                      candidate = PROFILE_DIRECTORY / f"{spelling}{suffix}"
+                      if candidate.is_file() and not any(os.path.samefile(candidate, existing) for existing in paths):
+                          paths.append(candidate)
+              return paths
+
+          def decode_profile(path, label):
+              try:
+                  decoded = subprocess.run(
+                      ["/usr/bin/security", "cms", "-D", "-i", str(path)],
+                      shell=False,
+                      check=True,
+                      stdout=subprocess.PIPE,
+                      stderr=subprocess.PIPE,
+                  ).stdout
+              except (OSError, subprocess.CalledProcessError):
+                  fail(f"{label} profile could not be decoded")
+              try:
+                  return plistlib.loads(decoded)
+              except (plistlib.InvalidFileException, TypeError, ValueError):
+                  fail(f"{label} profile decoded to invalid plist data")
+
+          def validate_candidate(profile, profile_uuid, profile_name, label, expected_platform, expected_bundle_id, entitlement_key):
+              decoded_uuid = profile.get("UUID")
+              if not isinstance(decoded_uuid, str) or canonical_uuid(decoded_uuid, label) != profile_uuid:
+                  fail(f"{label} profile UUID does not match action output")
+              if profile.get("Name") != profile_name:
+                  fail(f"{label} profile Name does not match action output")
+              platforms = profile.get("Platform")
+              if not isinstance(platforms, list) or expected_platform not in platforms:
+                  fail(f"{label} profile does not target {expected_platform}")
+              entitlements = profile.get("Entitlements")
+              application_identifier = entitlements.get(entitlement_key) if isinstance(entitlements, dict) else None
+              if not isinstance(application_identifier, str) or not application_identifier.endswith(f".{expected_bundle_id}"):
+                  fail(f"{label} profile has an unexpected application identifier")
+              certificates = profile.get("DeveloperCertificates")
+              if not isinstance(certificates, list) or not certificates or not all(isinstance(certificate, bytes) and certificate for certificate in certificates):
+                  fail(f"{label} profile has no valid DeveloperCertificates")
+              return {hashlib.sha1(certificate).hexdigest().upper() for certificate in certificates}
+
+          def find_apple_distribution_identities():
+              try:
+                  output = subprocess.run(
+                      ["/usr/bin/security", "find-identity", "-v", "-p", "codesigning", os.environ["SIGNING_KEYCHAIN"]],
+                      shell=False,
+                      check=True,
+                      stdout=subprocess.PIPE,
+                      stderr=subprocess.PIPE,
+                  ).stdout.decode("utf-8", errors="replace")
+              except (OSError, subprocess.CalledProcessError):
+                  fail("could not enumerate Apple Distribution identities from the signing keychain")
+              return {
+                  match.group(1).upper()
+                  for line in output.splitlines()
+                  for match in [IDENTITY_PATTERN.match(line)]
+                  if match and match.group(2).startswith("Apple Distribution:")
+              }
+
+          candidates_by_environment = {}
+          for environment_name, label, output_prefix, expected_platform, expected_bundle_id, entitlement_key in specifications:
+              raw_profiles = os.environ.get(environment_name)
+              if raw_profiles is None or raw_profiles == "":
+                  fail(f"{label} profile action returned no profiles output")
+              try:
+                  profiles = json.loads(raw_profiles)
+              except json.JSONDecodeError as error:
+                  fail(f"{label} profiles output is not valid JSON: {error.msg}")
+              if not isinstance(profiles, list) or not profiles:
+                  fail(f"{label} profiles output must be a non-empty JSON array")
+              candidates = []
+              for profile in profiles:
+                  if not isinstance(profile, dict):
+                      fail(f"{label} profiles output contains a non-object")
+                  profile_name = safe_scalar(profile.get("name"), "name", label)
+                  raw_uuid = safe_scalar(profile.get("udid"), "udid", label)
+                  profile_uuid = canonical_uuid(raw_uuid, label)
+                  paths = profile_paths(profile_uuid, raw_uuid)
+                  if len(paths) == 0:
+                      fail(f"{label} profile {profile_name} ({profile_uuid}) has no installed profile file")
+                  if len(paths) > 1:
+                      fail(f"{label} profile {profile_name} ({profile_uuid}) has multiple installed profile files")
+                  decoded_profile = decode_profile(paths[0], label)
+                  certificates = validate_candidate(
+                      decoded_profile,
+                      profile_uuid,
+                      profile_name,
+                      label,
+                      expected_platform,
+                      expected_bundle_id,
+                      entitlement_key,
+                  )
+                  candidates.append({"name": profile_name, "uuid": profile_uuid, "certificates": certificates})
+              candidates_by_environment[environment_name] = candidates
+
+          apple_distribution = find_apple_distribution_identities()
+          if not apple_distribution:
+              fail("signing keychain has no Apple Distribution identity")
+
+          def describe(candidates):
+              return ", ".join(
+                  f"{candidate['name']} ({candidate['uuid']}, {len(candidate['certificates'])} fingerprints)"
+                  for candidate in candidates
+              ) or "none"
+
+          def select_solution(platform_label, app_environment, extension_environment):
+              solutions = []
+              for app_profile in candidates_by_environment[app_environment]:
+                  for extension_profile in candidates_by_environment[extension_environment]:
+                      common_fingerprints = app_profile["certificates"] & extension_profile["certificates"] & apple_distribution
+                      for fingerprint in sorted(common_fingerprints):
+                          solutions.append((app_profile, extension_profile, fingerprint))
+              if len(solutions) != 1:
+                  fail(
+                      f"{platform_label} profile resolution requires exactly one joint solution, found {len(solutions)}; "
+                      f"app candidates: {describe(candidates_by_environment[app_environment])}; "
+                      f"PacketTunnel candidates: {describe(candidates_by_environment[extension_environment])}; "
+                      f"Apple Distribution fingerprint count: {len(apple_distribution)}"
+                  )
+              return solutions[0]
+
+          ios_app, ios_extension, _ = select_solution("iOS", "IOS_APP_PROFILES", "IOS_PACKET_TUNNEL_PROFILES")
+          macos_app, macos_extension, _ = select_solution("macOS", "MACOS_APP_PROFILES", "MACOS_PACKET_TUNNEL_PROFILES")
+          outputs = {
+              "ios_app_profile_name": ios_app["name"],
+              "ios_app_profile_uuid": ios_app["uuid"],
+              "ios_packet_tunnel_profile_name": ios_extension["name"],
+              "ios_packet_tunnel_profile_uuid": ios_extension["uuid"],
+              "macos_app_profile_name": macos_app["name"],
+              "macos_app_profile_uuid": macos_app["uuid"],
+              "macos_packet_tunnel_profile_name": macos_extension["name"],
+              "macos_packet_tunnel_profile_uuid": macos_extension["uuid"],
+          }
+
+          for key, value in outputs.items():
+              safe_scalar(value, "output", key)
+
+          output_path = os.environ.get("GITHUB_OUTPUT")
+          if not output_path:
+              fail("GITHUB_OUTPUT is unavailable")
+          with open(output_path, "a", encoding="utf-8") as output_file:
+              for key, value in outputs.items():
+                  output_file.write(f"{key}={value}\n")
+          PY
 
       - name: Read marketing version
         id: version
@@ -191,6 +458,15 @@ jobs:
           MARKETING_VERSION: ${{ steps.version.outputs.marketing-version }}
           IOS_BUILD_NUMBER: ${{ needs.allocate-build-number.outputs.ios_build_number }}
           MACOS_BUILD_NUMBER: ${{ needs.allocate-build-number.outputs.macos_build_number }}
+          SWIHOMO_IOS_APP_PROFILE: ${{ steps.resolve_profiles.outputs.ios_app_profile_name }}
+          SWIHOMO_IOS_PACKET_TUNNEL_PROFILE: ${{ steps.resolve_profiles.outputs.ios_packet_tunnel_profile_name }}
+          SWIHOMO_MACOS_APP_PROFILE: ${{ steps.resolve_profiles.outputs.macos_app_profile_name }}
+          SWIHOMO_MACOS_PACKET_TUNNEL_PROFILE: ${{ steps.resolve_profiles.outputs.macos_packet_tunnel_profile_name }}
+          IOS_APP_PROFILE_UUID: ${{ steps.resolve_profiles.outputs.ios_app_profile_uuid }}
+          IOS_PACKET_TUNNEL_PROFILE_UUID: ${{ steps.resolve_profiles.outputs.ios_packet_tunnel_profile_uuid }}
+          MACOS_APP_PROFILE_UUID: ${{ steps.resolve_profiles.outputs.macos_app_profile_uuid }}
+          MACOS_PACKET_TUNNEL_PROFILE_UUID: ${{ steps.resolve_profiles.outputs.macos_packet_tunnel_profile_uuid }}
+          SIGNING_KEYCHAIN: ${{ runner.temp }}/swihomo-signing.keychain
         run: |
           set -euo pipefail
 
@@ -204,43 +480,44 @@ jobs:
           rm -rf "$ios_archive" "$macos_archive" "$ios_export" "$macos_export" dist
           mkdir -p dist
 
-          cat > "$ios_options" <<'PLIST'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>app-store</string>
-            <key>signingStyle</key>
-            <string>automatic</string>
-            <key>teamID</key>
-            <string>7P8CLHDH5G</string>
-            <key>destination</key>
-            <string>export</string>
-            <key>manageAppVersionAndBuildNumber</key>
-            <false/>
-          </dict>
-          </plist>
-          PLIST
+          python3 - "$ios_options" "$macos_options" <<'PY'
+          import os
+          import plistlib
+          import sys
 
-          cat > "$macos_options" <<'PLIST'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>app-store</string>
-            <key>signingStyle</key>
-            <string>automatic</string>
-            <key>teamID</key>
-            <string>7P8CLHDH5G</string>
-            <key>destination</key>
-            <string>export</string>
-            <key>manageAppVersionAndBuildNumber</key>
-            <false/>
-          </dict>
-          </plist>
-          PLIST
+          ios_options, macos_options = sys.argv[1:]
+
+          def write_plist(path, app_profile, packet_tunnel_profile):
+              document = {
+                  "method": "app-store",
+                  "signingStyle": "manual",
+                  "signingCertificate": "Apple Distribution",
+              }
+              document.update(
+                  {
+                      "teamID": "7P8CLHDH5G",
+                      "destination": "export",
+                      "manageAppVersionAndBuildNumber": False,
+                      "provisioningProfiles": {
+                          "com.swihomo.client": app_profile,
+                          "com.swihomo.client.PacketTunnel": packet_tunnel_profile,
+                      },
+                  }
+              )
+              with open(path, "wb") as plist_file:
+                  plistlib.dump(document, plist_file, fmt=plistlib.FMT_XML, sort_keys=False)
+
+          write_plist(
+              ios_options,
+              os.environ["SWIHOMO_IOS_APP_PROFILE"],
+              os.environ["SWIHOMO_IOS_PACKET_TUNNEL_PROFILE"],
+          )
+          write_plist(
+              macos_options,
+              os.environ["SWIHOMO_MACOS_APP_PROFILE"],
+              os.environ["SWIHOMO_MACOS_PACKET_TUNNEL_PROFILE"],
+          )
+          PY
 
           xcodebuild archive \
             -project Swihomo.xcodeproj \
@@ -248,9 +525,13 @@ jobs:
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath "$ios_archive" \
-            CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            OTHER_CODE_SIGN_FLAGS="--keychain $SIGNING_KEYCHAIN" \
             DEVELOPMENT_TEAM=7P8CLHDH5G \
             MARKETING_VERSION="$MARKETING_VERSION" \
+            SWIHOMO_IOS_APP_PROFILE="$SWIHOMO_IOS_APP_PROFILE" \
+            SWIHOMO_IOS_PACKET_TUNNEL_PROFILE="$SWIHOMO_IOS_PACKET_TUNNEL_PROFILE" \
             CURRENT_PROJECT_VERSION="$IOS_BUILD_NUMBER"
 
           xcodebuild -exportArchive \
@@ -264,9 +545,13 @@ jobs:
             -configuration Release \
             -destination 'generic/platform=macOS' \
             -archivePath "$macos_archive" \
-            CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            OTHER_CODE_SIGN_FLAGS="--keychain $SIGNING_KEYCHAIN" \
             DEVELOPMENT_TEAM=7P8CLHDH5G \
             MARKETING_VERSION="$MARKETING_VERSION" \
+            SWIHOMO_MACOS_APP_PROFILE="$SWIHOMO_MACOS_APP_PROFILE" \
+            SWIHOMO_MACOS_PACKET_TUNNEL_PROFILE="$SWIHOMO_MACOS_PACKET_TUNNEL_PROFILE" \
             CURRENT_PROJECT_VERSION="$MACOS_BUILD_NUMBER"
 
           xcodebuild -exportArchive \
@@ -300,6 +585,10 @@ jobs:
           MARKETING_VERSION: ${{ steps.version.outputs.marketing-version }}
           IOS_BUILD_NUMBER: ${{ needs.allocate-build-number.outputs.ios_build_number }}
           MACOS_BUILD_NUMBER: ${{ needs.allocate-build-number.outputs.macos_build_number }}
+          IOS_APP_PROFILE_UUID: ${{ steps.resolve_profiles.outputs.ios_app_profile_uuid }}
+          IOS_PACKET_TUNNEL_PROFILE_UUID: ${{ steps.resolve_profiles.outputs.ios_packet_tunnel_profile_uuid }}
+          MACOS_APP_PROFILE_UUID: ${{ steps.resolve_profiles.outputs.macos_app_profile_uuid }}
+          MACOS_PACKET_TUNNEL_PROFILE_UUID: ${{ steps.resolve_profiles.outputs.macos_packet_tunnel_profile_uuid }}
         run: |
           set -euo pipefail
 
@@ -313,6 +602,55 @@ jobs:
           codesign --verify --deep --strict "$macos_app"
           codesign --verify --deep --strict "$macos_extension"
           pkgutil --check-signature dist/Swihomo-macOS.pkg
+
+          python3 - "$ios_app" "$ios_extension" "$macos_app" "$macos_extension" <<'PY'
+          import os
+          import plistlib
+          import subprocess
+          import sys
+          import uuid
+
+          def fail(message):
+              raise SystemExit(f"Archive signing material validation failed: {message}")
+
+          def canonical_uuid(value, label):
+              try:
+                  return str(uuid.UUID(value)).upper()
+              except ValueError:
+                  fail(f"{label} has an invalid expected profile UUID")
+
+          def decode_profile(path, label):
+              if not os.path.isfile(path):
+                  fail(f"{label} embedded profile is missing")
+              try:
+                  output = subprocess.run(
+                      ["/usr/bin/security", "cms", "-D", "-i", path],
+                      shell=False,
+                      check=True,
+                      stdout=subprocess.PIPE,
+                      stderr=subprocess.PIPE,
+                  ).stdout
+              except (OSError, subprocess.CalledProcessError):
+                  fail(f"{label} embedded profile could not be decoded")
+              try:
+                  return plistlib.loads(output)
+              except (plistlib.InvalidFileException, TypeError, ValueError):
+                  fail(f"{label} embedded profile is invalid")
+
+          ios_app, ios_extension, macos_app, macos_extension = sys.argv[1:]
+          bundles = (
+              ("iOS app", ios_app, "embedded.mobileprovision", os.environ["IOS_APP_PROFILE_UUID"]),
+              ("iOS PacketTunnel", ios_extension, "embedded.mobileprovision", os.environ["IOS_PACKET_TUNNEL_PROFILE_UUID"]),
+              ("macOS app", macos_app, os.path.join("Contents", "embedded.provisionprofile"), os.environ["MACOS_APP_PROFILE_UUID"]),
+              ("macOS PacketTunnel", macos_extension, os.path.join("Contents", "embedded.provisionprofile"), os.environ["MACOS_PACKET_TUNNEL_PROFILE_UUID"]),
+          )
+
+          for label, bundle_path, embedded_name, expected_profile_uuid in bundles:
+              profile = decode_profile(os.path.join(bundle_path, embedded_name), label)
+              actual_profile_uuid = profile.get("UUID")
+              if canonical_uuid(actual_profile_uuid, label) != canonical_uuid(expected_profile_uuid, label):
+                  fail(f"{label} embedded profile UUID does not match the resolver output")
+          PY
 
           assert_bundle_versions() {
             local label="$1"
@@ -365,7 +703,7 @@ jobs:
   publish:
     name: Publish to App Store Connect
     needs: build
-    runs-on: macos-15
+    runs-on: macos-latest
     environment: app-store-connect
     timeout-minutes: 120
     permissions:

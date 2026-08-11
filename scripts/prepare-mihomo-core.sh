@@ -1,17 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="${CI_PRIMARY_REPOSITORY_PATH:-$(cd "$(dirname "$0")/.." && pwd)}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CORE_ROOT="$ROOT/Vendor/mihomo"
 OUTPUT="$ROOT/Vendor/MihomoCore.xcframework"
 GO_VERSION="1.26.5"
-GO_TOOL_ROOT="${CI_DERIVED_DATA_PATH:-${TMPDIR:-/tmp}}/swihomo-go"
+GO_TOOL_ROOT="${TMPDIR:-/tmp}/swihomo-go"
 GO_ROOT="$GO_TOOL_ROOT/go$GO_VERSION"
 
 fail() {
-    printf 'Xcode Cloud pre-build failed: %s\n' "$1" >&2
+    printf 'Core preparation failed: %s\n' "$1" >&2
     exit 1
 }
+
+if [[ "$#" -eq 0 ]]; then
+    MODE="full"
+elif [[ "$#" -eq 1 && "$1" == "--submodule-only" ]]; then
+    MODE="submodule-only"
+else
+    fail "Unsupported argument(s): $*"
+fi
 
 ensure_go() {
     if [[ -x "$GO_ROOT/bin/go" ]]; then
@@ -98,28 +106,38 @@ sync_mihomo_version() {
     printf 'Set embedded mihomo version to %s from tag %s\n' "$version" "$latest_tag"
 }
 
+prepare_submodule() {
+    git -C "$ROOT" submodule sync --recursive
+    git -C "$ROOT" submodule update --init --recursive
+
+    SUBMODULE_STATUS="$(git -C "$ROOT" submodule status --recursive)"
+    [[ -n "$SUBMODULE_STATUS" ]] || fail "No Git submodules were found."
+    printf 'Verified Git submodules:\n%s\n' "$SUBMODULE_STATUS"
+
+    while IFS= read -r line; do
+        case "$line" in
+            [-+U]*) fail "Submodule is not checked out at the commit recorded by the parent repository: $line" ;;
+        esac
+    done <<< "$SUBMODULE_STATUS"
+
+    [[ -f "$CORE_ROOT/go.mod" ]] || fail "mihomo submodule is missing its Go module."
+}
+
 [[ -f "$ROOT/.gitmodules" ]] || fail "Missing .gitmodules."
 command -v git >/dev/null || fail "Git is unavailable."
+
+if [[ "$MODE" == "submodule-only" ]]; then
+    prepare_submodule
+    exit 0
+fi
+
 command -v curl >/dev/null || fail "curl is unavailable."
 command -v shasum >/dev/null || fail "shasum is unavailable."
 command -v tar >/dev/null || fail "tar is unavailable."
 
 ensure_go
 
-git -C "$ROOT" submodule sync --recursive
-git -C "$ROOT" submodule update --init --recursive
-
-SUBMODULE_STATUS="$(git -C "$ROOT" submodule status --recursive)"
-[[ -n "$SUBMODULE_STATUS" ]] || fail "No Git submodules were found."
-printf 'Verified Git submodules:\n%s\n' "$SUBMODULE_STATUS"
-
-while IFS= read -r line; do
-    case "$line" in
-        [-+U]*) fail "Submodule is not checked out at the commit recorded by the parent repository: $line" ;;
-    esac
-done <<< "$SUBMODULE_STATUS"
-
-[[ -f "$CORE_ROOT/go.mod" ]] || fail "mihomo submodule is missing its Go module."
+prepare_submodule
 sync_mihomo_version
 
 printf 'Building embedded mihomo core...\n'

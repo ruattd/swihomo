@@ -24,6 +24,11 @@ jobs:
         with:
           app-id: ${{ secrets.SWIHOMO_AUTOMATION_APP_ID }}
           private-key: ${{ secrets.SWIHOMO_AUTOMATION_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: |
+            Swihomo
+            swihomo-core
+          permission-contents: write
 
       - name: Checkout dev
         uses: actions/checkout@v4
@@ -35,8 +40,18 @@ jobs:
 
       - name: Sync mihomo core
         shell: bash
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
+          if [[ -z "${APP_TOKEN:-}" ]]; then
+            printf '%s\n' 'GitHub App token is empty.' >&2
+            exit 1
+          fi
+          github_app_basic_auth="$(printf 'x-access-token:%s' "$APP_TOKEN" | base64 | tr -d '\n')"
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0='http.https://github.com/.extraheader'
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $github_app_basic_auth"
           git submodule sync --recursive
           git submodule update --init --recursive
           git -C Vendor/mihomo fetch origin swihomo
@@ -45,8 +60,18 @@ jobs:
 
       - name: Push rebased mihomo branch
         shell: bash
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
+          if [[ -z "${APP_TOKEN:-}" ]]; then
+            printf '%s\n' 'GitHub App token is empty.' >&2
+            exit 1
+          fi
+          github_app_basic_auth="$(printf 'x-access-token:%s' "$APP_TOKEN" | base64 | tr -d '\n')"
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0='http.https://github.com/.extraheader'
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $github_app_basic_auth"
           git -C Vendor/mihomo push --force-with-lease origin swihomo
 
       - name: Fetch origin main and dev
