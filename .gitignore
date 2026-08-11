@@ -47,6 +47,7 @@ Vendor/mihomo/.build-mihomo/
 *.key
 
 # Tooling and logs
+.orca/
 .codegraph/
 .orca/
 .idea/
