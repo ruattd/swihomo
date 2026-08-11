@@ -1,4 +1,4 @@
-name: Sync dev to main
+name: Nightly Sync
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ permissions:
   {}
 
 concurrency:
-  group: sync-dev-to-main
+  group: nightly-sync
   cancel-in-progress: false
 
 jobs:
@@ -25,12 +25,29 @@ jobs:
           app-id: ${{ secrets.SWIHOMO_AUTOMATION_APP_ID }}
           private-key: ${{ secrets.SWIHOMO_AUTOMATION_PRIVATE_KEY }}
 
-      - name: Check out dev
+      - name: Checkout dev
         uses: actions/checkout@v4
         with:
           token: ${{ steps.app-token.outputs.token }}
           ref: dev
           fetch-depth: 0
+          submodules: false
+
+      - name: Sync mihomo core
+        shell: bash
+        run: |
+          set -euo pipefail
+          git submodule sync --recursive
+          git submodule update --init --recursive
+          git -C Vendor/mihomo fetch origin swihomo
+          git -C Vendor/mihomo checkout --track -b swihomo origin/swihomo
+          scripts/sync-mihomo-core.sh
+
+      - name: Push rebased mihomo branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C Vendor/mihomo push --force-with-lease origin swihomo
 
       - name: Fetch origin main and dev
         shell: bash
