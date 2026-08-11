@@ -26,7 +26,10 @@ final class AppModel: ObservableObject {
     private let profiles = SharedProfileRepository()
     private let tunnel = TunnelController()
     private lazy var controller = MihomoControllerClient(tunnel: tunnel)
+    private let screenshotDemoMode: Bool
     private var logStore: PersistentLogStore?
+    private var demoProfileContents: [UUID: String] = [:]
+    private var demoResourceContents: [String: Data] = [:]
     private var coreLogPollingTask: Task<Void, Never>?
     private var connectionPollingTask: Task<Void, Never>?
     private var trafficStreamTask: Task<Void, Never>?
@@ -44,12 +47,34 @@ final class AppModel: ObservableObject {
     private static let geoDataLastUpdatedKeyPrefix = "com.swihomo.geodata.lastUpdated."
     private static let appLogLevelKey = "appLogLevel"
 
-    init() {
+    init(demoMode: Bool = ScreenshotDemoMode.isEnabled) {
+        screenshotDemoMode = demoMode
+
+        if demoMode {
+            let demo = ScreenshotDemoFixtures.make()
+            snapshot = demo.snapshot
+            tunnelStatus = .connected
+            proxyGroups = demo.proxyGroups
+            delays = demo.delays
+            logEntries = demo.logEntries
+            externalResources = demo.externalResources
+            connectionActivities = demo.connectionActivities
+            trafficUploadSpeed = demo.trafficUploadSpeed
+            trafficDownloadSpeed = demo.trafficDownloadSpeed
+            trafficUploadTotal = demo.trafficUploadTotal
+            trafficDownloadTotal = demo.trafficDownloadTotal
+            demoProfileContents = demo.profileContents
+            demoResourceContents = demo.resourceContents
+            recordOriginalProxyOrder(demo.proxyGroups)
+        }
+
         tunnel.onStartFailed = { [weak self] error in
+            guard self?.screenshotDemoMode != true else { return }
             self?.reconnectProfile = nil
             self?.present(error, module: "Mihomo")
         }
         tunnel.onStatusChanged = { [weak self] status in
+            guard self?.screenshotDemoMode != true else { return }
             self?.tunnelStatus = status
             self?.record(.info, module: "Tunnel", "Status changed to \(status.rawValue).")
             if status == .connected {
@@ -122,6 +147,7 @@ final class AppModel: ObservableObject {
     }
 
     func load() async {
+        guard !screenshotDemoMode else { return }
         if logStore == nil {
             let store = await Task.detached(priority: .utility) {
                 PersistentLogStore(directoryName: "AppLogs")
@@ -150,12 +176,49 @@ final class AppModel: ObservableObject {
     }
 
     func addLocalProfile(name: String, contents: String) async {
+        if screenshotDemoMode {
+            let profile = Profile(
+                id: UUID(),
+                name: name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Demo Local Profile" : name,
+                source: .local,
+                remoteURL: nil,
+                customUserAgent: nil,
+                createdAt: .now,
+                updatedAt: .now,
+                lastFetchedAt: nil,
+                subscriptionInfo: nil
+            )
+            snapshot.profiles.append(profile)
+            demoProfileContents[profile.id] = contents
+            return
+        }
         await perform(module: "Profiles", "Imported local profile \(name).") { [self] in
             snapshot = try await profiles.createLocalProfile(name: name, contents: contents)
         }
     }
 
     func addRemoteProfile(name: String, url: URL, customUserAgent: String?) async {
+        if screenshotDemoMode {
+            let profile = Profile(
+                id: UUID(),
+                name: name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? (url.host ?? "Demo Online Profile") : name,
+                source: .remote,
+                remoteURL: url,
+                customUserAgent: customUserAgent,
+                createdAt: .now,
+                updatedAt: .now,
+                lastFetchedAt: .now,
+                subscriptionInfo: MihomoSubscriptionInfo(
+                    upload: 1_000_000_000,
+                    download: 4_000_000_000,
+                    total: 20_000_000_000,
+                    expire: 1_800_000_000
+                )
+            )
+            snapshot.profiles.append(profile)
+            demoProfileContents[profile.id] = "proxies:\n  - name: Demo Node\n    type: http\n    server: demo.example.test\n    port: 443\n"
+            return
+        }
         await perform(module: "Profiles", "Added online profile \(name).") { [self] in
             snapshot = try await profiles.createRemoteProfile(
                 name: name,
@@ -166,12 +229,23 @@ final class AppModel: ObservableObject {
     }
 
     func refreshProfile(_ profile: Profile) async {
+        if screenshotDemoMode { return }
         await perform(module: "Profiles", "Refreshed profile \(profile.name).") { [self] in
             snapshot = try await profiles.refreshProfile(profile.id)
         }
     }
 
     func updateRemoteProfile(_ profile: Profile, name: String, url: URL, customUserAgent: String?) async {
+        if screenshotDemoMode {
+            guard let index = snapshot.profiles.firstIndex(where: { $0.id == profile.id }) else { return }
+            snapshot.profiles[index].name = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? (url.host ?? "Demo Online Profile")
+                : name
+            snapshot.profiles[index].remoteURL = url
+            snapshot.profiles[index].customUserAgent = customUserAgent
+            snapshot.profiles[index].updatedAt = .now
+            return
+        }
         await perform(module: "Profiles", "Updated online profile \(name).") { [self] in
             snapshot = try await profiles.updateRemoteProfile(
                 profile.id,
@@ -183,6 +257,9 @@ final class AppModel: ObservableObject {
     }
 
     func profileContents(_ profile: Profile) async -> String? {
+        if screenshotDemoMode {
+            return demoProfileContents[profile.id]
+        }
         do {
             return try await profiles.profileContents(for: profile.id)
         } catch {
@@ -192,6 +269,14 @@ final class AppModel: ObservableObject {
     }
 
     func saveProfileContents(_ contents: String, for profile: Profile) async -> Bool {
+        if screenshotDemoMode {
+            guard snapshot.profiles.contains(where: { $0.id == profile.id }) else { return false }
+            demoProfileContents[profile.id] = contents
+            if let index = snapshot.profiles.firstIndex(where: { $0.id == profile.id }) {
+                snapshot.profiles[index].updatedAt = .now
+            }
+            return true
+        }
         do {
             snapshot = try await profiles.updateProfileContents(contents, for: profile.id)
             record(.info, module: "Profiles", "Saved profile contents for \(profile.name).")
@@ -203,6 +288,11 @@ final class AppModel: ObservableObject {
     }
 
     func setCustomOverridesEnabled(_ isEnabled: Bool, for profile: Profile) async {
+        if screenshotDemoMode {
+            guard let index = snapshot.profiles.firstIndex(where: { $0.id == profile.id }) else { return }
+            snapshot.profiles[index].customOverridesEnabled = isEnabled
+            return
+        }
         let action = isEnabled ? "Enabled" : "Disabled"
         await perform(module: "Profiles", "\(action) custom overrides for \(profile.name).") { [self] in
             snapshot = try await profiles.setCustomOverridesEnabled(isEnabled, for: profile.id)
@@ -210,18 +300,36 @@ final class AppModel: ObservableObject {
     }
 
     func setProfileCustomOverride(_ contents: String, for profile: Profile) async {
+        if screenshotDemoMode {
+            guard let index = snapshot.profiles.firstIndex(where: { $0.id == profile.id }) else { return }
+            snapshot.profiles[index].customOverrideYAML = contents
+            return
+        }
         await perform(module: "Profiles", "Saved custom override for \(profile.name).") { [self] in
             snapshot = try await profiles.setCustomOverrideYAML(contents, for: profile.id)
         }
     }
 
     func deleteProfile(_ profile: Profile) async {
+        if screenshotDemoMode {
+            snapshot.profiles.removeAll { $0.id == profile.id }
+            if snapshot.activeProfileID == profile.id {
+                snapshot.activeProfileID = snapshot.profiles.first?.id
+            }
+            demoProfileContents[profile.id] = nil
+            return
+        }
         await perform(module: "Profiles", "Deleted profile \(profile.name).") { [self] in
             snapshot = try await profiles.deleteProfile(profile.id)
         }
     }
 
     func connect(profile: Profile) async {
+        if screenshotDemoMode {
+            guard snapshot.profiles.contains(where: { $0.id == profile.id }) else { return }
+            snapshot.activeProfileID = profile.id
+            return
+        }
         if tunnelStatus != .disconnected && tunnelStatus != .invalid {
             reconnectProfile = profile
             record(.info, module: "Tunnel", "Switching Packet Tunnel to \(profile.name).")
@@ -252,12 +360,14 @@ final class AppModel: ObservableObject {
     }
 
     func disconnect() {
+        if screenshotDemoMode { return }
         reconnectProfile = nil
         record(.info, module: "Tunnel", "Requested disconnect.")
         tunnel.disconnect()
     }
 
     func reconnect() {
+        if screenshotDemoMode { return }
         guard tunnelStatus == .connected, let profile = snapshot.activeProfile else { return }
         reconnectProfile = profile
         record(.info, module: "Tunnel", "Requested reconnect.")
@@ -271,6 +381,10 @@ final class AppModel: ObservableObject {
     }
 
     func saveOverrides(_ overrides: ProxyOverrides) async -> Bool {
+        if screenshotDemoMode {
+            snapshot.overrides = overrides
+            return true
+        }
         let previousOverrides = snapshot.overrides
         do {
             snapshot = try await profiles.saveOverrides(overrides)
@@ -302,6 +416,7 @@ final class AppModel: ObservableObject {
     }
 
     func reloadProxyGroups(showErrors: Bool = true) async {
+        guard !screenshotDemoMode else { return }
         guard tunnelStatus == .connected else {
             proxyGroups = []
             delays = [:]
@@ -328,6 +443,17 @@ final class AppModel: ObservableObject {
     }
 
     func select(node: String, in group: MihomoProxyGroup) async {
+        if screenshotDemoMode {
+            guard let index = proxyGroups.firstIndex(where: { $0.id == group.id }) else { return }
+            let current = proxyGroups[index]
+            guard current.candidates.contains(node) else { return }
+            proxyGroups[index] = MihomoProxyGroup(
+                name: current.name,
+                selected: node,
+                candidates: current.candidates
+            )
+            return
+        }
         await perform(module: "Proxies", "Selected \(node) for \(group.name).") { [self] in
             try await controller.select(node: node, in: group.name, using: snapshot.overrides)
             await reloadProxyGroups(showErrors: false)
@@ -335,6 +461,7 @@ final class AppModel: ObservableObject {
     }
 
     func testDelay(for node: String) async {
+        if screenshotDemoMode { return }
         do {
             if let delay = try await controller.delay(for: node, using: snapshot.overrides) {
                 delays[node] = delay
@@ -346,6 +473,7 @@ final class AppModel: ObservableObject {
     }
 
     func testDelays(in group: MihomoProxyGroup) async {
+        if screenshotDemoMode { return }
         guard tunnelStatus == .connected else {
             present(ClientError.tunnelUnavailable, module: "Proxies")
             return
@@ -448,6 +576,14 @@ final class AppModel: ObservableObject {
     }
 
     func clearLogs(source: LogSource? = nil) async {
+        if screenshotDemoMode {
+            if let source {
+                logEntries.removeAll { $0.source == source }
+            } else {
+                logEntries = []
+            }
+            return
+        }
         guard let logStore else { return }
 
         if source != .app {
@@ -468,6 +604,7 @@ final class AppModel: ObservableObject {
     }
 
     func reloadConnections(showErrors: Bool = true) async {
+        guard !screenshotDemoMode else { return }
         guard isConnectionMonitoringEnabled, tunnelStatus == .connected else { return }
 
         connectionRefreshGeneration += 1
@@ -503,6 +640,11 @@ final class AppModel: ObservableObject {
     }
 
     func closeConnection(id: String) async -> Bool {
+        if screenshotDemoMode {
+            guard connectionActivities.contains(where: { $0.id == id }) else { return false }
+            connectionActivities.removeAll { $0.id == id }
+            return true
+        }
         guard tunnelStatus == .connected else {
             present(ClientError.tunnelUnavailable, module: "Connections")
             return false
@@ -523,6 +665,10 @@ final class AppModel: ObservableObject {
     }
 
     func closeAllConnections() async {
+        if screenshotDemoMode {
+            connectionActivities = []
+            return
+        }
         guard tunnelStatus == .connected else {
             present(ClientError.tunnelUnavailable, module: "Connections")
             return
@@ -546,6 +692,9 @@ final class AppModel: ObservableObject {
     }
 
     func externalResourceContents(_ resource: ExternalResource) async -> Data? {
+        if screenshotDemoMode {
+            return demoResourceContents[resource.id]
+        }
         guard tunnelStatus == .connected else {
             present(ClientError.tunnelUnavailable, module: "Resources")
             return nil
@@ -559,6 +708,10 @@ final class AppModel: ObservableObject {
     }
 
     func saveExternalResource(_ resource: ExternalResource, contents: Data) async -> Bool {
+        if screenshotDemoMode {
+            demoResourceContents[resource.id] = contents
+            return true
+        }
         guard tunnelStatus == .connected else {
             present(ClientError.tunnelUnavailable, module: "Resources")
             return false
@@ -580,6 +733,7 @@ final class AppModel: ObservableObject {
     }
 
     func updateExternalResource(_ resource: ExternalResource) async {
+        if screenshotDemoMode { return }
         guard tunnelStatus == .connected else {
             present(ClientError.tunnelUnavailable, module: "Resources")
             return
@@ -604,6 +758,7 @@ final class AppModel: ObservableObject {
     }
 
     private func reloadCoreLogs(showErrors: Bool) async {
+        guard !screenshotDemoMode else { return }
         guard tunnelStatus == .connected, let logStore else { return }
         coreLogRefreshGeneration += 1
         let generation = coreLogRefreshGeneration
@@ -652,6 +807,7 @@ final class AppModel: ObservableObject {
     }
 
     private func reloadProxyGroupOrder(showErrors: Bool) async {
+        guard !screenshotDemoMode else { return }
         guard tunnelStatus == .connected else { return }
         do {
             let groupOrder = try await tunnel.proxyGroupOrder()
@@ -666,6 +822,7 @@ final class AppModel: ObservableObject {
     }
 
     private func reloadExternalResources(showErrors: Bool) async {
+        guard !screenshotDemoMode else { return }
         guard tunnelStatus == .connected else {
             externalResources = []
             return
@@ -696,6 +853,7 @@ final class AppModel: ObservableObject {
     }
 
     private func startCoreLogPolling() {
+        guard !screenshotDemoMode else { return }
         coreLogPollingTask?.cancel()
         coreLogPollingTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -707,6 +865,7 @@ final class AppModel: ObservableObject {
     }
 
     private func startConnectionPolling() {
+        guard !screenshotDemoMode else { return }
         connectionPollingTask?.cancel()
         connectionPollingTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -718,6 +877,7 @@ final class AppModel: ObservableObject {
 
     #if os(macOS)
     private func startTrafficStream() {
+        guard !screenshotDemoMode else { return }
         trafficStreamTask?.cancel()
         trafficStreamTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -739,6 +899,7 @@ final class AppModel: ObservableObject {
     }
 
     private func consumeTrafficStream() async {
+        guard !screenshotDemoMode else { return }
         let overrides = snapshot.overrides
         guard let url = URL(string: "http://127.0.0.1:\(overrides.controllerPort)/traffic") else { return }
         var request = URLRequest(url: url)

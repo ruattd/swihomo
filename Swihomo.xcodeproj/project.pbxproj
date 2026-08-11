@@ -51,6 +51,7 @@
 		100000000000000000000027 /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000026 /* Formatting.swift */; };
 		100000000000000000000029 /* SharedText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000029 /* SharedText.swift */; };
 		100000000000000000000051 /* QRCodeScannerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000051 /* QRCodeScannerSheet.swift */; };
+		100000000000000000000052 /* ScreenshotDemoFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000052 /* ScreenshotDemoFixtures.swift */; };
 		D000000000000000000000001 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = D000000000000000000000003 /* Yams */; };
 		D000000000000000000000004 /* CodeEditorView in Frameworks */ = {isa = PBXBuildFile; productRef = D000000000000000000000006 /* CodeEditorView */; };
 		D000000000000000000000005 /* LanguageSupport in Frameworks */ = {isa = PBXBuildFile; productRef = D000000000000000000000007 /* LanguageSupport */; };
@@ -128,6 +129,7 @@
 		200000000000000000000034 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		200000000000000000000029 /* SharedText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedText.swift; sourceTree = "<group>"; };
 		200000000000000000000051 /* QRCodeScannerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeScannerSheet.swift; sourceTree = "<group>"; };
+		200000000000000000000052 /* ScreenshotDemoFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotDemoFixtures.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -186,6 +188,7 @@
 				200000000000000000000001 /* SwihomoApp.swift */,
 				200000000000000000000002 /* ContentView.swift */,
 				200000000000000000000003 /* AppModel.swift */,
+				200000000000000000000052 /* ScreenshotDemoFixtures.swift */,
 				200000000000000000000025 /* MenuBarView.swift */,
 				200000000000000000000028 /* AppLanguage.swift */,
 				400000000000000000000011 /* Views */,
@@ -467,6 +470,7 @@
 				100000000000000000000027 /* Formatting.swift in Sources */,
 				100000000000000000000028 /* AppLanguage.swift in Sources */,
 				100000000000000000000029 /* SharedText.swift in Sources */,
+				100000000000000000000052 /* ScreenshotDemoFixtures.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
