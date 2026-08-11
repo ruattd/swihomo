@@ -48,6 +48,7 @@ Vendor/mihomo/.build-mihomo/
 
 # Tooling and logs
 .codegraph/
+.orca/
 .idea/
 .vscode/
 *.log
