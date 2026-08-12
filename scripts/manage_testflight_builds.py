@@ -685,10 +685,10 @@ def assign(api, environment):
         build_id = build.get("id")
         if not build_id:
             raise Failure(f"matching {platform} build has no ID")
-        groups = api.collection(f"/v1/builds/{quote(build_id, safe='')}/betaGroups")
+        group_builds = api.collection(f"/v1/betaGroups/{quote(group_id, safe='')}/builds")
         associated = any(
-            group.get("type") == "betaGroups" and group.get("id") == group_id
-            for group in groups
+            group_build.get("type") == "builds" and group_build.get("id") == build_id
+            for group_build in group_builds
         )
         if associated:
             print(f"{platform} build {build_id} is already assigned to the internal TestFlight group")
