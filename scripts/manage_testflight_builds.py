@@ -484,7 +484,7 @@ def next_build_numbers(api, environment):
         },
     )
     included_index = pre_release_index(included)
-    maximums = {}
+    maximum = None
 
     for index, build in enumerate(builds, start=1):
         if not isinstance(build, dict):
@@ -500,27 +500,20 @@ def next_build_numbers(api, environment):
 
         padded = tuple(components + [0] * (3 - len(components)))
         candidate_key = (padded, len(components))
-        current = maximums.get(platform)
-        if current is None or candidate_key > current[0]:
-            maximums[platform] = (candidate_key, components)
+        if maximum is None or candidate_key > maximum[0]:
+            maximum = (candidate_key, components)
 
-    build_numbers = {}
-    for platform in PLATFORMS:
-        current = maximums.get(platform)
-        if current is None:
-            build_numbers[platform] = "1"
-            continue
-        build_numbers[platform] = increment_cf_bundle_version(
-            current[1],
-            f"{platform} build number",
-        )
+    if maximum is None:
+        build_number = "1"
+    else:
+        build_number = increment_cf_bundle_version(maximum[1], "shared platform build number")
 
     output_path = os.environ.get("GITHUB_OUTPUT")
     if not output_path:
         raise Failure("GITHUB_OUTPUT is required in next-build-numbers mode")
     with open(output_path, "a", encoding="utf-8") as output_file:
-        output_file.write(f"ios_build_number={build_numbers['IOS']}\n")
-        output_file.write(f"macos_build_number={build_numbers['MAC_OS']}\n")
+        output_file.write(f"ios_build_number={build_number}\n")
+        output_file.write(f"macos_build_number={build_number}\n")
 
 
 def resolve_internal_group(api, group_id, app_id):
