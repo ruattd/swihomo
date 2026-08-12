@@ -24,7 +24,7 @@ on:
       - '!PATENTS.*'
 
 # Required vars: SIGNING_API_ISSUER_ID, SIGNING_API_KEY_ID, ASC_UPLOAD_API_ISSUER_ID,
-# ASC_UPLOAD_API_KEY_ID, APPSTORE_USES_NON_EXEMPT_ENCRYPTION. Required secrets:
+# ASC_UPLOAD_API_KEY_ID. Required secrets:
 # APPSTORE_CERTIFICATES_FILE_BASE64, APPSTORE_CERTIFICATES_PASSWORD, SIGNING_API_PRIVATE_KEY,
 # ASC_UPLOAD_API_PRIVATE_KEY, TESTFLIGHT_INTERNAL_GROUP_ID (intentionally a repository secret).
 # Protect the code-signing and app-store-connect environments.
@@ -773,20 +773,6 @@ jobs:
           }
           printf 'key-path=%s\n' "$key_path" >> "$GITHUB_OUTPUT"
 
-      - name: Validate App Store Connect settings
-        shell: bash
-        env:
-          APPSTORE_USES_NON_EXEMPT_ENCRYPTION: ${{ vars.APPSTORE_USES_NON_EXEMPT_ENCRYPTION }}
-        run: |
-          set -euo pipefail
-          case "$APPSTORE_USES_NON_EXEMPT_ENCRYPTION" in
-            true|false) ;;
-            *)
-              printf '%s\n' 'APPSTORE_USES_NON_EXEMPT_ENCRYPTION must be exactly true or false.' >&2
-              exit 1
-              ;;
-          esac
-
       - name: Preflight TestFlight builds
         id: preflight
         shell: bash
@@ -810,7 +796,6 @@ jobs:
           app-type: ios
           backend: appstore-api
           wait-for-processing: 'true'
-          uses-non-exempt-encryption: '${{ vars.APPSTORE_USES_NON_EXEMPT_ENCRYPTION }}'
           issuer-id: ${{ vars.ASC_UPLOAD_API_ISSUER_ID }}
           api-key-id: ${{ vars.ASC_UPLOAD_API_KEY_ID }}
           api-private-key: ${{ secrets.ASC_UPLOAD_API_PRIVATE_KEY }}
@@ -823,7 +808,6 @@ jobs:
           app-type: macos
           backend: altool
           wait-for-processing: 'true'
-          uses-non-exempt-encryption: '${{ vars.APPSTORE_USES_NON_EXEMPT_ENCRYPTION }}'
           issuer-id: ${{ vars.ASC_UPLOAD_API_ISSUER_ID }}
           api-key-id: ${{ vars.ASC_UPLOAD_API_KEY_ID }}
           api-private-key: ${{ secrets.ASC_UPLOAD_API_PRIVATE_KEY }}
