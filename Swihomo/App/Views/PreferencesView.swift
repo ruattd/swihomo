@@ -11,6 +11,7 @@ struct PreferencesView: View {
     @AppStorage("appLogLevel") private var appLogLevel = LogLevel.info.rawValue
     @AppStorage("appLanguage") private var selectedLanguage = AppLanguage.system.rawValue
     @AppStorage("packetTunnelBypassesPrivateNetworks") private var packetTunnelBypassesPrivateNetworks = false
+    @AppStorage("packetTunnelBypassAPNs") private var packetTunnelBypassAPNs = false
     @AppStorage("packetTunnelExcludeCellularServices") private var packetTunnelExcludeCellularServices = true
     @AppStorage("packetTunnelIncludeAllNetworks") private var packetTunnelIncludeAllNetworks = false
     @AppStorage("packetTunnelBypassCIDRs") private var packetTunnelBypassCIDRs = ""
@@ -205,6 +206,14 @@ struct PreferencesView: View {
                 .disabled(!packetTunnelIncludeAllNetworks)
 
             Text("preferences.packetTunnel.bypassLocalNetworks.description")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .disabled(!packetTunnelIncludeAllNetworks)
+
+            Toggle("preferences.packetTunnel.bypassAPNs", isOn: $packetTunnelBypassAPNs)
+                .disabled(!packetTunnelIncludeAllNetworks)
+
+            Text("preferences.packetTunnel.bypassAPNs.description")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .disabled(!packetTunnelIncludeAllNetworks)
