@@ -1,0 +1,200 @@
+name: Build Check
+
+on:
+  push:
+    branches: ['dev']
+    paths: &build_paths
+      - '**'
+      - '!**.md'
+      - '!**/*.md'
+      - '!**/.gitignore'
+      - '!.gitignore'
+      - '!.github/**'
+      - '.github/workflows/build-check.yml'
+      - '!docs/**'
+      - '!LICENSE'
+      - '!LICENSE.*'
+      - '!LICENCE'
+      - '!LICENCE.*'
+      - '!COPYING'
+      - '!COPYING.*'
+      - '!NOTICE'
+      - '!NOTICE.*'
+      - '!PATENTS'
+      - '!PATENTS.*'
+  pull_request:
+    branches: ['dev']
+    paths: *build_paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-check-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build unsigned iOS and macOS apps
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Record Xcode version
+        id: xcode_version
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcode_version="$(xcodebuild -version | tr -cs '[:alnum:]._-' '-')"
+          [[ -n "$xcode_version" ]] || {
+            printf '%s\n' 'xcodebuild -version returned an empty value.' >&2
+            exit 1
+          }
+          printf 'version=%s\n' "$xcode_version" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Swift package cache
+        id: swift_package_cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: &swift_package_cache_key swift-packages-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode_version.outputs.version }}-${{ hashFiles('Swihomo.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          path: &swift_package_cache_path ${{ runner.temp }}/Swihomo-SourcePackages
+
+      - name: Prepare mihomo submodule
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/prepare-mihomo-core.sh --submodule-only
+
+      - name: Calculate MihomoCore cache key
+        id: mihomo_cache_key
+        shell: bash
+        run: |
+          set -euo pipefail
+          commit="$(git -C Vendor/mihomo rev-parse HEAD)"
+          [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || {
+            printf 'MihomoCore cache key requires a lowercase 40-character submodule SHA, found: %s\n' "$commit" >&2
+            exit 1
+          }
+          printf 'key=mihomo-core-v3-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode_version.outputs.version }}-%s\n' "$commit" >> "$GITHUB_OUTPUT"
+
+      - name: Restore MihomoCore cache
+        id: mihomo_core_cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ steps.mihomo_cache_key.outputs.key }}
+          path: |
+            Vendor/MihomoCore.xcframework
+            Swihomo/Shared/MihomoCoreVersion.swift
+
+      - name: Build MihomoCore
+        if: steps.mihomo_core_cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/prepare-mihomo-core.sh
+
+      - name: Verify MihomoCore cache output
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -f Vendor/MihomoCore.xcframework/Info.plist ]] || {
+            printf '%s\n' 'MihomoCore cache/build output is missing Vendor/MihomoCore.xcframework/Info.plist.' >&2
+            exit 1
+          }
+          [[ -f Swihomo/Shared/MihomoCoreVersion.swift ]] || {
+            printf '%s\n' 'MihomoCore cache/build output is missing Swihomo/Shared/MihomoCoreVersion.swift.' >&2
+            exit 1
+          }
+
+      - name: Save MihomoCore cache
+        if: steps.mihomo_core_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ steps.mihomo_cache_key.outputs.key }}
+          path: |
+            Vendor/MihomoCore.xcframework
+            Swihomo/Shared/MihomoCoreVersion.swift
+
+      - name: Build and package iOS app
+        shell: bash
+        run: |
+          set -euo pipefail
+          ios_derived_data="$RUNNER_TEMP/Swihomo-iOS-DerivedData"
+          rm -rf "$ios_derived_data" dist
+          mkdir -p dist
+
+          xcodebuild build \
+            -project Swihomo.xcodeproj \
+            -scheme Swihomo \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$ios_derived_data" \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/Swihomo-SourcePackages" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=''
+
+          ios_apps=()
+          while IFS= read -r app; do
+            [[ -n "$app" ]] && ios_apps+=("$app")
+          done < <(find "$ios_derived_data/Build/Products" -type d -name 'Swihomo.app' -prune -print)
+          [[ "${#ios_apps[@]}" -eq 1 ]] || {
+            printf 'Expected exactly one iOS Swihomo.app, found %s.\n' "${#ios_apps[@]}" >&2
+            exit 1
+          }
+
+          ditto -c -k --sequesterRsrc --keepParent "${ios_apps[0]}" dist/Swihomo-iOS-unsigned.zip
+
+      - name: Build and package macOS app
+        shell: bash
+        run: |
+          set -euo pipefail
+          macos_derived_data="$RUNNER_TEMP/Swihomo-macOS-DerivedData"
+          rm -rf "$macos_derived_data" dist/Swihomo-macOS-unsigned.zip
+
+          xcodebuild build \
+            -project Swihomo.xcodeproj \
+            -scheme Swihomo \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath "$macos_derived_data" \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/Swihomo-SourcePackages" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=''
+
+          macos_apps=()
+          while IFS= read -r app; do
+            [[ -n "$app" ]] && macos_apps+=("$app")
+          done < <(find "$macos_derived_data/Build/Products" -type d -name 'Swihomo.app' -prune -print)
+          [[ "${#macos_apps[@]}" -eq 1 ]] || {
+            printf 'Expected exactly one macOS Swihomo.app, found %s.\n' "${#macos_apps[@]}" >&2
+            exit 1
+          }
+
+          ditto -c -k --sequesterRsrc --keepParent "${macos_apps[0]}" dist/Swihomo-macOS-unsigned.zip
+
+      - name: Save Swift package cache
+        if: steps.swift_package_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: *swift_package_cache_key
+          path: *swift_package_cache_path
+
+      - name: Upload unsigned app bundles
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: unsigned-app-bundles
+          path: |
+            dist/Swihomo-iOS-unsigned.zip
+            dist/Swihomo-macOS-unsigned.zip
+          if-no-files-found: error
+          retention-days: 7
