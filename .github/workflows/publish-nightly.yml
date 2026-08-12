@@ -483,11 +483,43 @@ jobs:
           python3 - "$ios_options" "$macos_options" <<'PY'
           import os
           import plistlib
+          import re
+          import subprocess
           import sys
 
           ios_options, macos_options = sys.argv[1:]
 
-          def write_plist(path, app_profile, packet_tunnel_profile):
+          INSTALLER_IDENTITY_PATTERN = re.compile(
+              r'^\s*\d+\)\s+([0-9A-Fa-f]{40})\s+"((?:Mac Installer Distribution|3rd Party Mac Developer Installer): .+ \(7P8CLHDH5G\))"$'
+          )
+
+          def macos_installer_identity():
+              try:
+                  result = subprocess.run(
+                      ["/usr/bin/security", "find-identity", "-v", "-p", "basic", os.environ["SIGNING_KEYCHAIN"]],
+                      check=True,
+                      stdout=subprocess.PIPE,
+                      stderr=subprocess.PIPE,
+                      text=True,
+                  )
+              except (KeyError, OSError, subprocess.CalledProcessError) as error:
+                  raise SystemExit(f"Could not enumerate macOS installer signing identities: {error}")
+
+              identities = [
+                  (match.group(1).upper(), match.group(2))
+                  for line in result.stdout.splitlines()
+                  for match in [INSTALLER_IDENTITY_PATTERN.match(line)]
+                  if match
+              ]
+              if len(identities) != 1:
+                  names = ", ".join(name for _, name in identities) or "none"
+                  raise SystemExit(
+                      "Expected exactly one Mac Installer Distribution or legacy 3rd Party Mac Developer Installer "
+                      f"identity for team 7P8CLHDH5G, found {len(identities)}: {names}"
+                  )
+              return identities[0][0]
+
+          def write_plist(path, app_profile, packet_tunnel_profile, installer_signing_certificate=None):
               document = {
                   "method": "app-store",
                   "signingStyle": "manual",
@@ -504,6 +536,8 @@ jobs:
                       },
                   }
               )
+              if installer_signing_certificate is not None:
+                  document["installerSigningCertificate"] = installer_signing_certificate
               with open(path, "wb") as plist_file:
                   plistlib.dump(document, plist_file, fmt=plistlib.FMT_XML, sort_keys=False)
 
@@ -516,6 +550,7 @@ jobs:
               macos_options,
               os.environ["SWIHOMO_MACOS_APP_PROFILE"],
               os.environ["SWIHOMO_MACOS_PACKET_TUNNEL_PROFILE"],
+              macos_installer_identity(),
           )
           PY
 
