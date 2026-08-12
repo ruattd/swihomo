@@ -115,6 +115,8 @@
 "preferences.packetTunnel.customDNS.description" = "每行输入一个 IPv4 或 IPv6 解析器地址, 自定义服务器独立于覆盖设置中的 DNS 设置";
 "preferences.packetTunnel.bypassLocalNetworks" = "绕过本地网络";
 "preferences.packetTunnel.bypassLocalNetworks.description" = "排除发往局域网主机的流量, 例如 AirPlay、AirDrop 和 CarPlay。具体哪些流量属于局域网流量由系统决定，不一定符合 RFC1918 规范。";
+"preferences.packetTunnel.bypassAPNs" = "绕过 APNs";
+"preferences.packetTunnel.bypassAPNs.description" = "将 Apple 推送通知服务 (APNs) 流量排除在隧道之外。";
 "preferences.packetTunnel.bypassIPRanges" = "绕过 IP 范围";
 "preferences.packetTunnel.bypassIPRanges.description" = "每行输入一个 IPv4 或 IPv6 CIDR, 例如 192.168.1.0/24 或 2001:db8::/32";
 "preferences.packetTunnel.edit" = "编辑...";

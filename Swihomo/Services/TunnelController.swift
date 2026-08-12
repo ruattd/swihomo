@@ -50,6 +50,7 @@ final class TunnelController {
         tunnelProtocol.includeAllNetworks = includeAllNetworks
         tunnelProtocol.excludeCellularServices = includeAllNetworks && packetTunnelExcludeCellularServices
         tunnelProtocol.excludeLocalNetworks = includeAllNetworks && bypassesPrivateNetworks
+        tunnelProtocol.excludeAPNs = includeAllNetworks && bypassesAPNs
         tunnelProtocol.providerConfiguration = [
             "profileID": profileID.uuidString,
             "profileYAML": configuration.profileYAML,
@@ -83,6 +84,10 @@ final class TunnelController {
 
     private var bypassesPrivateNetworks: Bool {
         UserDefaults.standard.object(forKey: "packetTunnelBypassesPrivateNetworks") as? Bool ?? false
+    }
+
+    private var bypassesAPNs: Bool {
+        UserDefaults.standard.object(forKey: "packetTunnelBypassAPNs") as? Bool ?? false
     }
 
     private var bypassedCIDRs: [String] {

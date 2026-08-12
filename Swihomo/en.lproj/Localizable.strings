@@ -115,6 +115,8 @@
 "preferences.packetTunnel.customDNS.description" = "Enter one IPv4 or IPv6 resolver address per line. Custom servers apply independently of the DNS setting in Overrides.";
 "preferences.packetTunnel.bypassLocalNetworks" = "Bypass local networks";
 "preferences.packetTunnel.bypassLocalNetworks.description" = "Exclude traffic to local network hosts, such as AirPlay, AirDrop, and CarPlay. The system determines which traffic qualifies as local network traffic, which may not follow RFC1918 rules.";
+"preferences.packetTunnel.bypassAPNs" = "Bypass APNs";
+"preferences.packetTunnel.bypassAPNs.description" = "Exclude Apple Push Notification service (APNs) traffic from the tunnel.";
 "preferences.packetTunnel.bypassIPRanges" = "Bypass IP Ranges";
 "preferences.packetTunnel.bypassIPRanges.description" = "Enter one IPv4 or IPv6 CIDR per line, for example 192.168.1.0/24 or 2001:db8::/32.";
 "preferences.packetTunnel.edit" = "Edit...";
