@@ -50,7 +50,7 @@ jobs:
       macos_build_number: ${{ steps.allocate.outputs.macos_build_number }}
     steps:
       - name: Checkout source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           submodules: false
@@ -98,7 +98,7 @@ jobs:
       actions: write
     steps:
       - name: Delete signed packages
-        uses: geekyeggo/delete-artifact@2b29beac362fd85f267740d1cf3dd53861de3568 # v6.0.0
+        uses: geekyeggo/delete-artifact@176a747ab7e287e3ff4787bf8a148716375ca118 # v6.0.0
         with:
           name: signed-packages
           useGlob: false
@@ -118,7 +118,7 @@ jobs:
       macos-build-number: ${{ needs.allocate-build-number.outputs.macos_build_number }}
     steps:
       - name: Checkout source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           submodules: recursive
@@ -135,6 +135,13 @@ jobs:
             exit 1
           }
           printf 'version=%s\n' "$xcode_version" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Swift package cache
+        id: swift_package_cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: &swift_package_cache_key swift-packages-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode_version.outputs.version }}-${{ hashFiles('Swihomo.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          path: &swift_package_cache_path ${{ runner.temp }}/Swihomo-SourcePackages
 
       - name: Prepare mihomo submodule
         shell: bash
@@ -154,7 +161,7 @@ jobs:
 
       - name: Restore MihomoCore cache
         id: mihomo_core_cache
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ steps.mihomo_cache_key.outputs.key }}
           path: |
@@ -182,7 +189,7 @@ jobs:
 
       - name: Save MihomoCore cache
         if: steps.mihomo_core_cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ steps.mihomo_cache_key.outputs.key }}
           path: |
@@ -190,7 +197,7 @@ jobs:
             Swihomo/Shared/MihomoCoreVersion.swift
 
       - name: Import signing certificates
-        uses: Apple-Actions/import-codesign-certs@5142e029c445c10ffc7149d172e540235a065466 # v7
+        uses: Apple-Actions/import-codesign-certs@5142e029c445c10ffc7149d172e540235a065466 # v7.0.0
         with:
           p12-file-base64: ${{ secrets.APPSTORE_CERTIFICATES_FILE_BASE64 }}
           p12-password: ${{ secrets.APPSTORE_CERTIFICATES_PASSWORD }}
@@ -199,7 +206,7 @@ jobs:
 
       - name: Install iOS app provisioning profile
         id: ios_app_profile
-        uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594 # v6
+        uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594 # v6.1.0
         with:
           bundle-id: com.swihomo.client
           profile-type: IOS_APP_STORE
@@ -209,7 +216,7 @@ jobs:
 
       - name: Install iOS PacketTunnel provisioning profile
         id: ios_packet_tunnel_profile
-        uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594 # v6
+        uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594 # v6.1.0
         with:
           bundle-id: com.swihomo.client.PacketTunnel
           profile-type: IOS_APP_STORE
@@ -219,7 +226,7 @@ jobs:
 
       - name: Install macOS app provisioning profile
         id: macos_app_profile
-        uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594 # v6
+        uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594 # v6.1.0
         with:
           bundle-id: com.swihomo.client
           profile-type: MAC_APP_STORE
@@ -229,7 +236,7 @@ jobs:
 
       - name: Install macOS PacketTunnel provisioning profile
         id: macos_packet_tunnel_profile
-        uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594 # v6
+        uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594 # v6.1.0
         with:
           bundle-id: com.swihomo.client.PacketTunnel
           profile-type: MAC_APP_STORE
@@ -560,6 +567,7 @@ jobs:
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath "$ios_archive" \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/Swihomo-SourcePackages" \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Apple Distribution" \
             OTHER_CODE_SIGN_FLAGS="--keychain $SIGNING_KEYCHAIN" \
@@ -580,6 +588,7 @@ jobs:
             -configuration Release \
             -destination 'generic/platform=macOS' \
             -archivePath "$macos_archive" \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/Swihomo-SourcePackages" \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Apple Distribution" \
             OTHER_CODE_SIGN_FLAGS="--keychain $SIGNING_KEYCHAIN" \
@@ -613,6 +622,13 @@ jobs:
             exit 1
           }
           cp "${macos_packages[0]}" dist/Swihomo-macOS.pkg
+
+      - name: Save Swift package cache
+        if: steps.swift_package_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: *swift_package_cache_key
+          path: *swift_package_cache_path
 
       - name: Validate signatures and release metadata
         shell: bash
@@ -725,7 +741,7 @@ jobs:
             "$MARKETING_VERSION" "$IOS_BUILD_NUMBER" "$MACOS_BUILD_NUMBER" > dist/release-metadata.json
 
       - name: Upload signed packages
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: signed-packages
           path: |
@@ -745,14 +761,14 @@ jobs:
       contents: read
     steps:
       - name: Checkout source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           submodules: false
           fetch-depth: 1
 
       - name: Download signed packages
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: signed-packages
           path: dist
@@ -790,7 +806,7 @@ jobs:
 
       - name: Upload iOS IPA to TestFlight
         if: steps.preflight.outputs.ios_upload == 'true'
-        uses: Apple-Actions/upload-testflight-build@1ad58030672057aa084b4e96beb6f7a8c627f9e6 # v5
+        uses: Apple-Actions/upload-testflight-build@5e75ff58276689011512ba87a381d93dc67dbcf8 # v5.3.0
         with:
           app-path: dist/Swihomo-iOS.ipa
           app-type: ios
@@ -802,7 +818,7 @@ jobs:
 
       - name: Upload macOS PKG to TestFlight
         if: steps.preflight.outputs.macos_upload == 'true'
-        uses: Apple-Actions/upload-testflight-build@1ad58030672057aa084b4e96beb6f7a8c627f9e6 # v5
+        uses: Apple-Actions/upload-testflight-build@5e75ff58276689011512ba87a381d93dc67dbcf8 # v5.3.0
         with:
           app-path: dist/Swihomo-macOS.pkg
           app-type: macos

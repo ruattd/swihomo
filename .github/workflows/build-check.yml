@@ -41,7 +41,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           submodules: recursive
@@ -61,7 +61,7 @@ jobs:
 
       - name: Restore Swift package cache
         id: swift_package_cache
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: &swift_package_cache_key swift-packages-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode_version.outputs.version }}-${{ hashFiles('Swihomo.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
           path: &swift_package_cache_path ${{ runner.temp }}/Swihomo-SourcePackages
@@ -86,7 +86,7 @@ jobs:
 
       - name: Restore MihomoCore cache
         id: mihomo_core_cache
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ steps.mihomo_cache_key.outputs.key }}
           path: |
@@ -116,7 +116,7 @@ jobs:
 
       - name: Save MihomoCore cache
         if: steps.mihomo_core_cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ steps.mihomo_cache_key.outputs.key }}
           path: |
@@ -184,13 +184,13 @@ jobs:
 
       - name: Save Swift package cache
         if: steps.swift_package_cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: *swift_package_cache_key
           path: *swift_package_cache_path
 
       - name: Upload unsigned app bundles
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: unsigned-app-bundles
           path: |
