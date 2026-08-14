@@ -4,15 +4,19 @@
     {
       "layers" : [
         {
-          "glass-specializations" : [
+          "blend-mode" : "normal",
+          "fill-specializations" : [
             {
-              "value" : false
+              "value" : "none"
             },
             {
               "appearance" : "tinted",
-              "value" : true
+              "value" : {
+                "solid" : "extended-gray:0.83000,1.00000"
+              }
             }
           ],
+          "glass" : true,
           "image-name" : "AppIcon.png",
           "name" : "AppIcon",
           "position" : {
