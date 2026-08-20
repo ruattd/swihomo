@@ -54,6 +54,8 @@ jobs:
           export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $github_app_basic_auth"
           git submodule sync --recursive
           git submodule update --init --recursive
+          git -C Vendor/mihomo config --local user.name 'swihomo-automation[bot]'
+          git -C Vendor/mihomo config --local user.email '315911239+swihomo-automation[bot]@users.noreply.github.com'
           git -C Vendor/mihomo fetch origin swihomo
           git -C Vendor/mihomo checkout --track -b swihomo origin/swihomo
           scripts/sync-mihomo-core.sh
