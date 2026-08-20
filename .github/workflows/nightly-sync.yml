@@ -52,6 +52,8 @@ jobs:
           export GIT_CONFIG_COUNT=1
           export GIT_CONFIG_KEY_0='http.https://github.com/.extraheader'
           export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $github_app_basic_auth"
+          git config --local user.name 'swihomo-automation[bot]'
+          git config --local user.email '315911239+swihomo-automation[bot]@users.noreply.github.com'
           git submodule sync --recursive
           git submodule update --init --recursive
           git -C Vendor/mihomo config --local user.name 'swihomo-automation[bot]'
@@ -75,6 +77,18 @@ jobs:
           export GIT_CONFIG_KEY_0='http.https://github.com/.extraheader'
           export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $github_app_basic_auth"
           git -C Vendor/mihomo push --force-with-lease origin swihomo
+
+      - name: Commit updated mihomo submodule reference
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- Vendor/mihomo; then
+            printf '%s\n' 'Mihomo submodule reference is already current; no dev push is needed.'
+            exit 0
+          fi
+          git add Vendor/mihomo
+          git commit -m 'chore(core): update mihomo submodule' -- Vendor/mihomo
+          git push origin HEAD:refs/heads/dev
 
       - name: Fetch origin main and dev
         shell: bash
