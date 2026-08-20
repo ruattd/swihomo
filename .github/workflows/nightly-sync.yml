@@ -76,7 +76,7 @@ jobs:
           export GIT_CONFIG_COUNT=1
           export GIT_CONFIG_KEY_0='http.https://github.com/.extraheader'
           export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $github_app_basic_auth"
-          git -C Vendor/mihomo push --force-with-lease origin swihomo
+          git -C Vendor/mihomo push --force-with-lease origin swihomo swihomo-alpha-base
 
       - name: Commit updated mihomo submodule reference
         shell: bash
