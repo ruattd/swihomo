@@ -48,7 +48,6 @@ struct ProxiesView: View {
                 }
             }
             .animation(reduceMotion ? nil : .snappy, value: model.proxyGroups)
-            .animation(reduceMotion ? nil : .smooth, value: model.delays)
             .navigationTitle(Text(LocalizedStringKey("navigation.proxies")))
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
@@ -224,7 +223,6 @@ private struct ProxyGroupSection: View {
                             .labelStyle(.iconOnly)
                     }
                 }
-                .liquidGlassButton()
                 .disabled(isTesting)
                 .accessibilityLabel(Text("accessibility.testAllDelays") + Text(verbatim: " \(group.name)"))
             }
@@ -311,7 +309,6 @@ private struct ProxyNodeCard: View {
                             .labelStyle(.iconOnly)
                     }
                 }
-                .liquidGlassButton()
                 .disabled(isTesting)
                 .controlSize(usesCompactLayout ? .small : .regular)
             }
