@@ -8,6 +8,16 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private let memoryPressureQueue = DispatchQueue(label: "com.swihomo.memory-pressure")
 
     override func startTunnel(options: [String: NSObject]?) async throws {
+        do {
+            try await performStart()
+            CoreLogStore.append(level: .info, message: "Packet Tunnel started.")
+        } catch {
+            CoreLogStore.append(level: .error, message: "startTunnel failed: \(verboseErrorDescription(error))")
+            throw error
+        }
+    }
+
+    private func performStart() async throws {
         guard let configuration = protocolConfiguration as? NETunnelProviderProtocol,
               let rawProfileID = configuration.providerConfiguration?["profileID"] as? String,
               UUID(uuidString: rawProfileID) != nil else {
@@ -18,6 +28,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             throw ClientError.missingProfile
         }
         let dnsEnabled = (configuration.providerConfiguration?["dnsEnabled"] as? NSNumber)?.boolValue ?? true
+        CoreLogStore.append(level: .debug, message: "startTunnel: parsed provider configuration for profile \(rawProfileID).")
         let automaticallyReclaimsMemory = (configuration.providerConfiguration?["automaticallyReclaimsMemory"] as? NSNumber)?.boolValue ?? false
         let bypassedCIDRs = configuration.providerConfiguration?["bypassedCIDRs"] as? [String] ?? []
         let mtu = (configuration.providerConfiguration?["mtu"] as? NSNumber)?.intValue ?? PacketTunnelMTULimits.defaultValue
@@ -26,7 +37,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
         // Download required geodata before the default route reaches the core's packet flow.
         let geoDataRequirements = MihomoGeoDataRequirements(profileYAML: profileYAML)
+        CoreLogStore.append(level: .debug, message: "startTunnel: prewarming geodata (\(geoDataRequirements)).")
         try await MihomoCoreFactory.prewarmGeoData(requiring: geoDataRequirements)
+        CoreLogStore.append(level: .debug, message: "startTunnel: applying network settings (dnsEnabled=\(dnsEnabled), mtu=\(mtu), bypassedCIDRs=\(bypassedCIDRs), customDNSServers=\(customDNSServers), ipv6Enabled=\(ipv6Enabled)).")
         try await setTunnelNetworkSettings(
             networkSettings(
                 dnsEnabled: dnsEnabled,
@@ -39,6 +52,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
         let core = MihomoCoreFactory.make()
         do {
+            CoreLogStore.append(level: .debug, message: "startTunnel: starting Mihomo core.")
             try await core.start(
                 configuration: MihomoRuntimeConfiguration(profileYAML: profileYAML),
                 packetFlow: packetFlow

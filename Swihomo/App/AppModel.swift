@@ -1018,20 +1018,10 @@ final class AppModel: ObservableObject {
     }
 
     private func detailedError(_ error: Error, message: String) -> String {
-        let nsError = error as NSError
         var details = [
             "message=\(message)",
-            "type=\(String(reflecting: type(of: error)))",
-            "domain=\(nsError.domain)",
-            "code=\(nsError.code)"
+            verboseErrorDescription(error)
         ]
-
-        if let reason = nsError.localizedFailureReason, !reason.isEmpty {
-            details.append("reason=\(reason)")
-        }
-        if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
-            details.append("underlying=\(underlying.domain):\(underlying.code) \(underlying.localizedDescription)")
-        }
         if let decodingError = error as? DecodingError {
             details.append(decodingDescription(decodingError))
         }

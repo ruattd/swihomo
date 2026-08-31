@@ -50,6 +50,7 @@
 		100000000000000000000031 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 400000000000000000000010 /* Localizable.strings */; };
 		100000000000000000000027 /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000026 /* Formatting.swift */; };
 		100000000000000000000029 /* SharedText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000029 /* SharedText.swift */; };
+		100000000000000000000053 /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000026 /* Formatting.swift */; };
 		100000000000000000000051 /* QRCodeScannerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000051 /* QRCodeScannerSheet.swift */; };
 		100000000000000000000052 /* ScreenshotDemoFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000052 /* ScreenshotDemoFixtures.swift */; };
 		D000000000000000000000001 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = D000000000000000000000003 /* Yams */; };
@@ -483,6 +484,7 @@
 				100000000000000000000016 /* PacketTunnelProvider.swift in Sources */,
 				100000000000000000000017 /* MihomoCore.swift in Sources */,
 				100000000000000000000022 /* PersistentLogStore.swift in Sources */,
+				100000000000000000000053 /* Formatting.swift in Sources */,
 				100000000000000000000024 /* MihomoCoreVersion.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

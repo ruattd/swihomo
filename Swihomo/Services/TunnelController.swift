@@ -74,6 +74,15 @@ final class TunnelController {
             try manager.connection.startVPNTunnel()
         } catch {
             isStarting = false
+            let startError = error as NSError
+            // startVPNTunnel() usually throws a generic NE error; the failure
+            // recorded by nesessionmanager carries the plugin's real error.
+            if let disconnectError = await lastDisconnectError() {
+                var userInfo = startError.userInfo
+                userInfo[NSLocalizedDescriptionKey] = startError.localizedDescription
+                userInfo[NSUnderlyingErrorKey] = disconnectError
+                throw NSError(domain: startError.domain, code: startError.code, userInfo: userInfo)
+            }
             throw error
         }
     }
