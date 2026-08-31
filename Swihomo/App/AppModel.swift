@@ -10,6 +10,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var proxyGroups: [MihomoProxyGroup] = []
     @Published private(set) var delays: [String: Int] = [:]
     @Published private(set) var testingProxyGroupIDs: Set<String> = []
+    @Published private(set) var testingProxyNodeNames: Set<String> = []
     @Published private(set) var logEntries: [LogEntry] = []
     @Published private(set) var externalResources: [ExternalResource] = []
     @Published private(set) var updatingExternalResourceIDs: Set<String> = []
@@ -104,6 +105,7 @@ final class AppModel: ObservableObject {
                 self?.proxyGroups = []
                 self?.delays = [:]
                 self?.testingProxyGroupIDs = []
+                self?.testingProxyNodeNames = []
                 self?.originalProxyGroupIndices = [:]
                 self?.originalProxyCandidateIndices = [:]
                 self?.externalResources = []
@@ -462,6 +464,8 @@ final class AppModel: ObservableObject {
 
     func testDelay(for node: String) async {
         if screenshotDemoMode { return }
+        guard testingProxyNodeNames.insert(node).inserted else { return }
+        defer { testingProxyNodeNames.remove(node) }
         do {
             if let delay = try await controller.delay(for: node, using: snapshot.overrides) {
                 delays[node] = delay

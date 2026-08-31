@@ -250,7 +250,7 @@ private struct ProxyGroupSection: View {
             }
         }
         .padding(14)
-        .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .liquidGlassCard(cornerRadius: 20)
         .overlay {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(Color.primary.opacity(0.09), lineWidth: 1)
@@ -270,6 +270,10 @@ private struct ProxyNodeCard: View {
 
     private var usesCompactLayout: Bool {
         horizontalSizeClass == .compact
+    }
+
+    private var isTesting: Bool {
+        model.testingProxyNodeNames.contains(node)
     }
 
     var body: some View {
@@ -299,10 +303,16 @@ private struct ProxyNodeCard: View {
                 Button {
                     Task { await model.testDelay(for: node) }
                 } label: {
-                    Label("proxies.testDelay", systemImage: "timer")
-                        .labelStyle(.iconOnly)
+                    if isTesting {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Label("proxies.testDelay", systemImage: "timer")
+                            .labelStyle(.iconOnly)
+                    }
                 }
                 .liquidGlassButton()
+                .disabled(isTesting)
                 .controlSize(usesCompactLayout ? .small : .regular)
             }
 
@@ -314,7 +324,6 @@ private struct ProxyNodeCard: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(isSelected ? Color.green.opacity(0.45) : Color.secondary.opacity(0.14), lineWidth: 1)
         }
-        .liquidGlassCard(cornerRadius: 16)
         .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .onTapGesture {
             guard !isSelected else { return }
