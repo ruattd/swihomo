@@ -305,3 +305,5 @@
 
 "menubar.openApp" = "Open Swihomo";
 "menubar.quitApp" = "Quit Swihomo";
+"preferences.experimental.replaceGeoDatabases" = "Replace Geo databases with rulesets";
+"preferences.experimental.replaceGeoDatabases.description" = "Rewrites GEOIP/GEOSITE rules and DNS geosite policies to mrs rulesets and removes geo database settings, reducing memory usage. dns.fallback-filter.geosite is not migrated. Applies the next time you connect.";

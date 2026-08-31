@@ -344,12 +344,16 @@ final class AppModel: ObservableObject {
         await perform(module: "Tunnel", "Requested Packet Tunnel start for \(profile.name).") { [self] in
             snapshot = try await profiles.activateProfile(profile.id)
             let runtime = try await profiles.runtimeConfiguration(for: profile.id)
-            let profileContents = try ProfileOverrideComposer.profileContents(
+            let (profileContents, rulesetWarnings) = try ProfileOverrideComposer.profileContents(
                 baseContents: runtime.contents,
                 globalOverrides: runtime.profile.customOverridesEnabled ? runtime.overrides.customYAML : "",
                 profileOverrides: runtime.profile.customOverrideYAML,
-                standardOverrides: MihomoConfigurationBuilder.standardOverridesYAML(runtime.overrides)
+                standardOverrides: MihomoConfigurationBuilder.standardOverridesYAML(runtime.overrides),
+                replacingGeoDatabasesWithRulesets: UserDefaults.standard.bool(forKey: "replaceGeoDatabasesWithRulesets")
             )
+            for warning in rulesetWarnings {
+                record(.warning, module: "Configuration", warning)
+            }
             let configuration = try MihomoConfigurationBuilder.makeRuntimeConfiguration(
                 profileContents: profileContents
             )
@@ -1079,13 +1083,18 @@ private enum ProfileOverrideComposer {
         baseContents: String,
         globalOverrides: String,
         profileOverrides: String,
-        standardOverrides: String
-    ) throws -> String {
+        standardOverrides: String,
+        replacingGeoDatabasesWithRulesets: Bool = false
+    ) throws -> (contents: String, warnings: [String]) {
         var profile = try mapping(from: baseContents, description: "profile configuration")
         try merge(contents: globalOverrides, into: &profile, description: "global custom overrides")
         try merge(contents: profileOverrides, into: &profile, description: "profile custom overrides")
         try merge(contents: standardOverrides, into: &profile, description: "standard overrides")
-        return try dump(object: profile)
+        var warnings: [String] = []
+        if replacingGeoDatabasesWithRulesets {
+            warnings = GeoDatabaseRulesetReplacer.apply(to: &profile)
+        }
+        return (try dump(object: profile), warnings)
     }
 
     private static func merge(contents: String, into base: inout [String: Any], description: String) throws {
@@ -1143,6 +1152,177 @@ private enum ProfileOverrideComposer {
     private static func unescapedKey(_ key: String) -> String {
         guard key.count > 2, key.hasPrefix("<"), key.hasSuffix(">") else { return key }
         return String(key.dropFirst().dropLast())
+    }
+}
+
+/// Rewrites geo database usage in a merged profile to MetaCubeX mrs rulesets so the
+/// core never loads GeoIP/GeoSite databases. Verified against the vendored alpha core:
+/// RULE-SET accepts src/no-resolve params, nameserver-policy accepts rule-set: keys,
+/// and fallback-filter.geosite has no ruleset equivalent (deprecated upstream).
+private enum GeoDatabaseRulesetReplacer {
+    private static let rulesetBaseURL = "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo"
+    private static let geoDatabaseKeys: Set<String> = [
+        "geodata-mode",
+        "geodata-loader",
+        "geo-auto-update",
+        "geo-update-interval",
+        "geox-url",
+        "geosite-matcher"
+    ]
+
+    static func apply(to profile: inout [String: Any]) -> [String] {
+        for key in geoDatabaseKeys {
+            profile.removeValue(forKey: key)
+        }
+
+        var providers: [String: String] = [:]
+        if let rules = profile["rules"] as? [Any] {
+            profile["rules"] = rewrite(rules: rules, providers: &providers)
+        }
+        if let subRules = profile["sub-rules"] as? [String: Any] {
+            var rewrittenSubRules = subRules
+            for (name, value) in subRules {
+                if let rules = value as? [Any] {
+                    rewrittenSubRules[name] = rewrite(rules: rules, providers: &providers)
+                }
+            }
+            profile["sub-rules"] = rewrittenSubRules
+        }
+
+        var warnings = rewriteDNSPolicies(in: &profile, providers: &providers)
+        injectProviders(providers, into: &profile)
+        if !providers.isEmpty {
+            warnings.insert("Replaced \(providers.count) geo database \(providers.count == 1 ? "reference" : "references") with rulesets.", at: 0)
+        }
+        return warnings
+    }
+
+    private static func rewrite(rules: [Any], providers: inout [String: String]) -> [Any] {
+        rules.map { rule in
+            guard let line = rule as? String else { return rule }
+            return rewriteRuleLine(line, providers: &providers)
+        }
+    }
+
+    private static func rewriteRuleLine(_ line: String, providers: inout [String: String]) -> String {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard let firstComma = trimmed.firstIndex(of: ",") else { return line }
+        let type = trimmed[..<firstComma].trimmingCharacters(in: .whitespaces).uppercased()
+
+        if ["AND", "OR", "NOT"].contains(type) {
+            let segments = splitTopLevel(String(trimmed[trimmed.index(after: firstComma)...]))
+            guard var group = segments.first, group.hasPrefix("("), group.hasSuffix(")") else { return line }
+            group = String(group.dropFirst().dropLast())
+            let members = splitTopLevel(group).map { member -> String in
+                var rule = member.trimmingCharacters(in: .whitespaces)
+                if rule.hasPrefix("(") && rule.hasSuffix(")") {
+                    rule = String(rule.dropFirst().dropLast())
+                }
+                return "(\(rewriteRuleLine(rule, providers: &providers)))"
+            }
+            let target = segments.count > 1 ? "," + segments[1...].joined(separator: ",") : ""
+            return "\(type),(\(members.joined(separator: ",")))\(target)"
+        }
+
+        let parts = trimmed
+            .split(separator: ",", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        guard parts.count >= 2 else { return line }
+        switch type {
+        case "GEOSITE":
+            let name = registerProvider(category: parts[1], kind: "geosite", behavior: "domain", providers: &providers)
+            return (["RULE-SET", name] + parts[2...]).joined(separator: ",")
+        case "GEOIP":
+            let name = registerProvider(category: parts[1], kind: "geoip", behavior: "ipcidr", providers: &providers)
+            return (["RULE-SET", name] + parts[2...]).joined(separator: ",")
+        case "SRC-GEOIP":
+            let name = registerProvider(category: parts[1], kind: "geoip", behavior: "ipcidr", providers: &providers)
+            return (["RULE-SET", name] + parts[2...] + ["src"]).joined(separator: ",")
+        default:
+            return line
+        }
+    }
+
+    private static func splitTopLevel(_ text: String) -> [String] {
+        var segments: [String] = []
+        var current = ""
+        var depth = 0
+        for character in text {
+            if character == "(" { depth += 1 } else if character == ")" { depth -= 1 }
+            if character == ",", depth == 0 {
+                segments.append(current)
+                current = ""
+            } else {
+                current.append(character)
+            }
+        }
+        segments.append(current)
+        return segments.map { $0.trimmingCharacters(in: .whitespaces) }
+    }
+
+    private static func rewriteDNSPolicies(
+        in profile: inout [String: Any],
+        providers: inout [String: String]
+    ) -> [String] {
+        guard let dns = profile["dns"] as? [String: Any] else { return [] }
+        var rewrittenDNS = dns
+        for policyKey in ["nameserver-policy", "proxy-server-nameserver-policy"] {
+            guard let policy = dns[policyKey] as? [String: Any] else { continue }
+            var rewrittenPolicy: [String: Any] = [:]
+            for (domain, servers) in policy {
+                rewrittenPolicy[rewritePolicyKey(domain, providers: &providers)] = servers
+            }
+            rewrittenDNS[policyKey] = rewrittenPolicy
+        }
+        profile["dns"] = rewrittenDNS
+
+        guard let fallbackFilter = dns["fallback-filter"] as? [String: Any],
+              let geosite = fallbackFilter["geosite"] as? [Any],
+              !geosite.isEmpty else {
+            return []
+        }
+        return [
+            "dns.fallback-filter.geosite cannot use rulesets and still loads the GeoSite database; migrate it to nameserver-policy rule-set entries."
+        ]
+    }
+
+    private static func rewritePolicyKey(_ key: String, providers: inout [String: String]) -> String {
+        guard let colonIndex = key.firstIndex(of: ":"),
+              key[..<colonIndex].lowercased() == "geosite" else {
+            return key
+        }
+        let names = key[key.index(after: colonIndex)...]
+            .split(separator: ",")
+            .map { registerProvider(category: String($0), kind: "geosite", behavior: "domain", providers: &providers) }
+        return "rule-set:" + names.joined(separator: ",")
+    }
+
+    private static func registerProvider(
+        category: String,
+        kind: String,
+        behavior: String,
+        providers: inout [String: String]
+    ) -> String {
+        let name = "swihomo-\(kind)-\(category.trimmingCharacters(in: .whitespaces).lowercased())"
+        providers[name] = behavior
+        return name
+    }
+
+    private static func injectProviders(_ providers: [String: String], into profile: inout [String: Any]) {
+        guard !providers.isEmpty else { return }
+        var ruleProviders = profile["rule-providers"] as? [String: Any] ?? [:]
+        for (name, behavior) in providers where ruleProviders[name] == nil {
+            let kind = name.hasPrefix("swihomo-geoip-") ? "geoip" : "geosite"
+            let code = String(name.dropFirst("swihomo-\(kind)-".count))
+            ruleProviders[name] = [
+                "type": "http",
+                "behavior": behavior,
+                "format": "mrs",
+                "url": "\(rulesetBaseURL)/\(kind)/\(code).mrs",
+                "interval": 86400
+            ]
+        }
+        profile["rule-providers"] = ruleProviders
     }
 }
 

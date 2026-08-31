@@ -305,3 +305,5 @@
 
 "menubar.openApp" = "打开 Swihomo";
 "menubar.quitApp" = "退出 Swihomo";
+"preferences.experimental.replaceGeoDatabases" = "用规则集替代 Geo 数据库";
+"preferences.experimental.replaceGeoDatabases.description" = "将 GEOIP/GEOSITE 规则与 DNS 中的 geosite 策略改写为 mrs 规则集, 并移除 Geo 数据库设置以减少内存占用, 不会迁移 dns.fallback-filter.geosite, 下次连接时生效";

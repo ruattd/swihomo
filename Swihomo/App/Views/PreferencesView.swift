@@ -6,6 +6,7 @@ struct PreferencesView: View {
     @AppStorage("appTheme") private var selectedTheme = AppTheme.system.rawValue
     @State private var systemThemeResetID = UUID()
     @AppStorage("automaticallyReclaimsMemory") private var automaticallyReclaimsMemory = false
+    @AppStorage("replaceGeoDatabasesWithRulesets") private var replaceGeoDatabasesWithRulesets = false
     @AppStorage("showsMenuBar") private var showsMenuBar = true
     @AppStorage("menuBarDisplay") private var menuBarDisplay = "iconAndSpeed"
     @AppStorage("appLogLevel") private var appLogLevel = LogLevel.info.rawValue
@@ -82,6 +83,12 @@ struct PreferencesView: View {
             Toggle("preferences.experimental.autoReclaimMemory", isOn: $automaticallyReclaimsMemory)
 
             Text("preferences.experimental.autoReclaimMemory.description")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Toggle("preferences.experimental.replaceGeoDatabases", isOn: $replaceGeoDatabasesWithRulesets)
+
+            Text("preferences.experimental.replaceGeoDatabases.description")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
