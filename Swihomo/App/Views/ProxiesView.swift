@@ -300,6 +300,10 @@ private struct ProxyNodeCard: View {
                             Text("\(delay) ms")
                                 .font(.caption.monospacedDigit().weight(.semibold))
                                 .foregroundStyle(delay < 300 ? .green : .orange)
+                        } else if let failure = model.failedDelayTests[node] {
+                            Text(failure == .timeout ? "proxies.testTimeout" : "proxies.testFailed")
+                                .font(.caption)
+                                .foregroundStyle(.red)
                         } else {
                             Text(LocalizedStringKey(usesCompactLayout ? "proxies.noResult" : "proxies.noDelayResult"))
                                 .font(.caption)

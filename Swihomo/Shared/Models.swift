@@ -408,6 +408,11 @@ struct MihomoDelayResponse: Decodable {
     let delay: Int?
 }
 
+enum DelayTestFailure {
+    case error
+    case timeout
+}
+
 struct MihomoConnectionResponse: Decodable {
     let connections: [MihomoConnection]
 }
@@ -698,6 +703,11 @@ struct MihomoProvider: Decodable {
     let updatedAt: String?
     let subscriptionInfo: MihomoSubscriptionInfo?
     let ruleCount: Int?
+    let proxies: [MihomoProviderProxy]?
+}
+
+struct MihomoProviderProxy: Decodable {
+    let name: String
 }
 
 struct MihomoSubscriptionInfo: Codable, Hashable {

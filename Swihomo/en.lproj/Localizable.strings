@@ -232,6 +232,8 @@
 "proxies.testGroupDelay" = "Test group delay";
 "proxies.testDelay" = "Test delay";
 "proxies.noResult" = "No result";
+"proxies.testFailed" = "Error";
+"proxies.testTimeout" = "Timeout";
 "proxies.noDelayResult" = "No delay result";
 "proxies.sort.original" = "Original";
 "proxies.sort.name" = "Name";

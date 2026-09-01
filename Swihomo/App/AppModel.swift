@@ -11,6 +11,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var delays: [String: Int] = [:]
     @Published private(set) var testingProxyGroupIDs: Set<String> = []
     @Published private(set) var testingProxyNodeNames: Set<String> = []
+    @Published private(set) var failedDelayTests: [String: DelayTestFailure] = [:]
     @Published private(set) var logEntries: [LogEntry] = []
     @Published private(set) var externalResources: [ExternalResource] = []
     @Published private(set) var updatingExternalResourceIDs: Set<String> = []
@@ -87,6 +88,9 @@ final class AppModel: ObservableObject {
                     if self?.isConnectionMonitoringEnabled == true {
                         self?.startConnectionPolling()
                     }
+                    if self?.hasPendingCoreLogClear == true {
+                        await self?.flushPendingCoreLogClear()
+                    }
                     await self?.reloadProxyGroupOrder(showErrors: false)
                     await self?.reloadProxyGroups(showErrors: false)
                     await self?.reloadCoreLogs(showErrors: false)
@@ -104,6 +108,7 @@ final class AppModel: ObservableObject {
                 self?.connectionRefreshGeneration += 1
                 self?.proxyGroups = []
                 self?.delays = [:]
+                self?.failedDelayTests = [:]
                 self?.testingProxyGroupIDs = []
                 self?.testingProxyNodeNames = []
                 self?.originalProxyGroupIndices = [:]
@@ -438,6 +443,7 @@ final class AppModel: ObservableObject {
             proxyGroups = groups
             let candidates = Set(groups.flatMap(\.candidates))
             delays = delays.filter { candidates.contains($0.key) }
+            failedDelayTests = failedDelayTests.filter { candidates.contains($0.key) }
             if showErrors {
                 record(.info, module: "Proxies", "Loaded \(groups.count) proxy groups.")
             }
@@ -470,11 +476,21 @@ final class AppModel: ObservableObject {
         if screenshotDemoMode { return }
         guard testingProxyNodeNames.insert(node).inserted else { return }
         defer { testingProxyNodeNames.remove(node) }
+        failedDelayTests[node] = nil
         do {
+            // mihomo answers a failed test with 504 (timeout) or 503 (test error) and an
+            // optional JSON message; both surface as an in-place failure marker, not a banner.
             if let delay = try await controller.delay(for: node, using: snapshot.overrides) {
                 delays[node] = delay
                 record(.debug, module: "Proxies", "Delay test for \(node): \(delay) ms.")
+            } else {
+                delays[node] = nil
+                failedDelayTests[node] = .error
             }
+        } catch ClientError.httpFailure(let code) where code == 503 || code == 504 {
+            delays[node] = nil
+            failedDelayTests[node] = code == 504 ? .timeout : .error
+            record(.debug, module: "Proxies", "Delay test for \(node) failed (HTTP \(code)).")
         } catch {
             present(error, module: "Proxies")
         }
@@ -489,14 +505,18 @@ final class AppModel: ObservableObject {
         guard testingProxyGroupIDs.insert(group.id).inserted else { return }
         defer { testingProxyGroupIDs.remove(group.id) }
 
-        do {
-            let groupDelays = try await controller.delays(in: group, using: snapshot.overrides)
-            delays.merge(groupDelays) { _, latest in latest }
-            await reloadProxyGroups(showErrors: false)
-            record(.debug, module: "Proxies", "Delay test for \(group.name): \(groupDelays.count) nodes.")
-        } catch {
-            present(error, module: "Proxies")
+        // Per-node requests instead of the group endpoint: the group endpoint omits failures
+        // without a reason, while single-node calls distinguish timeout (504) from test
+        // errors (503) — and each card updates as soon as its own result lands.
+        await withTaskGroup(of: Void.self) { taskGroup in
+            for node in group.candidates {
+                taskGroup.addTask { [self] in
+                    await testDelay(for: node)
+                }
+            }
         }
+        await reloadProxyGroups(showErrors: false)
+        record(.debug, module: "Proxies", "Delay test for \(group.name): \(group.candidates.count) nodes.")
     }
 
     func sortedProxyGroups(
@@ -596,19 +616,41 @@ final class AppModel: ObservableObject {
 
         if source != .app {
             coreLogRefreshGeneration += 1
-            guard tunnelStatus == .connected else {
-                present(ClientError.tunnelUnavailable, module: "Logs")
-                return
-            }
-            do {
-                try await tunnel.clearCoreLogs()
-            } catch {
-                present(error, module: "Logs")
-                return
+            if tunnelStatus == .connected {
+                do {
+                    try await tunnel.clearCoreLogs()
+                } catch {
+                    present(error, module: "Logs")
+                    return
+                }
+                hasPendingCoreLogClear = false
+            } else {
+                // Core is not running: the cached copy is dropped below; arm a marker so the
+                // real core-side clear runs when the core next starts.
+                hasPendingCoreLogClear = true
             }
         }
 
         logEntries = logStore.clear(source: source)
+    }
+
+    private static let pendingCoreLogClearDefaultsKey = "logs.pendingCoreLogClear"
+
+    private var hasPendingCoreLogClear: Bool {
+        get { UserDefaults.standard.bool(forKey: Self.pendingCoreLogClearDefaultsKey) }
+        set { UserDefaults.standard.set(newValue, forKey: Self.pendingCoreLogClearDefaultsKey) }
+    }
+
+    private func flushPendingCoreLogClear() async {
+        do {
+            try await tunnel.clearCoreLogs()
+            hasPendingCoreLogClear = false
+            coreLogRefreshGeneration += 1
+            record(.info, module: "Logs", "Executed deferred core log clear after core startup.")
+        } catch {
+            // Keep the marker so the next core startup retries the deferred clear.
+            record(.warning, module: "Logs", "Deferred core log clear failed; will retry on next core startup.")
+        }
     }
 
     func reloadConnections(showErrors: Bool = true) async {

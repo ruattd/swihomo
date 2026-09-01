@@ -232,6 +232,8 @@
 "proxies.testGroupDelay" = "测试组延迟";
 "proxies.testDelay" = "测试延迟";
 "proxies.noResult" = "没有结果";
+"proxies.testFailed" = "错误";
+"proxies.testTimeout" = "超时";
 "proxies.noDelayResult" = "没有延迟结果";
 "proxies.sort.original" = "原始";
 "proxies.sort.name" = "名称";

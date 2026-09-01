@@ -45,32 +45,50 @@ actor MihomoControllerClient {
         using overrides: ProxyOverrides,
         testURL: URL = URL(string: "https://www.gstatic.com/generate_204")!
     ) async throws -> Int? {
+        do {
+            let response: MihomoDelayResponse = try await request(
+                path: "proxies/\(proxy)/delay",
+                method: "GET",
+                overrides: overrides,
+                queryItems: delayQueryItems(testURL: testURL)
+            )
+            return response.delay
+        } catch ClientError.httpFailure(let code) where code == 404 {
+            // Provider-backed nodes are absent from mihomo's global proxy map, so the generic
+            // endpoint 404s; test them through their owning provider's healthcheck instead.
+            return try await providerNodeDelay(for: proxy, using: overrides, testURL: testURL)
+        }
+    }
+
+    private func providerNodeDelay(
+        for proxy: String,
+        using overrides: ProxyOverrides,
+        testURL: URL
+    ) async throws -> Int? {
+        let providers: MihomoProviderResponse = try await request(
+            path: "providers/proxies",
+            method: "GET",
+            overrides: overrides
+        )
+        guard let providerName = providers.providers.first(where: {
+            $0.value.proxies?.contains { $0.name == proxy } == true
+        })?.key else {
+            throw ClientError.httpFailure(404)
+        }
         let response: MihomoDelayResponse = try await request(
-            path: "proxies/\(proxy)/delay",
+            path: "providers/proxies/\(providerName)/\(proxy)/healthcheck",
             method: "GET",
             overrides: overrides,
-            queryItems: [
-                URLQueryItem(name: "url", value: testURL.absoluteString),
-                URLQueryItem(name: "timeout", value: "5000")
-            ]
+            queryItems: delayQueryItems(testURL: testURL)
         )
         return response.delay
     }
 
-    func delays(
-        in group: MihomoProxyGroup,
-        using overrides: ProxyOverrides,
-        testURL: URL = URL(string: "https://www.gstatic.com/generate_204")!
-    ) async throws -> [String: Int] {
-        try await request(
-            path: "group/\(group.name)/delay",
-            method: "GET",
-            overrides: overrides,
-            queryItems: [
-                URLQueryItem(name: "url", value: testURL.absoluteString),
-                URLQueryItem(name: "timeout", value: "5000")
-            ]
-        )
+    private func delayQueryItems(testURL: URL) -> [URLQueryItem] {
+        [
+            URLQueryItem(name: "url", value: testURL.absoluteString),
+            URLQueryItem(name: "timeout", value: "5000")
+        ]
     }
 
     func connections(using overrides: ProxyOverrides) async throws -> [MihomoConnection] {
