@@ -215,6 +215,24 @@ private struct LiveConnectionsView: View {
     }
 
     var body: some View {
+        GroupBox {
+            panelContent
+                .padding(10)
+        }
+        .confirmationDialog(
+            Text(LocalizedStringKey("connection.closeAll.confirmationTitle")),
+            isPresented: $showingCloseAllConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("connection.closeAll", role: .destructive) {
+                Task { await model.closeAllConnections() }
+            }
+        } message: {
+            Text(LocalizedStringKey("connection.closeAll.confirmationMessage"))
+        }
+    }
+
+    private var panelContent: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -298,23 +316,6 @@ private struct LiveConnectionsView: View {
                 }
             }
         }
-        .padding(16)
-        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-        }
-        .confirmationDialog(
-            Text(LocalizedStringKey("connection.closeAll.confirmationTitle")),
-            isPresented: $showingCloseAllConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("connection.closeAll", role: .destructive) {
-                Task { await model.closeAllConnections() }
-            }
-        } message: {
-            Text(LocalizedStringKey("connection.closeAll.confirmationMessage"))
-        }
     }
 }
 
@@ -322,6 +323,17 @@ private struct ConnectionRow: View {
     let activity: MihomoConnectionActivity
 
     var body: some View {
+        GroupBox {
+            rowContent
+                .padding(6)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: SurfaceMetrics.boxCornerRadius, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(activity.connection.processName), \(byteRate(activity.totalSpeed)), \(activity.connection.routingDescription)")
+        .accessibilityHint("accessibility.connectionDetails")
+    }
+
+    private var rowContent: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 12) {
                 ConnectionProcessIcon(metadata: activity.connection.metadata)
@@ -364,13 +376,7 @@ private struct ConnectionRow: View {
             .font(.caption2.monospacedDigit())
             .foregroundStyle(.secondary)
         }
-        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .liquidGlassCard(cornerRadius: 14)
-        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(activity.connection.processName), \(byteRate(activity.totalSpeed)), \(activity.connection.routingDescription)")
-        .accessibilityHint("accessibility.connectionDetails")
     }
 }
 

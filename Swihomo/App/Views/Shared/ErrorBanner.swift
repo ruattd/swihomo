@@ -33,9 +33,9 @@ struct ErrorBanner: View {
             .accessibilityLabel("accessibility.dismissError")
         }
         .padding(14)
-        .liquidGlassCard(cornerRadius: 20)
+        .liquidGlassCard(cornerRadius: SurfaceMetrics.panelCornerRadius)
         .overlay {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
+            RoundedRectangle(cornerRadius: CGFloat(SurfaceMetrics.panelCornerRadius), style: .continuous)
                 .stroke(Color.red.opacity(0.22), lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.14), radius: 16, y: 6)

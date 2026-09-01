@@ -105,6 +105,7 @@ struct OverridesView: View {
         NavigationStack {
             ScrollView {
                     LazyVStack(alignment: .leading, spacing: 16) {
+                    GroupBox {
                     VStack(alignment: .leading, spacing: 18) {
                         HStack(alignment: .top, spacing: 12) {
                             Image(systemName: "slider.horizontal.3")
@@ -207,9 +208,10 @@ struct OverridesView: View {
                         .padding(12)
                         .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
-                    .padding(18)
-                    .liquidGlassCard()
+                    .padding(10)
+                    }
 
+                    GroupBox {
                     VStack(alignment: .leading, spacing: 16) {
                         HStack(alignment: .top, spacing: 12) {
                             Image(systemName: "curlybraces.square")
@@ -237,30 +239,31 @@ struct OverridesView: View {
                             minHeight: 320
                         )
 
-                        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
-                            GridRow {
-                                Text("key!")
-                                    .foregroundStyle(.purple)
-                                Text("overrides.replaceObject")
+                        GroupBox {
+                            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
+                                GridRow {
+                                    Text("key!")
+                                        .foregroundStyle(.purple)
+                                    Text("overrides.replaceObject")
+                                }
+                                GridRow {
+                                    Text("+key / key+")
+                                        .foregroundStyle(.purple)
+                                    Text("overrides.arrayItems")
+                                }
+                                GridRow {
+                                    Text("<key>")
+                                        .foregroundStyle(.purple)
+                                    Text("overrides.escapeKey")
+                                }
                             }
-                            GridRow {
-                                Text("+key / key+")
-                                    .foregroundStyle(.purple)
-                                Text("overrides.arrayItems")
-                            }
-                            GridRow {
-                                Text("<key>")
-                                    .foregroundStyle(.purple)
-                                Text("overrides.escapeKey")
-                            }
+                            .font(.caption)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(6)
                         }
-                        .font(.caption)
-                        .padding(12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.purple.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
-                    .padding(18)
-                    .liquidGlassCard()
+                    .padding(10)
+                    }
 
                     }
                     .frame(maxWidth: 860, alignment: .leading)
@@ -270,6 +273,7 @@ struct OverridesView: View {
                     .padding(.bottom, usesCompactLayout ? 120 : 88)
             }
             .overlay(alignment: .bottom) {
+                GroupBox {
                 Group {
                     if usesCompactLayout {
                         VStack(alignment: .leading, spacing: 10) {
@@ -299,8 +303,8 @@ struct OverridesView: View {
                         }
                     }
                 }
-                .padding(14)
-                .liquidGlassCard()
+                .padding(8)
+                }
                 .frame(maxWidth: 860)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 20)

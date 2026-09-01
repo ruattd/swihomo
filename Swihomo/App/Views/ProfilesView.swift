@@ -266,12 +266,19 @@ private struct ProfileCard: View {
             }
         }
         .padding(14)
-        .background(isActive ? Color.green.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(isActive ? Color.green.opacity(0.42) : Color.secondary.opacity(0.14), lineWidth: 1)
+        .background {
+            if isActive {
+                RoundedRectangle(cornerRadius: CGFloat(SurfaceMetrics.boxCornerRadius), style: .continuous)
+                    .fill(Color.green.opacity(0.12))
+            }
         }
-        .liquidGlassCard()
+        .contentCard()
+        .overlay {
+            if isActive {
+                RoundedRectangle(cornerRadius: CGFloat(SurfaceMetrics.boxCornerRadius), style: .continuous)
+                    .stroke(Color.green.opacity(0.42), lineWidth: 1)
+            }
+        }
         .animation(.snappy, value: isActive)
         .sheet(isPresented: $showingRemoteEditor) {
             RemoteProfileSheet(profile: profile) { name, url, customUserAgent in
@@ -424,27 +431,28 @@ private struct ProfileOverrideSheet: View {
                         releasesResourcesOnDisappear: true
                     )
 
-                    Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
-                        GridRow {
-                            Text("key!")
-                                .foregroundStyle(.purple)
-                            Text("overrides.replaceObject")
+                    GroupBox {
+                        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
+                            GridRow {
+                                Text("key!")
+                                    .foregroundStyle(.purple)
+                                Text("overrides.replaceObject")
+                            }
+                            GridRow {
+                                Text("+key / key+")
+                                    .foregroundStyle(.purple)
+                                Text("overrides.arrayItems")
+                            }
+                            GridRow {
+                                Text("<key>")
+                                    .foregroundStyle(.purple)
+                                Text("overrides.escapeKey")
+                            }
                         }
-                        GridRow {
-                            Text("+key / key+")
-                                .foregroundStyle(.purple)
-                            Text("overrides.arrayItems")
-                        }
-                        GridRow {
-                            Text("<key>")
-                                .foregroundStyle(.purple)
-                            Text("overrides.escapeKey")
-                        }
+                        .font(.caption)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(6)
                     }
-                    .font(.caption)
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.purple.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .padding(.horizontal, pagePadding)
                 .padding(.vertical, pagePadding)
@@ -535,15 +543,12 @@ private struct RemoteProfileSheet: View {
                         TextField(text: $address, prompt: Text(verbatim: SharedText.subscriptionURLPlaceholder)) {
                             Text(verbatim: SharedText.subscriptionURLPlaceholder)
                         }
-                            .textFieldStyle(.plain)
+                            .textFieldStyle(.roundedBorder)
                             .focused($focusedField, equals: .address)
                     #if os(iOS)
                             .textInputAutocapitalization(.never)
                             .keyboardType(.URL)
                     #endif
-                            .padding(14)
-                            .liquidGlassCard()
-
                         if let subscriptionURL {
                             Label(subscriptionURL.host ?? subscriptionURL.absoluteString, systemImage: "checkmark.circle.fill")
                                 .font(.caption)
@@ -559,10 +564,8 @@ private struct RemoteProfileSheet: View {
                         Label("profiles.name", systemImage: "text.cursor")
                             .font(.subheadline.weight(.semibold))
                         TextField("profiles.name.placeholder", text: $name)
-                            .textFieldStyle(.plain)
+                            .textFieldStyle(.roundedBorder)
                             .focused($focusedField, equals: .name)
-                            .padding(14)
-                            .liquidGlassCard()
                         Text("profiles.name.description")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -576,10 +579,8 @@ private struct RemoteProfileSheet: View {
                             text: $customUserAgent,
                             prompt: Text("profiles.userAgent.placeholder") + Text(verbatim: " \(MihomoCoreVersion.userAgent)")
                         )
-                            .textFieldStyle(.plain)
+                            .textFieldStyle(.roundedBorder)
                             .focused($focusedField, equals: .customUserAgent)
-                            .padding(14)
-                            .liquidGlassCard()
                         (Text(LocalizedStringKey(isEditing ? "profiles.userAgent.editDescription" : "profiles.userAgent.addDescription"))
                             + Text(verbatim: " \(MihomoCoreVersion.userAgent)."))
                             .font(.caption)

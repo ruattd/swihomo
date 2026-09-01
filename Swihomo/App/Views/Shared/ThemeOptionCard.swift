@@ -30,10 +30,10 @@ struct ThemeOptionCard: View {
             }
             .padding(12)
             .frame(minWidth: 144, maxWidth: .infinity, alignment: .leading)
-            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .liquidGlassCard(cornerRadius: 20)
+            .contentShape(RoundedRectangle(cornerRadius: SurfaceMetrics.boxCornerRadius, style: .continuous))
+            .contentCard()
             .overlay {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                RoundedRectangle(cornerRadius: SurfaceMetrics.boxCornerRadius, style: .continuous)
                     .stroke(isSelected ? Color.accentColor : .clear, lineWidth: 2)
             }
         }

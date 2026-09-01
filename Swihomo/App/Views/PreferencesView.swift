@@ -26,85 +26,80 @@ struct PreferencesView: View {
     #endif
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("preferences.appearance.title")
-                            .font(.title2.bold())
-                        Text("preferences.appearance.description")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if horizontalSizeClass == .compact {
-                        Picker("preferences.appearance.title", selection: themeSelection) {
-                            ForEach(AppTheme.allCases) { theme in
-                                Text(theme.titleKey).tag(theme.rawValue)
-                            }
-                        }
-                        .labelsHidden()
-                        .pickerStyle(.segmented)
-                    } else {
-                        ViewThatFits(in: .horizontal) {
-                            HStack(spacing: 12) {
-                                themeOptions
-                            }
-
-                            VStack(spacing: 12) {
-                                themeOptions
-                            }
-                        }
-                    }
-                }
-                .padding(20)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .liquidGlassCard(cornerRadius: 20)
-
+        Form {
+            appearanceSettings
 #if os(macOS)
-                menuBarSettings
+            menuBarSettings
 #endif
-
-                applicationSettings
-                packetTunnelSettings
-                memoryManagementSettings
-            }
-            .padding(20)
-            .frame(maxWidth: 760, alignment: .leading)
+            applicationSettings
+            packetTunnelSettings
+            memoryManagementSettings
         }
+        .formStyle(.grouped)
         .navigationTitle(Text(LocalizedStringKey("navigation.preferences")))
     }
 
+    private var appearanceSettings: some View {
+        Section {
+            if horizontalSizeClass == .compact {
+                Picker("preferences.appearance.title", selection: themeSelection) {
+                    ForEach(AppTheme.allCases) { theme in
+                        Text(theme.titleKey).tag(theme.rawValue)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) {
+                        themeOptions
+                    }
+
+                    VStack(spacing: 12) {
+                        themeOptions
+                    }
+                }
+            }
+        } header: {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("preferences.appearance.title")
+                    .font(.title2.bold())
+                Text("preferences.appearance.description")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
     private var memoryManagementSettings: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        Section {
+            preferenceRow(
+                title: Text("preferences.experimental.autoReclaimMemory"),
+                description: Text("preferences.experimental.autoReclaimMemory.description")
+            ) {
+                Toggle("preferences.experimental.autoReclaimMemory", isOn: $automaticallyReclaimsMemory)
+                    .labelsHidden()
+            }
+
+            preferenceRow(
+                title: Text("preferences.experimental.replaceGeoDatabases"),
+                description: Text("preferences.experimental.replaceGeoDatabases.description")
+            ) {
+                Toggle("preferences.experimental.replaceGeoDatabases", isOn: $replaceGeoDatabasesWithRulesets)
+                    .labelsHidden()
+            }
+        } header: {
             Label("preferences.experimental", systemImage: "flask")
                 .font(.title3.weight(.semibold))
-
-            Toggle("preferences.experimental.autoReclaimMemory", isOn: $automaticallyReclaimsMemory)
-
-            Text("preferences.experimental.autoReclaimMemory.description")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Toggle("preferences.experimental.replaceGeoDatabases", isOn: $replaceGeoDatabasesWithRulesets)
-
-            Text("preferences.experimental.replaceGeoDatabases.description")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .liquidGlassCard(cornerRadius: 20)
     }
 
     private var applicationSettings: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Label("preferences.application.title", systemImage: "app.badge")
-                .font(.title3.weight(.semibold))
-
-            HStack {
-                Text("preferences.application.logLevel")
-                Spacer()
+        Section {
+            preferenceRow(
+                title: Text("preferences.application.logLevel"),
+                description: Text("preferences.application.logLevel.description")
+            ) {
                 Picker("preferences.application.logLevel", selection: $appLogLevel) {
                     ForEach(LogLevel.allCases, id: \.rawValue) { level in
                         Text(LocalizedStringKey(level.localizationKey)).tag(level.rawValue)
@@ -113,13 +108,7 @@ struct PreferencesView: View {
                 .labelsHidden()
             }
 
-            Text("preferences.application.logLevel.description")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            HStack {
-                Text("preferences.application.language")
-                Spacer()
+            LabeledContent("preferences.application.language") {
                 Picker("preferences.application.language", selection: $selectedLanguage) {
                     ForEach(AppLanguage.allCases) { language in
                         languageLabel(for: language).tag(language.rawValue)
@@ -127,10 +116,10 @@ struct PreferencesView: View {
                 }
                 .labelsHidden()
             }
+        } header: {
+            Label("preferences.application.title", systemImage: "app.badge")
+                .font(.title3.weight(.semibold))
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .liquidGlassCard(cornerRadius: 20)
     }
 
     @ViewBuilder
@@ -143,18 +132,14 @@ struct PreferencesView: View {
     }
 
     private var packetTunnelSettings: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Label("preferences.packetTunnel.title", systemImage: "point.3.connected.trianglepath.dotted")
-                .font(.title3.weight(.semibold))
-
-            Text("preferences.packetTunnel.reconnectDescription")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            HStack {
-                Text(verbatim: SharedText.mtu)
-                Spacer()
+        Section {
+            preferenceRow(
+                title: Text(verbatim: SharedText.mtu),
+                description: Text("preferences.packetTunnel.mtu.description"),
+                descriptionColor: packetTunnelMTUInputIsInvalid ? .red : .secondary
+            ) {
                 TextField(SharedText.mtu, text: packetTunnelMTUInputBinding)
+                    .labelsHidden()
                     .font(.body.monospacedDigit())
                     .multilineTextAlignment(.trailing)
                     .textFieldStyle(.roundedBorder)
@@ -173,17 +158,13 @@ struct PreferencesView: View {
                     }
             }
 
-            Text("preferences.packetTunnel.mtu.description")
-                .font(.caption)
-                .foregroundStyle(packetTunnelMTUInputIsInvalid ? .red : .secondary)
-
-            Toggle("preferences.packetTunnel.routeIPv6", isOn: $packetTunnelIPv6Enabled)
-
-            Text("preferences.packetTunnel.routeIPv6.description")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Divider()
+            preferenceRow(
+                title: Text("preferences.packetTunnel.routeIPv6"),
+                description: Text("preferences.packetTunnel.routeIPv6.description")
+            ) {
+                Toggle("preferences.packetTunnel.routeIPv6", isOn: $packetTunnelIPv6Enabled)
+                    .labelsHidden()
+            }
 
             packetTunnelEditorSection(
                 titleKey: "preferences.packetTunnel.customDNS",
@@ -193,39 +174,40 @@ struct PreferencesView: View {
                 field: .customDNS
             )
 
-            Divider()
+            preferenceRow(
+                title: Text("preferences.packetTunnel.includeAllNetworks"),
+                description: Text("preferences.packetTunnel.includeAllNetworks.description")
+            ) {
+                Toggle("preferences.packetTunnel.includeAllNetworks", isOn: $packetTunnelIncludeAllNetworks)
+                    .labelsHidden()
+            }
 
-            Toggle("preferences.packetTunnel.includeAllNetworks", isOn: $packetTunnelIncludeAllNetworks)
+            preferenceRow(
+                title: Text("preferences.packetTunnel.excludeCellularServices"),
+                description: Text("preferences.packetTunnel.excludeCellularServices.description")
+            ) {
+                Toggle("preferences.packetTunnel.excludeCellularServices", isOn: $packetTunnelExcludeCellularServices)
+                    .labelsHidden()
+            }
+            .disabled(!packetTunnelIncludeAllNetworks)
 
-            Text("preferences.packetTunnel.includeAllNetworks.description")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            preferenceRow(
+                title: Text("preferences.packetTunnel.bypassLocalNetworks"),
+                description: Text("preferences.packetTunnel.bypassLocalNetworks.description")
+            ) {
+                Toggle("preferences.packetTunnel.bypassLocalNetworks", isOn: $packetTunnelBypassesPrivateNetworks)
+                    .labelsHidden()
+            }
+            .disabled(!packetTunnelIncludeAllNetworks)
 
-            Toggle("preferences.packetTunnel.excludeCellularServices", isOn: $packetTunnelExcludeCellularServices)
-                .disabled(!packetTunnelIncludeAllNetworks)
-
-            Text("preferences.packetTunnel.excludeCellularServices.description")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .disabled(!packetTunnelIncludeAllNetworks)
-
-            Toggle("preferences.packetTunnel.bypassLocalNetworks", isOn: $packetTunnelBypassesPrivateNetworks)
-                .disabled(!packetTunnelIncludeAllNetworks)
-
-            Text("preferences.packetTunnel.bypassLocalNetworks.description")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .disabled(!packetTunnelIncludeAllNetworks)
-
-            Toggle("preferences.packetTunnel.bypassAPNs", isOn: $packetTunnelBypassAPNs)
-                .disabled(!packetTunnelIncludeAllNetworks)
-
-            Text("preferences.packetTunnel.bypassAPNs.description")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .disabled(!packetTunnelIncludeAllNetworks)
-
-            Divider()
+            preferenceRow(
+                title: Text("preferences.packetTunnel.bypassAPNs"),
+                description: Text("preferences.packetTunnel.bypassAPNs.description")
+            ) {
+                Toggle("preferences.packetTunnel.bypassAPNs", isOn: $packetTunnelBypassAPNs)
+                    .labelsHidden()
+            }
+            .disabled(!packetTunnelIncludeAllNetworks)
 
             packetTunnelEditorSection(
                 titleKey: "preferences.packetTunnel.bypassIPRanges",
@@ -234,10 +216,15 @@ struct PreferencesView: View {
                 minHeight: 120,
                 field: .bypassIPRanges
             )
+        } header: {
+            VStack(alignment: .leading, spacing: 6) {
+                Label("preferences.packetTunnel.title", systemImage: "point.3.connected.trianglepath.dotted")
+                    .font(.title3.weight(.semibold))
+                Text("preferences.packetTunnel.reconnectDescription")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .liquidGlassCard(cornerRadius: 20)
         .sheet(item: $editingPacketTunnelField) { field in
             NavigationStack {
                 switch field {
@@ -256,6 +243,27 @@ struct PreferencesView: View {
                         minHeight: 240
                     )
                 }
+            }
+        }
+    }
+
+    /// Settings row: title + control on one line, description on its own line below.
+    private func preferenceRow<Control: View>(
+        title: Text,
+        description: Text?,
+        descriptionColor: Color = .secondary,
+        @ViewBuilder control: () -> Control
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                title
+                Spacer()
+                control()
+            }
+            if let description {
+                description
+                    .font(.caption)
+                    .foregroundStyle(descriptionColor)
             }
         }
     }
@@ -292,11 +300,11 @@ struct PreferencesView: View {
         minHeight: CGFloat,
         field: PacketTunnelTextField
     ) -> some View {
-        Text(titleKey)
-            .font(.subheadline.weight(.medium))
+        VStack(alignment: .leading, spacing: 10) {
+            Text(titleKey)
+                .font(.subheadline.weight(.medium))
 
-        if horizontalSizeClass == .compact {
-            VStack(alignment: .leading, spacing: 10) {
+            if horizontalSizeClass == .compact {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     packetTunnelSummary(for: text.wrappedValue)
                         .font(.caption)
@@ -313,13 +321,9 @@ struct PreferencesView: View {
                     }
                     .buttonStyle(.bordered)
                 }
-
-                Text(descriptionKey)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            } else {
+                MultilineCodeEditor(text: text, minHeight: minHeight)
             }
-        } else {
-            MultilineCodeEditor(text: text, minHeight: minHeight)
 
             Text(descriptionKey)
                 .font(.caption)
@@ -391,39 +395,37 @@ struct PreferencesView: View {
 
 #if os(macOS)
     private var menuBarSettings: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Label("preferences.menuBar.title", systemImage: "menubar.rectangle")
-                .font(.title3.weight(.semibold))
-
+        Section {
             Toggle("preferences.menuBar.show", isOn: $showsMenuBar)
 
-            Divider()
-
-            Picker("preferences.menuBar.display", selection: $menuBarDisplay) {
-                ForEach(MenuBarDisplay.allCases) { display in
-                    Text(display.titleKey).tag(display.rawValue)
+            preferenceRow(
+                title: Text("preferences.menuBar.display"),
+                description: menuBarDisplay == MenuBarDisplay.icon.rawValue
+                    ? Text("preferences.menuBar.display.iconOnlyDescription")
+                    : nil
+            ) {
+                Picker("preferences.menuBar.display", selection: $menuBarDisplay) {
+                    ForEach(MenuBarDisplay.allCases) { display in
+                        Text(display.titleKey).tag(display.rawValue)
+                    }
                 }
+                .labelsHidden()
+                .pickerStyle(.segmented)
             }
-            .pickerStyle(.segmented)
             .disabled(!showsMenuBar)
 
-            if menuBarDisplay == MenuBarDisplay.icon.rawValue {
-                Text("preferences.menuBar.display.iconOnlyDescription")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            preferenceRow(
+                title: Text("preferences.menuBar.hideDockIcon"),
+                description: showsMenuBar ? nil : Text("preferences.menuBar.hideDockIcon.description")
+            ) {
+                Toggle("preferences.menuBar.hideDockIcon", isOn: $hidesDockIcon)
+                    .labelsHidden()
             }
-
-            Toggle("preferences.menuBar.hideDockIcon", isOn: $hidesDockIcon)
-                .disabled(!showsMenuBar)
-
-            if !showsMenuBar {
-                Text("preferences.menuBar.hideDockIcon.description")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            .disabled(!showsMenuBar)
+        } header: {
+            Label("preferences.menuBar.title", systemImage: "menubar.rectangle")
+                .font(.title3.weight(.semibold))
         }
-        .padding(20)
-        .liquidGlassCard(cornerRadius: 20)
     }
 #endif
 }
@@ -453,8 +455,6 @@ private struct PacketTunnelTextEditor: View {
             }
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .liquidGlassCard(cornerRadius: 20)
-            .padding(20)
         }
         .navigationTitle(Text(titleKey))
         .toolbar {

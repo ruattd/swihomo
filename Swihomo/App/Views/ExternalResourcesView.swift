@@ -12,11 +12,13 @@ struct ExternalResourcesView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
-                    Text("resources.description")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .padding(14)
-                        .liquidGlassCard(cornerRadius: 18)
+                    GroupBox {
+                        Text("resources.description")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(6)
+                    }
 
                     ForEach(model.externalResources) { resource in
                         ExternalResourceCard(
@@ -87,19 +89,44 @@ private struct ExternalResourceCard: View {
     let edit: () -> Void
     let replace: () -> Void
 
-    var body: some View {
-        let isUpdating = model.updatingExternalResourceIDs.contains(resource.id)
-        let tint = switch resource.kind {
-        case .proxyProvider: Color.orange
-        case .ruleProvider: Color.purple
-        case .geoData: Color.teal
+    private var isUpdating: Bool { model.updatingExternalResourceIDs.contains(resource.id) }
+    private var tint: Color {
+        switch resource.kind {
+        case .proxyProvider: .orange
+        case .ruleProvider: .purple
+        case .geoData: .teal
         }
-        let icon = switch resource.kind {
+    }
+    private var icon: String {
+        switch resource.kind {
         case .proxyProvider: "point.3.connected.trianglepath.dotted"
         case .ruleProvider: "list.bullet.rectangle"
         case .geoData: "globe.americas.fill"
         }
-        let subscriptionInfo = resource.kind == .proxyProvider ? resource.subscriptionInfo : nil
+    }
+    private var subscriptionInfo: MihomoSubscriptionInfo? { resource.kind == .proxyProvider ? resource.subscriptionInfo : nil }
+
+    // Custom surface (not GroupBox) so the usage fill can span edge-to-edge behind the content;
+    // visually identical to GroupBox: quaternarySystemFill + boxCornerRadius.
+    var body: some View {
+        cardContent
+            .padding(8)
+            .background(alignment: .topLeading) {
+                if let usageFraction = subscriptionInfo?.usageFraction {
+                    GeometryReader { geometry in
+                        Rectangle()
+                            .fill(tint.opacity(0.13))
+                            .frame(width: geometry.size.width * CGFloat(usageFraction))
+                            .allowsHitTesting(false)
+                    }
+                    .mask(RoundedRectangle(cornerRadius: SurfaceMetrics.boxCornerRadius, style: .continuous))
+                    .allowsHitTesting(false)
+                }
+            }
+            .contentCard()
+    }
+
+    private var cardContent: some View {
         VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .top, spacing: 12) {
                     Image(systemName: icon)
@@ -189,19 +216,6 @@ private struct ExternalResourceCard: View {
                         .disabled(isUpdating)
                 }
         }
-        .padding(14)
-        .background(alignment: .topLeading) {
-            if let usageFraction = subscriptionInfo?.usageFraction {
-                GeometryReader { geometry in
-                    Rectangle()
-                        .fill(tint.opacity(0.13))
-                        .frame(width: geometry.size.width * CGFloat(usageFraction))
-                        .allowsHitTesting(false)
-                }
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .liquidGlassCard(cornerRadius: 20)
     }
 }
 

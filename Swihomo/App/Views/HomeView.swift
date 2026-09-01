@@ -76,31 +76,46 @@ struct HomeView: View {
                 }
                 .padding(.bottom, 2)
 
-                LazyVGrid(
-                    columns: [
-                        GridItem(.flexible(), spacing: 12),
-                        GridItem(.flexible(), spacing: 12)
-                    ],
-                    spacing: 12
-                ) {
-                    ForEach(HomeSection.allCases) { section in
-                        NavigationLink(value: section) {
-                            HomeFeatureCard(
-                                section: section,
-                                value: value(for: section),
-                                valueKey: valueKey(for: section),
-                                subtitle: subtitle(for: section),
-                                subtitleKey: subtitleKey(for: section),
-                                isHighlighted: section == .connection && model.isConnected
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+                navigationGrid
             }
             .padding()
         }
         .navigationTitle(Text(LocalizedStringKey("navigation.home")))
+    }
+
+    @ViewBuilder
+    private var navigationGrid: some View {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            GlassEffectContainer {
+                navigationGridContent
+            }
+        } else {
+            navigationGridContent
+        }
+    }
+
+    private var navigationGridContent: some View {
+        LazyVGrid(
+            columns: [
+                GridItem(.flexible(), spacing: 12),
+                GridItem(.flexible(), spacing: 12)
+            ],
+            spacing: 12
+        ) {
+            ForEach(HomeSection.allCases) { section in
+                NavigationLink(value: section) {
+                    HomeFeatureCard(
+                        section: section,
+                        value: value(for: section),
+                        valueKey: valueKey(for: section),
+                        subtitle: subtitle(for: section),
+                        subtitleKey: subtitleKey(for: section),
+                        isHighlighted: section == .connection && model.isConnected
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 
     private func value(for section: HomeSection) -> String {
@@ -218,7 +233,7 @@ private struct HomeFeatureCard: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, minHeight: 112, maxHeight: 112, alignment: .topLeading)
-        .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: CGFloat(SurfaceMetrics.panelCornerRadius), style: .continuous))
         .liquidGlassCard(interactive: true)
         .modifier(HomeFeatureCardHelp(text: subtitle, key: subtitleKey))
         .accessibilityElement(children: .combine)
