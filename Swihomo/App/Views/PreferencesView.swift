@@ -36,6 +36,7 @@ struct PreferencesView: View {
             memoryManagementSettings
         }
         .formStyle(.grouped)
+        .uniformTopScrollEdge()
         .navigationTitle(Text(LocalizedStringKey("navigation.preferences")))
     }
 
@@ -62,10 +63,10 @@ struct PreferencesView: View {
             }
         } header: {
             VStack(alignment: .leading, spacing: 6) {
-                Text("preferences.appearance.title")
-                    .font(.title2.bold())
+                Label("preferences.appearance.title", systemImage: "paintpalette")
+                    .font(.title3.weight(.semibold))
                 Text("preferences.appearance.description")
-                    .font(.callout)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }

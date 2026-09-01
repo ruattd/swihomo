@@ -47,7 +47,8 @@ struct OverridesView: View {
         } label: {
             Label("overrides.save", systemImage: "checkmark")
         }
-        .liquidGlassButton(prominent: true)
+        // Inside the floating glass bar: glass-on-glass buttons get demoted, so use a solid prominent style.
+        .buttonStyle(.borderedProminent)
         .disabled(draft == model.snapshot.overrides)
     }
 
@@ -272,8 +273,8 @@ struct OverridesView: View {
                     .padding(.top, 20)
                     .padding(.bottom, usesCompactLayout ? 120 : 88)
             }
+            .uniformTopScrollEdge()
             .overlay(alignment: .bottom) {
-                GroupBox {
                 Group {
                     if usesCompactLayout {
                         VStack(alignment: .leading, spacing: 10) {
@@ -303,8 +304,8 @@ struct OverridesView: View {
                         }
                     }
                 }
-                .padding(8)
-                }
+                .padding(14)
+                .liquidGlassCard()
                 .frame(maxWidth: 860)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 20)

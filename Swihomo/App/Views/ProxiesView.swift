@@ -29,6 +29,7 @@ struct ProxiesView: View {
                         .padding()
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .uniformTopScrollEdge()
                     .overlay {
                         if model.proxyGroups.isEmpty {
                             ContentUnavailableView(
@@ -40,11 +41,16 @@ struct ProxiesView: View {
                         }
                     }
                 } else {
-                    ContentUnavailableView(
-                        LocalizedStringKey("proxies.connectToUse"),
-                        systemImage: "point.3.connected.trianglepath.dotted",
-                        description: Text(LocalizedStringKey("proxies.connectToUse.description"))
-                    )
+                    ContentUnavailableView {
+                        Label {
+                            Text(LocalizedStringKey("proxies.connectToUse"))
+                        } icon: {
+                            Image(systemName: "point.3.connected.trianglepath.dotted")
+                                .frame(height: 40)
+                        }
+                    } description: {
+                        Text(LocalizedStringKey("proxies.connectToUse.description"))
+                    }
                 }
             }
             .animation(reduceMotion ? nil : .snappy, value: model.proxyGroups)
@@ -104,13 +110,6 @@ struct ProxiesView: View {
                         Label(LocalizedStringKey(groupSortCriterion.localizationKey), systemImage: groupSortDirection.systemImage)
                             .font(.subheadline.weight(.medium))
                     }
-
-                    Button {
-                        Task { await model.reloadProxyGroups() }
-                    } label: {
-                        Label("common.refresh", systemImage: "arrow.clockwise")
-                    }
-                    .disabled(model.tunnelStatus != .connected)
                 }
             }
             .task(id: model.tunnelStatus == .connected) {

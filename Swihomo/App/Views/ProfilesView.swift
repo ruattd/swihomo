@@ -23,6 +23,7 @@ struct ProfilesView: View {
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .uniformTopScrollEdge()
             .overlay {
                 if model.snapshot.profiles.isEmpty {
                     ContentUnavailableView(

@@ -123,6 +123,7 @@ struct DashboardView: View {
                 .padding(16)
             }
             .coordinateSpace(name: "connection-dashboard-scroll")
+            .uniformTopScrollEdge()
             .onPreferenceChange(ConnectionDashboardScrollOffsetKey.self) { offset in
                 let shouldShow = offset < -180
                 guard shouldShow != showsBackToTopButton else { return }

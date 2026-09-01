@@ -80,6 +80,7 @@ struct HomeView: View {
             }
             .padding()
         }
+        .uniformTopScrollEdge()
         .navigationTitle(Text(LocalizedStringKey("navigation.home")))
     }
 

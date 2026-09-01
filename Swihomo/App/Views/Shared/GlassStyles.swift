@@ -20,6 +20,17 @@ enum SurfaceMetrics {
 }
 
 extension View {
+    /// Pins the top scroll-edge effect to the soft style (progressive blur). Every page uses
+    /// ScrollView/Form containers, so the window no longer latches the style of the last-visited page.
+    @ViewBuilder
+    func uniformTopScrollEdge() -> some View {
+        if #available(macOS 26.0, iOS 26.0, *) {
+            self.scrollEdgeEffectStyle(.soft, for: .top)
+        } else {
+            self
+        }
+    }
+
     /// Custom card surface matching native GroupBox metrics. Prefer a real GroupBox for pure
     /// content cards; this exists for selection-state cards needing custom fills/strokes.
     @ViewBuilder

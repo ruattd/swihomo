@@ -35,26 +35,22 @@ struct ExternalResourcesView: View {
                 .frame(maxWidth: 860)
                 .frame(maxWidth: .infinity)
             }
+            .uniformTopScrollEdge()
             .overlay {
                 if model.externalResources.isEmpty {
-                    ContentUnavailableView(
-                        LocalizedStringKey(model.isConnected ? "resources.empty" : "resources.connectToView"),
-                        systemImage: "externaldrive.connected.to.line.below",
-                        description: Text(LocalizedStringKey(model.isConnected ? "resources.empty.description" : "resources.connectToView.description"))
-                    )
+                    ContentUnavailableView {
+                        Label {
+                            Text(LocalizedStringKey(model.isConnected ? "resources.empty" : "resources.connectToView"))
+                        } icon: {
+                            Image(systemName: "externaldrive.connected.to.line.below")
+                                .frame(height: 40)
+                        }
+                    } description: {
+                        Text(LocalizedStringKey(model.isConnected ? "resources.empty.description" : "resources.connectToView.description"))
+                    }
                 }
             }
             .navigationTitle(Text(LocalizedStringKey("navigation.resources")))
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        Task { await model.reloadExternalResources() }
-                    } label: {
-                        Label("common.refresh", systemImage: "arrow.clockwise")
-                    }
-                    .disabled(!model.isConnected)
-                }
-            }
             .task { await model.reloadExternalResources() }
             .sheet(item: $editingResource) { resource in
                 ExternalResourceEditor(resource: resource)

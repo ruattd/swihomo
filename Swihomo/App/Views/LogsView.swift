@@ -81,26 +81,23 @@ struct LogsView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    Picker("common.source", selection: $filter) {
-                        ForEach(LogFilter.allCases) { filter in
-                            Text(filter.titleKey).tag(filter)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    Picker("common.level", selection: $levelFilter) {
-                        ForEach(LogLevelFilter.allCases) { level in
-                            Text(level.titleKey).tag(level)
+            // Single lazy implementation for both platforms: macOS grouped Form lays out rows
+            // eagerly (measured 10x slower with 5000 rows) and GroupedListStyle is iOS-only.
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    ForEach(entries) { entry in
+                        GroupBox {
+                            LogEntryRow(entry: entry)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(6)
                         }
                     }
                 }
-
-                ForEach(entries) { entry in
-                    LogEntryRow(entry: entry)
-                }
+                .padding(16)
+                .frame(maxWidth: 860)
+                .frame(maxWidth: .infinity)
             }
+            .uniformTopScrollEdge()
             .overlay {
                 if entries.isEmpty {
                     ContentUnavailableView(
@@ -115,6 +112,14 @@ struct LogsView: View {
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
                     Menu {
+                        sourceFilterSection
+                        levelFilterSection
+                    } label: {
+                        Label(filter.titleKey, systemImage: "line.3.horizontal.decrease")
+                            .font(.subheadline.weight(.medium))
+                    }
+
+                    Menu {
                         Button(role: .destructive) {
                             showingClearLogsConfirmation = true
                         } label: {
@@ -123,13 +128,6 @@ struct LogsView: View {
                     } label: {
                         Label("common.more", systemImage: "ellipsis.circle")
                     }
-
-                    Button {
-                        Task { await model.reloadLogs() }
-                    } label: {
-                        Label("common.refresh", systemImage: "arrow.clockwise")
-                    }
-                    .disabled(!model.isConnected)
                 }
             }
             .confirmationDialog(
@@ -151,6 +149,36 @@ struct LogsView: View {
                 Text(LocalizedStringKey("logs.clearLogs.description"))
             }
             .task { await model.reloadLogs() }
+        }
+    }
+
+    private var sourceFilterSection: some View {
+        Section("common.source") {
+            ForEach(LogFilter.allCases) { source in
+                Button {
+                    filter = source
+                } label: {
+                    Label(
+                        source.titleKey,
+                        systemImage: filter == source ? "checkmark" : "circle"
+                    )
+                }
+            }
+        }
+    }
+
+    private var levelFilterSection: some View {
+        Section("common.level") {
+            ForEach(LogLevelFilter.allCases) { level in
+                Button {
+                    levelFilter = level
+                } label: {
+                    Label(
+                        level.titleKey,
+                        systemImage: levelFilter == level ? "checkmark" : "circle"
+                    )
+                }
+            }
         }
     }
 }
