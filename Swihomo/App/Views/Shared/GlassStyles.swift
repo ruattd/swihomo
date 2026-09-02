@@ -61,6 +61,31 @@ struct SectionHeaderLabel: View {
     }
 }
 
+/// Settings-row picker with an explicit menu style: the Form-default picker is
+/// list-integrated and swallows press-and-hold, while an explicit `.menu` style renders
+/// the native standalone menu control with the compact tap palette and the
+/// hold-to-expand option list.
+struct SettingsPickerRow<Selection: Hashable>: View {
+    let title: LocalizedStringKey
+    @Binding var selection: Selection
+    let options: [(value: Selection, label: Text)]
+
+    init(_ title: LocalizedStringKey, selection: Binding<Selection>, options: [(Selection, Text)]) {
+        self.title = title
+        self._selection = selection
+        self.options = options.map { (value: $0.0, label: $0.1) }
+    }
+
+    var body: some View {
+        Picker(title, selection: $selection) {
+            ForEach(options, id: \.value) { option in
+                option.label.tag(option.value)
+            }
+        }
+        .pickerStyle(.menu)
+    }
+}
+
 enum SurfaceMetrics {
     static let panelCornerRadius: Double = 20
     static let rowCornerRadius: Double = 12

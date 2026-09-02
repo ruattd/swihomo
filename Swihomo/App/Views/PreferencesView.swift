@@ -129,25 +129,28 @@ struct PreferencesView: View {
 
     private var applicationSettings: some View {
         Section {
-            // Default-style pickers with a visible label: iOS renders a full-width navigation
-            // row (push to select, press-and-hold quick select); macOS renders the title with
-            // a popup menu — the native settings row on both platforms.
             VStack(alignment: .leading, spacing: 6) {
-                Picker("preferences.application.logLevel", selection: $appLogLevel) {
-                    ForEach(LogLevel.allCases, id: \.rawValue) { level in
-                        Text(LocalizedStringKey(level.localizationKey)).tag(level.rawValue)
-                    }
-                }
+                SettingsPickerRow(
+                    "preferences.application.logLevel",
+                    selection: $appLogLevel,
+                    options: LogLevel.allCases.map { ($0.rawValue, Text(LocalizedStringKey($0.localizationKey))) }
+                )
                 Text("preferences.application.logLevel.description")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Picker("preferences.application.language", selection: $selectedLanguage) {
-                ForEach(AppLanguage.allCases) { language in
-                    languageLabel(for: language).tag(language.rawValue)
+            SettingsPickerRow(
+                "preferences.application.language",
+                selection: $selectedLanguage,
+                options: AppLanguage.allCases.map { language in
+                    if let titleKey = language.titleKey {
+                        (language.rawValue, Text(titleKey))
+                    } else {
+                        (language.rawValue, Text(verbatim: language.endonym ?? language.rawValue))
+                    }
                 }
-            }
+            )
 
             PreferenceRow(
                 title: Text("preferences.application.autoCollapseProxyGroups"),
@@ -158,15 +161,6 @@ struct PreferencesView: View {
             }
         } header: {
             SectionHeaderLabel("preferences.application.title", systemImage: "app.badge")
-        }
-    }
-
-    @ViewBuilder
-    private func languageLabel(for language: AppLanguage) -> some View {
-        if let titleKey = language.titleKey {
-            Text(titleKey)
-        } else if let endonym = language.endonym {
-            Text(verbatim: endonym)
         }
     }
 

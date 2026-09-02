@@ -177,16 +177,16 @@ struct OverridesView: View {
 
     private var basicSection: some View {
         Section {
-            Picker("overrides.routingMode", selection: $draft.mode) {
-                ForEach(ProxyMode.allCases) { mode in
-                    Text(LocalizedStringKey(mode.localizationKey)).tag(mode)
-                }
-            }
-            Picker("overrides.mihomoLogLevel", selection: $draft.logLevel) {
-                ForEach(MihomoLogLevel.allCases) { level in
-                    Text(LocalizedStringKey(level.localizationKey)).tag(level)
-                }
-            }
+            SettingsPickerRow(
+                "overrides.routingMode",
+                selection: $draft.mode,
+                options: ProxyMode.allCases.map { ($0, Text(LocalizedStringKey($0.localizationKey))) }
+            )
+            SettingsPickerRow(
+                "overrides.mihomoLogLevel",
+                selection: $draft.logLevel,
+                options: MihomoLogLevel.allCases.map { ($0, Text(LocalizedStringKey($0.localizationKey))) }
+            )
             Toggle("overrides.allowLAN", isOn: $draft.allowLAN)
             Toggle("overrides.enableIPv6", isOn: $draft.ipv6Enabled)
             Toggle("overrides.enableDNS", isOn: $draft.dnsEnabled)
