@@ -111,7 +111,7 @@ struct PreferencesView: View {
                         .font(.body.monospacedDigit())
                         .multilineTextAlignment(.trailing)
                         .textFieldStyle(.roundedBorder)
-                        .frame(width: 76)
+                        .frame(width: 50)
 #if os(iOS)
                         .keyboardType(.numberPad)
 #endif

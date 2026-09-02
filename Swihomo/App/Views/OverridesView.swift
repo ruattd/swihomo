@@ -5,7 +5,6 @@ import AppKit
 
 struct OverridesView: View {
     @EnvironmentObject private var model: AppModel
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.openURL) private var openURL
     @State private var draft = ProxyOverrides.default()
     @State private var isControllerSecretVisible = false
@@ -19,10 +18,6 @@ struct OverridesView: View {
 #else
         0
 #endif
-    }
-
-    private var usesCompactLayout: Bool {
-        horizontalSizeClass == .compact
     }
 
     private var changesRequireReconnect: Bool {
@@ -138,36 +133,19 @@ struct OverridesView: View {
             }
             .formStyle(.grouped)
             .uniformTopScrollEdge()
-            .contentMargins(.bottom, usesCompactLayout ? 120 : 88, for: .scrollContent)
+            .contentMargins(.bottom, 88, for: .scrollContent)
             .overlay(alignment: .bottom) {
-                Group {
-                    if usesCompactLayout {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text(LocalizedStringKey(draft == model.snapshot.overrides ? "overrides.allSaved" : "overrides.unsavedChanges"))
-                                .font(.subheadline.weight(.semibold))
-                            HStack(alignment: .bottom, spacing: 12) {
-                                Text("overrides.saveDescription")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                Spacer(minLength: 8)
-                                saveButton
-                            }
-                        }
-                    } else {
-                        HStack(alignment: .center, spacing: 16) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(LocalizedStringKey(draft == model.snapshot.overrides ? "overrides.allSaved" : "overrides.unsavedChanges"))
-                                    .font(.subheadline.weight(.semibold))
-                                Text("overrides.saveDescription")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                            Spacer()
-                            saveButton
-                        }
+                HStack(alignment: .center, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(LocalizedStringKey(draft == model.snapshot.overrides ? "overrides.allSaved" : "overrides.unsavedChanges"))
+                            .font(.subheadline.weight(.semibold))
+                        Text("overrides.saveDescription")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
+                    Spacer()
+                    saveButton
                 }
                 .padding(14)
                 .liquidGlassCard()
