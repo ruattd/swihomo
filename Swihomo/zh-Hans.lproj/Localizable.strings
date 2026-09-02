@@ -293,7 +293,7 @@
 "resources.lastUpdated" = "上次更新";
 "resources.rules" = "规则";
 "resources.ruleCountSuffix" = "条规则";
-"resources.expires" = "到期 ";
+"resources.expires" = "到期";
 "resources.unsupportedEncoding" = "不支持的编码";
 "resources.unsupportedEncoding.description" = "此资源不是 UTF-8 文本, 请改用文件替换";
 

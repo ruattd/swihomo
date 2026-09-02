@@ -293,7 +293,7 @@
 "resources.lastUpdated" = "Last updated";
 "resources.rules" = "Rules";
 "resources.ruleCountSuffix" = "rules";
-"resources.expires" = "expires ";
+"resources.expires" = "Expires";
 "resources.unsupportedEncoding" = "Unsupported Encoding";
 "resources.unsupportedEncoding.description" = "This resource is not UTF-8 text. Replace it with a file instead.";
 

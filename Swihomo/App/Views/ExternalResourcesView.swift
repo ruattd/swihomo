@@ -10,28 +10,31 @@ struct ExternalResourcesView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Text("resources.description")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(6)
-                    .contentCard()
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 7, leading: 16, bottom: 7, trailing: 16))
+            Form {
+                Section {
+                    Text("resources.description")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
 
                 ForEach(model.externalResources) { resource in
-                    ExternalResourceCard(
-                        resource: resource,
-                        edit: { editingResource = resource },
-                        replace: {
-                            importedResource = resource
-                            showingImporter = true
-                        }
-                    )
+                    // One resource per section: the whole card is the section's single row.
+                    Section {
+                        ExternalResourceCard(
+                            resource: resource,
+                            edit: { editingResource = resource },
+                            replace: {
+                                importedResource = resource
+                                showingImporter = true
+                            }
+                        )
+                    }
                 }
             }
-            .listStyle(.plain)
+            .formStyle(.grouped)
+            // Tighter than the roomy grouped defaults.
+            .listSectionSpacing(14)
             .uniformTopScrollEdge()
             .overlay {
                 if model.externalResources.isEmpty {
@@ -99,25 +102,12 @@ private struct ExternalResourceCard: View {
     }
     private var subscriptionInfo: MihomoSubscriptionInfo? { resource.kind == .proxyProvider ? resource.subscriptionInfo : nil }
 
-    // Custom surface (not a plain box) so the usage fill can span edge-to-edge behind the content.
+    // Plain row content: the section's grouped container is the visual surface, so no
+    // card chrome of its own. The old edge-to-edge usage wash can't sit inside a native
+    // section row — the percentage stays in the subscription summary text.
     var body: some View {
         cardContent
-            .padding(8)
-            .background(alignment: .topLeading) {
-                if let usageFraction = subscriptionInfo?.usageFraction {
-                    GeometryReader { geometry in
-                        Rectangle()
-                            .fill(tint.opacity(0.13))
-                            .frame(width: geometry.size.width * CGFloat(usageFraction))
-                            .allowsHitTesting(false)
-                    }
-                    .mask(RoundedRectangle(cornerRadius: SurfaceMetrics.boxCornerRadius, style: .continuous))
-                        .allowsHitTesting(false)
-                }
-            }
-            .contentCard()
-            .listRowSeparator(.hidden)
-            .listRowInsets(EdgeInsets(top: 7, leading: 16, bottom: 7, trailing: 16))
+            .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
     }
 
     private var cardContent: some View {
@@ -172,6 +162,13 @@ private struct ExternalResourceCard: View {
                             Spacer()
                             subscriptionSummary(subscriptionInfo)
                                 .lineLimit(1)
+                        }
+                        if let expirationDate = subscriptionInfo.expirationDate {
+                            HStack(spacing: 8) {
+                                Label("resources.expires", systemImage: "calendar")
+                                Spacer()
+                                Text(expirationDate, format: .dateTime.year().month().day())
+                            }
                         }
                     } else if resource.kind != .geoData, let ruleCount = resource.ruleCount {
                         HStack(spacing: 8) {
