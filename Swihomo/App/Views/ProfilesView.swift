@@ -14,16 +14,14 @@ struct ProfilesView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 14) {
+            List {
                 ForEach(model.snapshot.profiles) { profile in
-                        ProfileCard(profile: profile)
-                    }
+                    ProfileCard(profile: profile)
                 }
-                .padding()
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .listStyle(.plain)
             .uniformTopScrollEdge()
+            .animation(reduceMotion ? nil : .snappy, value: model.snapshot.profiles)
             .overlay {
                 if model.snapshot.profiles.isEmpty {
                     ContentUnavailableView(
@@ -34,7 +32,6 @@ struct ProfilesView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
                 }
             }
-            .animation(reduceMotion ? nil : .snappy, value: model.snapshot.profiles)
             .navigationTitle(Text(LocalizedStringKey("navigation.profiles")))
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
@@ -145,6 +142,61 @@ private struct ProfileCard: View {
     }
 
     var body: some View {
+        cardContent
+            .padding(14)
+            .background {
+                if isActive {
+                    RoundedRectangle(cornerRadius: CGFloat(SurfaceMetrics.boxCornerRadius), style: .continuous)
+                        .fill(Color.green.opacity(0.12))
+                }
+            }
+            .contentCard()
+            .overlay {
+                if isActive {
+                    RoundedRectangle(cornerRadius: CGFloat(SurfaceMetrics.boxCornerRadius), style: .continuous)
+                        .stroke(Color.green.opacity(0.42), lineWidth: 1)
+                }
+            }
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 7, leading: 16, bottom: 7, trailing: 16))
+        .animation(.snappy, value: isActive)
+        .sheet(isPresented: $showingRemoteEditor) {
+            RemoteProfileSheet(profile: profile) { name, url, customUserAgent in
+                Task { await model.updateRemoteProfile(profile, name: name, url: url, customUserAgent: customUserAgent) }
+                showingRemoteEditor = false
+            }
+        }
+        .sheet(isPresented: $showingContentEditor) {
+            ProfileContentEditor(profile: profile)
+        }
+        .sheet(isPresented: $showingProfileOverrideEditor) {
+            ProfileOverrideSheet(profile: profile) { contents, globalOverridesEnabled in
+                Task {
+                    if globalOverridesEnabled != profile.customOverridesEnabled {
+                        await model.setCustomOverridesEnabled(globalOverridesEnabled, for: profile)
+                    }
+                    if contents != profile.customOverrideYAML {
+                        await model.setProfileCustomOverride(contents, for: profile)
+                    }
+                }
+                showingProfileOverrideEditor = false
+            }
+        }
+        .confirmationDialog(
+            deletionConfirmationTitle,
+            isPresented: $showingDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("common.delete", role: .destructive) {
+                Task { await model.deleteProfile(profile) }
+            }
+            Button("common.cancel", role: .cancel) {}
+        } message: {
+            Text(LocalizedStringKey("profiles.delete.description"))
+        }
+    }
+
+    private var cardContent: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: profile.source == .remote ? "link" : "doc.text")
@@ -265,55 +317,6 @@ private struct ProfileCard: View {
                 .liquidGlassButton(prominent: !isActive || !model.isConnected)
                 .disabled(isActive && model.isConnected)
             }
-        }
-        .padding(14)
-        .background {
-            if isActive {
-                RoundedRectangle(cornerRadius: CGFloat(SurfaceMetrics.boxCornerRadius), style: .continuous)
-                    .fill(Color.green.opacity(0.12))
-            }
-        }
-        .contentCard()
-        .overlay {
-            if isActive {
-                RoundedRectangle(cornerRadius: CGFloat(SurfaceMetrics.boxCornerRadius), style: .continuous)
-                    .stroke(Color.green.opacity(0.42), lineWidth: 1)
-            }
-        }
-        .animation(.snappy, value: isActive)
-        .sheet(isPresented: $showingRemoteEditor) {
-            RemoteProfileSheet(profile: profile) { name, url, customUserAgent in
-                Task { await model.updateRemoteProfile(profile, name: name, url: url, customUserAgent: customUserAgent) }
-                showingRemoteEditor = false
-            }
-        }
-        .sheet(isPresented: $showingContentEditor) {
-            ProfileContentEditor(profile: profile)
-        }
-        .sheet(isPresented: $showingProfileOverrideEditor) {
-            ProfileOverrideSheet(profile: profile) { contents, globalOverridesEnabled in
-                Task {
-                    if globalOverridesEnabled != profile.customOverridesEnabled {
-                        await model.setCustomOverridesEnabled(globalOverridesEnabled, for: profile)
-                    }
-                    if contents != profile.customOverrideYAML {
-                        await model.setProfileCustomOverride(contents, for: profile)
-                    }
-                }
-                showingProfileOverrideEditor = false
-            }
-        }
-        .confirmationDialog(
-            deletionConfirmationTitle,
-            isPresented: $showingDeleteConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("common.delete", role: .destructive) {
-                Task { await model.deleteProfile(profile) }
-            }
-            Button("common.cancel", role: .cancel) {}
-        } message: {
-            Text(LocalizedStringKey("profiles.delete.description"))
         }
     }
 }

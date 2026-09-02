@@ -10,31 +10,28 @@ struct ExternalResourcesView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 14) {
-                    GroupBox {
-                        Text("resources.description")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(6)
-                    }
+            List {
+                Text("resources.description")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(6)
+                    .contentCard()
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 7, leading: 16, bottom: 7, trailing: 16))
 
-                    ForEach(model.externalResources) { resource in
-                        ExternalResourceCard(
-                            resource: resource,
-                            edit: { editingResource = resource },
-                            replace: {
-                                importedResource = resource
-                                showingImporter = true
-                            }
-                        )
-                    }
+                ForEach(model.externalResources) { resource in
+                    ExternalResourceCard(
+                        resource: resource,
+                        edit: { editingResource = resource },
+                        replace: {
+                            importedResource = resource
+                            showingImporter = true
+                        }
+                    )
                 }
-                .padding(16)
-                .frame(maxWidth: 860)
-                .frame(maxWidth: .infinity)
             }
+            .listStyle(.plain)
             .uniformTopScrollEdge()
             .overlay {
                 if model.externalResources.isEmpty {
@@ -102,8 +99,7 @@ private struct ExternalResourceCard: View {
     }
     private var subscriptionInfo: MihomoSubscriptionInfo? { resource.kind == .proxyProvider ? resource.subscriptionInfo : nil }
 
-    // Custom surface (not GroupBox) so the usage fill can span edge-to-edge behind the content;
-    // visually identical to GroupBox: quaternarySystemFill + boxCornerRadius.
+    // Custom surface (not a plain box) so the usage fill can span edge-to-edge behind the content.
     var body: some View {
         cardContent
             .padding(8)
@@ -116,10 +112,12 @@ private struct ExternalResourceCard: View {
                             .allowsHitTesting(false)
                     }
                     .mask(RoundedRectangle(cornerRadius: SurfaceMetrics.boxCornerRadius, style: .continuous))
-                    .allowsHitTesting(false)
+                        .allowsHitTesting(false)
                 }
             }
             .contentCard()
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 7, leading: 16, bottom: 7, trailing: 16))
     }
 
     private var cardContent: some View {

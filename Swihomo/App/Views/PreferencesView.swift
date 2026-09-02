@@ -7,6 +7,9 @@ struct PreferencesView: View {
     @State private var systemThemeResetID = UUID()
     @AppStorage("automaticallyReclaimsMemory") private var automaticallyReclaimsMemory = false
     @AppStorage("replaceGeoDatabasesWithRulesets") private var replaceGeoDatabasesWithRulesets = false
+    @AppStorage("realtimeDelayTest") private var realtimeDelayTest = false
+    @AppStorage("delayTestMaxConcurrency") private var delayTestMaxConcurrency = 4
+    @AppStorage("autoCollapseProxyGroups") private var autoCollapseProxyGroups = false
     @AppStorage("showsMenuBar") private var showsMenuBar = true
     @AppStorage("menuBarDisplay") private var menuBarDisplay = "iconAndSpeed"
     @AppStorage("appLogLevel") private var appLogLevel = LogLevel.info.rawValue
@@ -74,7 +77,7 @@ struct PreferencesView: View {
 
     private var memoryManagementSettings: some View {
         Section {
-            preferenceRow(
+            PreferenceRow(
                 title: Text("preferences.experimental.autoReclaimMemory"),
                 description: Text("preferences.experimental.autoReclaimMemory.description")
             ) {
@@ -82,13 +85,44 @@ struct PreferencesView: View {
                     .labelsHidden()
             }
 
-            preferenceRow(
+            PreferenceRow(
                 title: Text("preferences.experimental.replaceGeoDatabases"),
                 description: Text("preferences.experimental.replaceGeoDatabases.description")
             ) {
                 Toggle("preferences.experimental.replaceGeoDatabases", isOn: $replaceGeoDatabasesWithRulesets)
                     .labelsHidden()
             }
+
+            PreferenceRow(
+                title: Text("preferences.experimental.realtimeDelayTest"),
+                description: Text("preferences.experimental.realtimeDelayTest.description")
+            ) {
+                Toggle("preferences.experimental.realtimeDelayTest", isOn: $realtimeDelayTest)
+                    .labelsHidden()
+            }
+
+            PreferenceRow(
+                title: Text("preferences.experimental.delayTestConcurrency"),
+                description: Text("preferences.experimental.delayTestConcurrency.description")
+            ) {
+                HStack(spacing: 6) {
+                    TextField("preferences.experimental.delayTestConcurrency", value: $delayTestMaxConcurrency, format: .number.grouping(.never))
+                        .labelsHidden()
+                        .font(.body.monospacedDigit())
+                        .multilineTextAlignment(.trailing)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 76)
+#if os(iOS)
+                        .keyboardType(.numberPad)
+#endif
+                        .onChange(of: delayTestMaxConcurrency) { _, value in
+                            delayTestMaxConcurrency = min(max(value, 1), 32)
+                        }
+                    Stepper("preferences.experimental.delayTestConcurrency", value: $delayTestMaxConcurrency, in: 1...32)
+                        .labelsHidden()
+                }
+            }
+            .disabled(!realtimeDelayTest)
         } header: {
             Label("preferences.experimental", systemImage: "flask")
                 .font(.title3.weight(.semibold))
@@ -97,25 +131,32 @@ struct PreferencesView: View {
 
     private var applicationSettings: some View {
         Section {
-            preferenceRow(
-                title: Text("preferences.application.logLevel"),
-                description: Text("preferences.application.logLevel.description")
-            ) {
+            // Default-style pickers with a visible label: iOS renders a full-width navigation
+            // row (push to select, press-and-hold quick select); macOS renders the title with
+            // a popup menu — the native settings row on both platforms.
+            VStack(alignment: .leading, spacing: 6) {
                 Picker("preferences.application.logLevel", selection: $appLogLevel) {
                     ForEach(LogLevel.allCases, id: \.rawValue) { level in
                         Text(LocalizedStringKey(level.localizationKey)).tag(level.rawValue)
                     }
                 }
-                .labelsHidden()
+                Text("preferences.application.logLevel.description")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
-            LabeledContent("preferences.application.language") {
-                Picker("preferences.application.language", selection: $selectedLanguage) {
-                    ForEach(AppLanguage.allCases) { language in
-                        languageLabel(for: language).tag(language.rawValue)
-                    }
+            Picker("preferences.application.language", selection: $selectedLanguage) {
+                ForEach(AppLanguage.allCases) { language in
+                    languageLabel(for: language).tag(language.rawValue)
                 }
-                .labelsHidden()
+            }
+
+            PreferenceRow(
+                title: Text("preferences.application.autoCollapseProxyGroups"),
+                description: Text("preferences.application.autoCollapseProxyGroups.description")
+            ) {
+                Toggle("preferences.application.autoCollapseProxyGroups", isOn: $autoCollapseProxyGroups)
+                    .labelsHidden()
             }
         } header: {
             Label("preferences.application.title", systemImage: "app.badge")
@@ -134,7 +175,7 @@ struct PreferencesView: View {
 
     private var packetTunnelSettings: some View {
         Section {
-            preferenceRow(
+            PreferenceRow(
                 title: Text(verbatim: SharedText.mtu),
                 description: Text("preferences.packetTunnel.mtu.description"),
                 descriptionColor: packetTunnelMTUInputIsInvalid ? .red : .secondary
@@ -159,7 +200,7 @@ struct PreferencesView: View {
                     }
             }
 
-            preferenceRow(
+            PreferenceRow(
                 title: Text("preferences.packetTunnel.routeIPv6"),
                 description: Text("preferences.packetTunnel.routeIPv6.description")
             ) {
@@ -175,7 +216,7 @@ struct PreferencesView: View {
                 field: .customDNS
             )
 
-            preferenceRow(
+            PreferenceRow(
                 title: Text("preferences.packetTunnel.includeAllNetworks"),
                 description: Text("preferences.packetTunnel.includeAllNetworks.description")
             ) {
@@ -183,7 +224,7 @@ struct PreferencesView: View {
                     .labelsHidden()
             }
 
-            preferenceRow(
+            PreferenceRow(
                 title: Text("preferences.packetTunnel.excludeCellularServices"),
                 description: Text("preferences.packetTunnel.excludeCellularServices.description")
             ) {
@@ -192,7 +233,7 @@ struct PreferencesView: View {
             }
             .disabled(!packetTunnelIncludeAllNetworks)
 
-            preferenceRow(
+            PreferenceRow(
                 title: Text("preferences.packetTunnel.bypassLocalNetworks"),
                 description: Text("preferences.packetTunnel.bypassLocalNetworks.description")
             ) {
@@ -201,7 +242,7 @@ struct PreferencesView: View {
             }
             .disabled(!packetTunnelIncludeAllNetworks)
 
-            preferenceRow(
+            PreferenceRow(
                 title: Text("preferences.packetTunnel.bypassAPNs"),
                 description: Text("preferences.packetTunnel.bypassAPNs.description")
             ) {
@@ -244,27 +285,6 @@ struct PreferencesView: View {
                         minHeight: 240
                     )
                 }
-            }
-        }
-    }
-
-    /// Settings row: title + control on one line, description on its own line below.
-    private func preferenceRow<Control: View>(
-        title: Text,
-        description: Text?,
-        descriptionColor: Color = .secondary,
-        @ViewBuilder control: () -> Control
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                title
-                Spacer()
-                control()
-            }
-            if let description {
-                description
-                    .font(.caption)
-                    .foregroundStyle(descriptionColor)
             }
         }
     }
@@ -399,7 +419,7 @@ struct PreferencesView: View {
         Section {
             Toggle("preferences.menuBar.show", isOn: $showsMenuBar)
 
-            preferenceRow(
+            PreferenceRow(
                 title: Text("preferences.menuBar.display"),
                 description: menuBarDisplay == MenuBarDisplay.icon.rawValue
                     ? Text("preferences.menuBar.display.iconOnlyDescription")
@@ -415,7 +435,7 @@ struct PreferencesView: View {
             }
             .disabled(!showsMenuBar)
 
-            preferenceRow(
+            PreferenceRow(
                 title: Text("preferences.menuBar.hideDockIcon"),
                 description: showsMenuBar ? nil : Text("preferences.menuBar.hideDockIcon.description")
             ) {

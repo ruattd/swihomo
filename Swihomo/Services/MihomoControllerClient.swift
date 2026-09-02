@@ -84,6 +84,21 @@ actor MihomoControllerClient {
         return response.delay
     }
 
+    /// One-shot whole-group test: mihomo returns only the nodes that answered, so
+    /// absent candidates are the failures — timeout and test error are not distinguished.
+    func groupDelay(
+        for group: String,
+        using overrides: ProxyOverrides,
+        testURL: URL = URL(string: "https://www.gstatic.com/generate_204")!
+    ) async throws -> [String: Int] {
+        try await request(
+            path: "group/\(group)/delay",
+            method: "GET",
+            overrides: overrides,
+            queryItems: delayQueryItems(testURL: testURL)
+        )
+    }
+
     private func delayQueryItems(testURL: URL) -> [URLQueryItem] {
         [
             URLQueryItem(name: "url", value: testURL.absoluteString),

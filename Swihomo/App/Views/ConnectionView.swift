@@ -11,6 +11,7 @@ struct DashboardView: View {
     @State private var selectedConnection: MihomoConnectionActivity?
     @State private var connectionSearchText = ""
     @State private var showsBackToTopButton = false
+    @State private var showingCloseAllConfirmation = false
 
     private var showsConnections: Bool {
         model.tunnelStatus == .connected
@@ -95,35 +96,83 @@ struct DashboardView: View {
         }
     }
 
+    private var connections: [MihomoConnectionActivity] {
+        model.sortedConnectionActivities(by: connectionSortCriterion, direction: connectionSortDirection)
+    }
+
+    private var filteredConnections: [MihomoConnectionActivity] {
+        let query = connectionSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return connections }
+        return connections.filter { activity in
+            let metadata = activity.connection.metadata
+            return [
+                activity.connection.processName,
+                activity.connection.destination,
+                metadata.destinationIP,
+                metadata.remoteDestination,
+                address(metadata.destinationIP, port: metadata.destinationPort)
+            ].contains { $0.localizedCaseInsensitiveContains(query) }
+        }
+    }
+
     private var connectedDashboard: some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 16) {
-                    GeometryReader { geometry in
-                        Color.clear.preference(
-                            key: ConnectionDashboardScrollOffsetKey.self,
-                            value: geometry.frame(in: .named("connection-dashboard-scroll")).minY
-                        )
-                    }
-                    .frame(height: 0)
-                    .id("connection-dashboard-top")
-
-                    connectionSummary
-                        .frame(maxWidth: .infinity)
-
-                    LiveConnectionsView(
-                        sortCriterion: $connectionSortCriterion,
-                        sortDirection: $connectionSortDirection,
-                        selectedConnection: $selectedConnection,
-                        searchText: $connectionSearchText
+            List {
+                connectionSummary
+                    .frame(maxWidth: .infinity)
+                    .background(
+                        GeometryReader { geometry in
+                            Color.clear.preference(
+                                key: ConnectionDashboardScrollOffsetKey.self,
+                                value: geometry.frame(in: .named("connection-dashboard-scroll")).minY
+                            )
+                        }
                     )
+                    .id("connection-dashboard-top")
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 16, leading: 16, bottom: 8, trailing: 16))
+
+                panelHeader
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 2, trailing: 16))
+
+                controlsRow
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 8, trailing: 16))
+
+                if filteredConnections.isEmpty {
+                    ContentUnavailableView(
+                        LocalizedStringKey(connections.isEmpty ? "connections.empty" : "connections.noMatch"),
+                        systemImage: "point.3.connected.trianglepath.dotted",
+                        description: Text(LocalizedStringKey(connections.isEmpty ? "connections.empty.description" : "connections.noMatch.description"))
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 260)
+                    .listRowSeparator(.hidden)
+                } else {
+                    ForEach(filteredConnections) { activity in
+                        Button {
+                            selectedConnection = activity
+                        } label: {
+                            ConnectionRow(activity: activity)
+                        }
+                        .buttonStyle(.plain)
+                        .listRowSeparator(.hidden)
+                    }
                 }
-                .frame(maxWidth: 860)
-                .frame(maxWidth: .infinity)
-                .padding(16)
             }
+            .listStyle(.plain)
             .coordinateSpace(name: "connection-dashboard-scroll")
-            .uniformTopScrollEdge()
+            .confirmationDialog(
+                Text(LocalizedStringKey("connection.closeAll.confirmationTitle")),
+                isPresented: $showingCloseAllConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("connection.closeAll", role: .destructive) {
+                    Task { await model.closeAllConnections() }
+                }
+            } message: {
+                Text(LocalizedStringKey("connection.closeAll.confirmationMessage"))
+            }
             .onPreferenceChange(ConnectionDashboardScrollOffsetKey.self) { offset in
                 let shouldShow = offset < -180
                 guard shouldShow != showsBackToTopButton else { return }
@@ -151,6 +200,7 @@ struct DashboardView: View {
             }
         }
     }
+
 }
 
 private struct ConnectionDashboardScrollOffsetKey: PreferenceKey {
@@ -188,89 +238,47 @@ private struct Metric: View {
     }
 }
 
-private struct LiveConnectionsView: View {
-    @EnvironmentObject private var model: AppModel
-    @Binding var sortCriterion: ConnectionSortCriterion
-    @Binding var sortDirection: ProxySortDirection
-    @Binding var selectedConnection: MihomoConnectionActivity?
-    @Binding var searchText: String
-    @State private var showingCloseAllConfirmation = false
+extension DashboardView {
 
-    private var connections: [MihomoConnectionActivity] {
-        model.sortedConnectionActivities(by: sortCriterion, direction: sortDirection)
-    }
-
-    private var filteredConnections: [MihomoConnectionActivity] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return connections }
-        return connections.filter { activity in
-            let metadata = activity.connection.metadata
-            return [
-                activity.connection.processName,
-                activity.connection.destination,
-                metadata.destinationIP,
-                metadata.remoteDestination,
-                address(metadata.destinationIP, port: metadata.destinationPort)
-            ].contains { $0.localizedCaseInsensitiveContains(query) }
-        }
-    }
-
-    var body: some View {
-        GroupBox {
-            panelContent
-                .padding(10)
-        }
-        .confirmationDialog(
-            Text(LocalizedStringKey("connection.closeAll.confirmationTitle")),
-            isPresented: $showingCloseAllConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("connection.closeAll", role: .destructive) {
-                Task { await model.closeAllConnections() }
-            }
-        } message: {
-            Text(LocalizedStringKey("connection.closeAll.confirmationMessage"))
-        }
-    }
-
-    private var panelContent: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("connections.live.title")
-                        .font(.headline)
-                    Text("connections.live.description")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Text("\(connections.count)")
-                    .font(.caption.weight(.semibold))
+    fileprivate var panelHeader: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("connections.live.title")
+                    .font(.headline)
+                Text("connections.live.description")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(Color.cyan.opacity(0.14), in: Capsule())
             }
+            Spacer()
+            Text("\(connections.count)")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(Color.cyan.opacity(0.14), in: Capsule())
+        }
+    }
 
-            HStack(spacing: 10) {
+    fileprivate var controlsRow: some View {
+        HStack(spacing: 10) {
                 Button(role: .destructive) {
                     showingCloseAllConfirmation = true
                 } label: {
                     Label("connection.closeAll", systemImage: "xmark.circle")
                 }
-                .liquidGlassButton()
+                                    .liquidGlassButton()
                 .disabled(connections.isEmpty || model.isClosingAllConnections)
                 Spacer()
                 Menu {
                     Section("common.sortBy") {
                         ForEach(ConnectionSortCriterion.allCases) { criterion in
                             Button {
-                                sortCriterion = criterion
-                                sortDirection = criterion == .speed ? .descending : .ascending
+                                connectionSortCriterion = criterion
+                                connectionSortDirection = criterion == .speed ? .descending : .ascending
                             } label: {
                                 Label(
                                     LocalizedStringKey(criterion.localizationKey),
-                                    systemImage: sortCriterion == criterion ? "checkmark" : "circle"
+                                    systemImage: connectionSortCriterion == criterion ? "checkmark" : "circle"
                                 )
                             }
                         }
@@ -278,44 +286,23 @@ private struct LiveConnectionsView: View {
                     Section("common.direction") {
                         ForEach(ProxySortDirection.allCases) { direction in
                             Button {
-                                sortDirection = direction
+                                connectionSortDirection = direction
                             } label: {
                                 Label(
                                     LocalizedStringKey(direction.localizationKey),
-                                    systemImage: sortDirection == direction ? "checkmark" : direction.systemImage
+                                    systemImage: connectionSortDirection == direction ? "checkmark" : direction.systemImage
                                 )
                             }
                         }
                     }
                 } label: {
                     Label(
-                        LocalizedStringKey(sortCriterion.localizationKey),
-                        systemImage: sortDirection.systemImage
+                        LocalizedStringKey(connectionSortCriterion.localizationKey),
+                        systemImage: connectionSortDirection.systemImage
                     )
                         .font(.subheadline.weight(.medium))
                 }
                 .liquidGlassButton()
-            }
-
-            if filteredConnections.isEmpty {
-                ContentUnavailableView(
-                    LocalizedStringKey(connections.isEmpty ? "connections.empty" : "connections.noMatch"),
-                    systemImage: "point.3.connected.trianglepath.dotted",
-                    description: Text(LocalizedStringKey(connections.isEmpty ? "connections.empty.description" : "connections.noMatch.description"))
-                )
-                .frame(maxWidth: .infinity, minHeight: 260)
-            } else {
-                LazyVStack(spacing: 8) {
-                    ForEach(filteredConnections) { activity in
-                        Button {
-                            selectedConnection = activity
-                        } label: {
-                            ConnectionRow(activity: activity)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
         }
     }
 }
@@ -324,14 +311,14 @@ private struct ConnectionRow: View {
     let activity: MihomoConnectionActivity
 
     var body: some View {
-        GroupBox {
-            rowContent
-                .padding(6)
-        }
-        .contentShape(RoundedRectangle(cornerRadius: SurfaceMetrics.boxCornerRadius, style: .continuous))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(activity.connection.processName), \(byteRate(activity.totalSpeed)), \(activity.connection.routingDescription)")
-        .accessibilityHint("accessibility.connectionDetails")
+        rowContent
+            .padding(6)
+            .contentCard()
+            .contentShape(RoundedRectangle(cornerRadius: SurfaceMetrics.boxCornerRadius, style: .continuous))
+            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(activity.connection.processName), \(byteRate(activity.totalSpeed)), \(activity.connection.routingDescription)")
+            .accessibilityHint("accessibility.connectionDetails")
     }
 
     private var rowContent: some View {

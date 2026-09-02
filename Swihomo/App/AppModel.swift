@@ -505,18 +505,61 @@ final class AppModel: ObservableObject {
         guard testingProxyGroupIDs.insert(group.id).inserted else { return }
         defer { testingProxyGroupIDs.remove(group.id) }
 
-        // Per-node requests instead of the group endpoint: the group endpoint omits failures
-        // without a reason, while single-node calls distinguish timeout (504) from test
-        // errors (503) — and each card updates as soon as its own result lands.
-        await withTaskGroup(of: Void.self) { taskGroup in
-            for node in group.candidates {
-                taskGroup.addTask { [self] in
-                    await testDelay(for: node)
+        if UserDefaults.standard.bool(forKey: "realtimeDelayTest") {
+            // Per-node requests instead of the group endpoint: the group endpoint omits failures
+            // without a reason, while single-node calls distinguish timeout (504) from test
+            // errors (503) — and each card updates as soon as its own result lands.
+            // In-flight tests are capped: every test allocates connection/test buffers in
+            // mihomo, so large groups run in a sliding window instead of unbounded fan-out.
+            let configuredLimit = UserDefaults.standard.integer(forKey: "delayTestMaxConcurrency")
+            let maxConcurrentTests = max(1, configuredLimit == 0 ? 4 : configuredLimit)
+            var pending = group.candidates.makeIterator()
+            await withTaskGroup(of: Void.self) { taskGroup in
+                var running = 0
+                while let node = pending.next() {
+                    if running >= maxConcurrentTests {
+                        await taskGroup.next()
+                        running -= 1
+                    }
+                    taskGroup.addTask { [self] in
+                        await testDelay(for: node)
+                    }
+                    running += 1
                 }
             }
+        } else {
+            await testGroupDelay(group)
         }
         await reloadProxyGroups(showErrors: false)
         record(.debug, module: "Proxies", "Delay test for \(group.name): \(group.candidates.count) nodes.")
+    }
+
+    /// Group-API test: one request for the whole group. mihomo omits failed nodes from
+    /// the result map, so every missing candidate — timeout or test error alike — is
+    /// surfaced as a uniform error.
+    private func testGroupDelay(_ group: MihomoProxyGroup) async {
+        testingProxyNodeNames.formUnion(group.candidates)
+        defer { testingProxyNodeNames.subtract(group.candidates) }
+        do {
+            let results = try await controller.groupDelay(for: group.name, using: snapshot.overrides)
+            for node in group.candidates {
+                if let delay = results[node] {
+                    delays[node] = delay
+                    failedDelayTests[node] = nil
+                } else {
+                    delays[node] = nil
+                    failedDelayTests[node] = .error
+                }
+            }
+        } catch ClientError.httpFailure(let code) where code == 503 || code == 504 {
+            for node in group.candidates {
+                delays[node] = nil
+                failedDelayTests[node] = .error
+            }
+            record(.debug, module: "Proxies", "Group delay test for \(group.name) failed (HTTP \(code)).")
+        } catch {
+            present(error, module: "Proxies")
+        }
     }
 
     func sortedProxyGroups(

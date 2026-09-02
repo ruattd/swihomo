@@ -105,6 +105,8 @@
 "preferences.application.title" = "Application";
 "preferences.application.logLevel" = "App Log Level";
 "preferences.application.language" = "Language";
+"preferences.application.autoCollapseProxyGroups" = "Auto-collapse other proxy groups";
+"preferences.application.autoCollapseProxyGroups.description" = "Expanding a proxy group automatically collapses the other expanded groups.";
 "preferences.application.logLevel.description" = "Controls Swihomo app logs only. Configure mihomo core logging in Overrides.";
 "preferences.packetTunnel.title" = "Packet Tunnel";
 "preferences.packetTunnel.reconnectDescription" = "All settings below apply after you reconnect.";
@@ -243,7 +245,7 @@
 "proxies.sort.nodes.sortBy" = "Nodes Within Groups: Sort by";
 "proxies.sort.nodes.direction" = "Nodes Within Groups: Direction";
 
-"overrides.save" = "Save Overrides";
+"overrides.save" = "Save";
 "overrides.basicSettings" = "Basic Settings";
 "overrides.basicSettings.description" = "Applied after your custom YAML, so these values always take priority.";
 "overrides.routingMode" = "Routing Mode";
@@ -269,7 +271,7 @@
 "overrides.escapeKey" = "Escape a literal plus-prefixed or plus-suffixed key";
 "overrides.allSaved" = "All changes saved";
 "overrides.unsavedChanges" = "Unsaved changes";
-"overrides.saveDescription" = "Routing mode and log level update live. Other changes apply after reconnect; invalid YAML prevents mihomo from starting.";
+"overrides.saveDescription" = "Routing mode and log level update live, other changes apply after reconnect";
 "overrides.reconnect.confirmationTitle" = "Reconnect to Apply Changes?";
 "overrides.reconnect.description" = "Your saved network, controller, DNS, or custom YAML changes require reconnecting to take effect.";
 
@@ -309,3 +311,7 @@
 "menubar.quitApp" = "Quit Swihomo";
 "preferences.experimental.replaceGeoDatabases" = "Replace Geo databases with rulesets";
 "preferences.experimental.replaceGeoDatabases.description" = "Rewrites GEOIP/GEOSITE rules and DNS geosite policies to mrs rulesets and removes geo database settings, reducing memory usage. dns.fallback-filter.geosite is not migrated. Applies the next time you connect.";
+"preferences.experimental.delayTestConcurrency" = "Delay test concurrency";
+"preferences.experimental.realtimeDelayTest" = "Realtime delay test";
+"preferences.experimental.realtimeDelayTest.description" = "Tests each node individually and updates cards as results arrive. When off, group tests use the group API instead and failed nodes are all reported as errors.";
+"preferences.experimental.delayTestConcurrency.description" = "Caps how many nodes are tested at the same time during group delay tests. Excessively large values can easily cause memory pressure.";

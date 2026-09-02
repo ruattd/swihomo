@@ -2,6 +2,42 @@
 
 import SwiftUI
 
+/// Settings row: title + control on one line, description on its own line below.
+/// Shared by Preferences and Overrides so both settings surfaces stay identical.
+struct PreferenceRow<Control: View>: View {
+    let title: Text
+    let description: Text?
+    let descriptionColor: Color
+    @ViewBuilder var control: Control
+
+    init(
+        title: Text,
+        description: Text? = nil,
+        descriptionColor: Color = .secondary,
+        @ViewBuilder control: () -> Control
+    ) {
+        self.title = title
+        self.description = description
+        self.descriptionColor = descriptionColor
+        self.control = control()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                title
+                Spacer()
+                control
+            }
+            if let description {
+                description
+                    .font(.caption)
+                    .foregroundStyle(descriptionColor)
+            }
+        }
+    }
+}
+
 enum SurfaceMetrics {
     static let panelCornerRadius: Double = 20
     static let rowCornerRadius: Double = 12
@@ -19,16 +55,27 @@ enum SurfaceMetrics {
     }
 }
 
+extension EdgeInsets {
+    /// Standard content insets for a settings row inside a grouped section.
+    static var settingsRow: EdgeInsets { EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12) }
+}
+
 extension View {
     /// Pins the top scroll-edge effect to the soft style (progressive blur). Every page uses
     /// ScrollView/Form containers, so the window no longer latches the style of the last-visited page.
+    /// macOS only: iOS must keep the default automatic style — pinning .soft leaves the
+    /// navigation bar fully transparent on iOS 27.
     @ViewBuilder
     func uniformTopScrollEdge() -> some View {
-        if #available(macOS 26.0, iOS 26.0, *) {
+#if os(macOS)
+        if #available(macOS 26.0, *) {
             self.scrollEdgeEffectStyle(.soft, for: .top)
         } else {
             self
         }
+#else
+        self
+#endif
     }
 
     /// Custom card surface matching native GroupBox metrics. Prefer a real GroupBox for pure

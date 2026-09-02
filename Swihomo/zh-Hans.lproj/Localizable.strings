@@ -105,6 +105,8 @@
 "preferences.application.title" = "应用程序";
 "preferences.application.logLevel" = "应用日志级别";
 "preferences.application.language" = "语言";
+"preferences.application.autoCollapseProxyGroups" = "自动折叠其他代理组";
+"preferences.application.autoCollapseProxyGroups.description" = "展开任意代理组时, 自动折叠其他已展开的代理组";
 "preferences.application.logLevel.description" = "仅控制 Swihomo 应用日志, mihomo 核心日志请在覆盖设置中配置";
 "preferences.packetTunnel.title" = "数据包隧道";
 "preferences.packetTunnel.reconnectDescription" = "以下所有设置将在重新连接后生效。";
@@ -243,7 +245,7 @@
 "proxies.sort.nodes.sortBy" = "组内节点: 排序方式";
 "proxies.sort.nodes.direction" = "组内节点: 方向";
 
-"overrides.save" = "保存覆盖设置";
+"overrides.save" = "保存";
 "overrides.basicSettings" = "基本设置";
 "overrides.basicSettings.description" = "应用于你的自定义 YAML 之后, 因此这些值始终优先";
 "overrides.routingMode" = "路由模式";
@@ -269,7 +271,7 @@
 "overrides.escapeKey" = "转义字面量加号前缀或后缀的键";
 "overrides.allSaved" = "所有更改已保存";
 "overrides.unsavedChanges" = "有未保存的更改";
-"overrides.saveDescription" = "路由模式和日志级别会实时更新, 其他更改在重新连接后生效, 无效 YAML 会阻止 mihomo 启动";
+"overrides.saveDescription" = "路由模式和日志级别会实时更新, 其他更改在重新连接后生效";
 "overrides.reconnect.confirmationTitle" = "重新连接以应用更改？";
 "overrides.reconnect.description" = "已保存的网络, 控制器, DNS 或自定义 YAML 更改需要重新连接后才能生效";
 
@@ -309,3 +311,7 @@
 "menubar.quitApp" = "退出 Swihomo";
 "preferences.experimental.replaceGeoDatabases" = "用规则集替代 Geo 数据库";
 "preferences.experimental.replaceGeoDatabases.description" = "将 GEOIP/GEOSITE 规则与 DNS 中的 geosite 策略改写为 mrs 规则集, 并移除 Geo 数据库设置以减少内存占用, 不会迁移 dns.fallback-filter.geosite, 下次连接时生效";
+"preferences.experimental.delayTestConcurrency" = "延迟测试并发数量";
+"preferences.experimental.realtimeDelayTest" = "实时延迟测试";
+"preferences.experimental.realtimeDelayTest.description" = "逐个测试节点并实时更新结果卡片, 关闭时组测速使用统一的组 API, 失败的节点一律视为错误";
+"preferences.experimental.delayTestConcurrency.description" = "限制组测速时同时测试的节点数量, 过大的数量容易造成内存压力";

@@ -81,22 +81,17 @@ struct LogsView: View {
 
     var body: some View {
         NavigationStack {
-            // Single lazy implementation for both platforms: macOS grouped Form lays out rows
-            // eagerly (measured 10x slower with 5000 rows) and GroupedListStyle is iOS-only.
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 10) {
-                    ForEach(entries) { entry in
-                        GroupBox {
-                            LogEntryRow(entry: entry)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(6)
-                        }
-                    }
+            List {
+                ForEach(entries) { entry in
+                    LogEntryRow(entry: entry)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(6)
+                        .contentCard()
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
                 }
-                .padding(16)
-                .frame(maxWidth: 860)
-                .frame(maxWidth: .infinity)
             }
+            .listStyle(.plain)
             .uniformTopScrollEdge()
             .overlay {
                 if entries.isEmpty {

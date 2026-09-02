@@ -13,8 +13,12 @@ struct ProxiesView: View {
         NavigationStack {
             Group {
                 if model.tunnelStatus == .connected {
+                    // ScrollView, not List: expansion animates row height, and List rows
+                    // hand height changes to UICollectionView, which fights SwiftUI's
+                    // layout animation (double animation). Laziness that matters — the
+                    // node grids — stays lazy inside each card via LazyVGrid.
                     ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 14) {
+                        LazyVStack(spacing: 14) {
                             ForEach(model.sortedProxyGroups(by: groupSortCriterion, direction: groupSortDirection)) { group in
                                 ProxyGroupSection(
                                     group: group,
@@ -27,7 +31,6 @@ struct ProxiesView: View {
                             }
                         }
                         .padding()
-                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .uniformTopScrollEdge()
                     .overlay {
@@ -53,7 +56,6 @@ struct ProxiesView: View {
                     }
                 }
             }
-            .animation(reduceMotion ? nil : .snappy, value: model.proxyGroups)
             .navigationTitle(Text(LocalizedStringKey("navigation.proxies")))
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
@@ -128,9 +130,13 @@ struct ProxiesView: View {
     }
 
     private func toggle(_ group: MihomoProxyGroup) {
-        withAnimation(reduceMotion ? nil : .snappy) {
+        // Fixed-duration ease: springs overshoot proportionally to distance, so tall
+        // cards rebound hard when collapsing. easeInOut has no overshoot at any height.
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
             if expandedGroupNames.contains(group.id) {
                 expandedGroupNames.remove(group.id)
+            } else if UserDefaults.standard.bool(forKey: "autoCollapseProxyGroups") {
+                expandedGroupNames = [group.id]
             } else {
                 expandedGroupNames.insert(group.id)
             }
@@ -138,8 +144,12 @@ struct ProxiesView: View {
     }
 
     private func test(_ group: MihomoProxyGroup) {
-        withAnimation(reduceMotion ? nil : .snappy) {
-            _ = expandedGroupNames.insert(group.id)
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
+            if UserDefaults.standard.bool(forKey: "autoCollapseProxyGroups") {
+                expandedGroupNames = [group.id]
+            } else {
+                _ = expandedGroupNames.insert(group.id)
+            }
         }
         Task { await model.testDelays(in: group) }
     }
@@ -181,10 +191,11 @@ private struct ProxyGroupSection: View {
     private var isTesting: Bool { model.testingProxyGroupIDs.contains(group.id) }
 
     var body: some View {
-        GroupBox {
-            sectionContent
-                .padding(8)
-        }
+        sectionContent
+            .padding(8)
+            .contentCard()
+            // Keep collapsing content inside the card during the height animation.
+            .clipShape(RoundedRectangle(cornerRadius: SurfaceMetrics.boxCornerRadius, style: .continuous))
     }
 
     private var sectionContent: some View {
