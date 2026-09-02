@@ -304,9 +304,9 @@
 "logs.clearLogs" = "Clear Logs";
 "logs.clearLogs.confirmationTitle" = "Clear Logs?";
 "logs.clearLogs.description" = "Choose which logs to permanently remove.";
-"logs.clearApp" = "Clear App Logs";
-"logs.clearCore" = "Clear Core Logs";
-"logs.clearAll" = "Clear All Logs";
+"logs.clearApp" = "App Logs";
+"logs.clearCore" = "Core Logs";
+"logs.clearAll" = "All";
 "logs.source.app" = "App";
 "logs.source.core" = "Core";
 

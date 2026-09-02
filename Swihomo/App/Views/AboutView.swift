@@ -15,40 +15,45 @@ struct AboutView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            VStack(spacing: 12) {
-                appIcon
-                    .frame(width: 96, height: 96)
+        // The icon header lives inside the Form so the whole page scrolls as one surface
+        // instead of only the info/open-source sections scrolling beneath a pinned header.
+        Form {
+            Section {
+                VStack(spacing: 12) {
+                    appIcon
+                        .frame(width: 96, height: 96)
 
-                Text("Swihomo")
-                    .font(.title.bold())
-                Text("about.subtitle")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.vertical, 20)
-
-            Form {
-                Section {
-                    AboutDetailRow(title: "about.version", value: appVersion)
-                    AboutDetailRow(title: "about.build", value: buildNumber)
-                    AboutDetailRow(title: "about.mihomoCore", value: MihomoCoreVersion.version)
-                    AboutDetailRow(title: "about.license", value: "AGPL-3.0")
-                }
-
-                Section {
-                    Text("about.openSource.description")
+                    Text("Swihomo")
+                        .font(.title.bold())
+                    Text("about.subtitle")
                         .font(.callout)
                         .foregroundStyle(.secondary)
-                    Link("about.openSource.viewSwihomo", destination: URL(string: "https://github.com/ruattd/swihomo")!)
-                    Link("about.openSource.viewMihomo", destination: URL(string: "https://github.com/MetaCubeX/mihomo")!)
-                } header: {
-                    Text("about.openSource")
                 }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
             }
-            .formStyle(.grouped)
-            .uniformTopScrollEdge()
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets())
+
+            Section {
+                AboutDetailRow(title: "about.version", value: appVersion)
+                AboutDetailRow(title: "about.build", value: buildNumber)
+                AboutDetailRow(title: "about.mihomoCore", value: MihomoCoreVersion.version)
+                AboutDetailRow(title: "about.license", value: "AGPL-3.0")
+            }
+
+            Section {
+                Text("about.openSource.description")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Link("about.openSource.viewSwihomo", destination: URL(string: "https://github.com/ruattd/swihomo")!)
+                Link("about.openSource.viewMihomo", destination: URL(string: "https://github.com/MetaCubeX/mihomo")!)
+            } header: {
+                Text("about.openSource")
+            }
         }
+        .formStyle(.grouped)
+        .uniformTopScrollEdge()
         .navigationTitle(Text(LocalizedStringKey("navigation.about")))
     }
 
