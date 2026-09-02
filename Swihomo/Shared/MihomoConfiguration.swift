@@ -37,13 +37,17 @@ enum MihomoConfigurationBuilder {
 
     static func standardOverridesYAML(_ overrides: ProxyOverrides) -> String {
         let secret = yamlQuoted(overrides.controllerSecret)
+        // The app dispatches API requests in-process through the bridge, so the external
+        // controller exists only for third-party clients: port 0 binds an unreachable
+        // ephemeral port, effectively disabling it.
+        let controllerPort = overrides.externalControllerEnabled ? overrides.controllerPort : 0
         return """
         mode: \(overrides.mode.rawValue)
         log-level: \(overrides.logLevel.rawValue)
         mixed-port: \(overrides.mixedPort)
         allow-lan: \(overrides.allowLAN)
         ipv6: \(overrides.ipv6Enabled)
-        external-controller: 127.0.0.1:\(overrides.controllerPort)
+        external-controller: 127.0.0.1:\(controllerPort)
         secret: \(secret)
         dns:
           enable: \(overrides.dnsEnabled)

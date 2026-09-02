@@ -263,6 +263,9 @@
 "overrides.enableDNS" = "Enable DNS";
 "overrides.mixedPort" = "Mixed Port";
 "overrides.controllerPort" = "Controller Port";
+"overrides.externalController" = "External Controller";
+"overrides.externalController.enable" = "Enable external controller";
+"overrides.externalController.description" = "Exposes the mihomo REST API on 127.0.0.1 for third-party clients. The app talks to the core directly and is unaffected when this is off.";
 "overrides.controllerSecret" = "Controller secret";
 "overrides.customYAML" = "Custom YAML Override";
 "overrides.customYAML.description" = "Deep-merge profile fields without modifying the source subscription.";

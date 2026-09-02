@@ -404,7 +404,7 @@ final class AppModel: ObservableObject {
 
             if previousOverrides.logLevel != overrides.logLevel {
                 do {
-                    try await controller.updateLogLevel(overrides.logLevel, using: previousOverrides)
+                    try await controller.updateLogLevel(overrides.logLevel)
                     record(.info, module: "Configuration", "Applied log level to the running core.")
                 } catch {
                     record(.warning, module: "Configuration", "Saved log level. Reconnect to apply it to the running core.")
@@ -413,7 +413,7 @@ final class AppModel: ObservableObject {
 
             if previousOverrides.mode != overrides.mode {
                 do {
-                    try await controller.updateRoutingMode(overrides.mode, using: previousOverrides)
+                    try await controller.updateRoutingMode(overrides.mode)
                     record(.info, module: "Configuration", "Applied routing mode to the running core.")
                 } catch {
                     record(.warning, module: "Configuration", "Saved routing mode. Reconnect to apply it to the running core.")
@@ -437,7 +437,7 @@ final class AppModel: ObservableObject {
         proxyRefreshGeneration += 1
         let generation = proxyRefreshGeneration
         do {
-            let groups = try await controller.proxyGroups(using: snapshot.overrides)
+            let groups = try await controller.proxyGroups()
             guard generation == proxyRefreshGeneration else { return }
             recordOriginalProxyOrder(groups)
             proxyGroups = groups
@@ -467,7 +467,7 @@ final class AppModel: ObservableObject {
             return
         }
         await perform(module: "Proxies", "Selected \(node) for \(group.name).") { [self] in
-            try await controller.select(node: node, in: group.name, using: snapshot.overrides)
+            try await controller.select(node: node, in: group.name)
             await reloadProxyGroups(showErrors: false)
         }
     }
@@ -480,7 +480,7 @@ final class AppModel: ObservableObject {
         do {
             // mihomo answers a failed test with 504 (timeout) or 503 (test error) and an
             // optional JSON message; both surface as an in-place failure marker, not a banner.
-            if let delay = try await controller.delay(for: node, using: snapshot.overrides) {
+            if let delay = try await controller.delay(for: node) {
                 delays[node] = delay
                 record(.debug, module: "Proxies", "Delay test for \(node): \(delay) ms.")
             } else {
@@ -541,7 +541,7 @@ final class AppModel: ObservableObject {
         testingProxyNodeNames.formUnion(group.candidates)
         defer { testingProxyNodeNames.subtract(group.candidates) }
         do {
-            let results = try await controller.groupDelay(for: group.name, using: snapshot.overrides)
+            let results = try await controller.groupDelay(for: group.name)
             for node in group.candidates {
                 if let delay = results[node] {
                     delays[node] = delay
@@ -703,7 +703,7 @@ final class AppModel: ObservableObject {
         connectionRefreshGeneration += 1
         let generation = connectionRefreshGeneration
         do {
-            let connections = try await controller.connections(using: snapshot.overrides)
+            let connections = try await controller.connections()
             guard generation == connectionRefreshGeneration else { return }
             updateConnectionActivities(connections, at: Date())
         } catch where showErrors && generation == connectionRefreshGeneration {
@@ -746,7 +746,7 @@ final class AppModel: ObservableObject {
         defer { closingConnectionIDs.remove(id) }
 
         do {
-            try await controller.closeConnection(id: id, using: snapshot.overrides)
+            try await controller.closeConnection(id: id)
             connectionActivities.removeAll { $0.id == id }
             connectionTransferSamples[id] = nil
             record(.info, module: "Connections", "Closed connection \(id).")
@@ -771,7 +771,7 @@ final class AppModel: ObservableObject {
         defer { isClosingAllConnections = false }
 
         do {
-            try await controller.closeAllConnections(using: snapshot.overrides)
+            try await controller.closeAllConnections()
             connectionActivities = []
             connectionTransferSamples = [:]
             record(.info, module: "Connections", "Closed all connections.")
@@ -836,11 +836,11 @@ final class AppModel: ObservableObject {
 
         do {
             if resource.kind == .geoData {
-                try await controller.updateGeoData(using: snapshot.overrides)
+                try await controller.updateGeoData()
                 recordGeoDataUpdate(at: .now)
                 record(.info, module: "Resources", "Updated enabled geodata databases.")
             } else {
-                try await controller.updateExternalResource(resource, using: snapshot.overrides)
+                try await controller.updateExternalResource(resource)
                 await reloadProxyGroups(showErrors: false)
                 record(.info, module: "Resources", "Updated external resource \(resource.name).")
             }
@@ -922,7 +922,7 @@ final class AppModel: ObservableObject {
         }
         do {
             let resources = try await tunnel.externalResources()
-            let providerDetails = (try? await controller.externalResourceDetails(using: snapshot.overrides)) ?? [:]
+            let providerDetails = (try? await controller.externalResourceDetails()) ?? [:]
             externalResources = resources.map { resource in
                 var resource = resource
                 if let details = providerDetails[resource.id] {

@@ -200,33 +200,48 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     private func performControllerRequest(_ request: MihomoControllerRequest) async throws -> (Data, Int) {
-        guard (1...65535).contains(request.controllerPort) else {
-            throw URLError(.badURL)
-        }
-
+        // Direct in-process dispatch into the mihomo router: no loopback HTTP, no external
+        // controller dependency, and no secret — the bridge is trusted by construction.
         var components = URLComponents()
-        components.scheme = "http"
-        components.host = "127.0.0.1"
-        components.port = request.controllerPort
         components.path = "/\(request.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")))"
         components.queryItems = request.queryItems.map {
             URLQueryItem(name: $0.name, value: $0.value)
         }
-        guard let url = components.url else { throw URLError(.badURL) }
+        let target = components.path + (components.percentEncodedQuery.map { "?\($0)" } ?? "")
 
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = request.method
-        urlRequest.httpBody = request.body
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if !request.controllerSecret.isEmpty {
-            urlRequest.setValue("Bearer \(request.controllerSecret)", forHTTPHeaderField: "Authorization")
+        var bodyBytes = [UInt8](request.body ?? Data())
+        let bodyLength = bodyBytes.count
+        var responsePointer: UnsafeMutablePointer<UInt8>?
+        var responseLength = 0
+        let status = request.method.withCString { methodPointer in
+            target.withCString { targetPointer in
+                bodyBytes.withUnsafeMutableBufferPointer { bodyBuffer in
+                    SwihomoCoreAPIRequest(
+                        methodPointer,
+                        targetPointer,
+                        bodyBuffer.baseAddress,
+                        bodyLength,
+                        &responsePointer,
+                        &responseLength
+                    )
+                }
+            }
         }
+        // The bridge reports transport failures as codes below 100; HTTP statuses are >= 100.
+        guard status >= 100 else {
+            throw ClientError.controllerRequestFailed(Self.lastCoreError())
+        }
+        defer { if let responsePointer { SwihomoCoreFreeData(responsePointer) } }
+        return (responsePointer.map { Data(bytes: $0, count: responseLength) } ?? Data(), Int(status))
+    }
 
-        let (data, urlResponse) = try await URLSession.shared.data(for: urlRequest)
-        guard let response = urlResponse as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
+    private static func lastCoreError() -> String {
+        guard let pointer = SwihomoCoreLastError() else {
+            return "Mihomo core API request failed."
         }
-        return (data, response.statusCode)
+        defer { SwihomoCoreFreeString(pointer) }
+        let message = String(cString: pointer)
+        return message.isEmpty ? "Mihomo core API request failed." : message
     }
 
     private func networkSettings(

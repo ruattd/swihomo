@@ -144,6 +144,7 @@ struct ProxyOverrides: Codable, Equatable {
     var allowLAN: Bool
     var ipv6Enabled: Bool
     var dnsEnabled: Bool
+    var externalControllerEnabled: Bool
     var controllerPort: Int
     var controllerSecret: String
     var customYAML: String
@@ -155,6 +156,7 @@ struct ProxyOverrides: Codable, Equatable {
         case allowLAN
         case ipv6Enabled
         case dnsEnabled
+        case externalControllerEnabled
         case controllerPort
         case controllerSecret
         case customYAML
@@ -167,6 +169,7 @@ struct ProxyOverrides: Codable, Equatable {
         allowLAN: Bool,
         ipv6Enabled: Bool,
         dnsEnabled: Bool,
+        externalControllerEnabled: Bool = false,
         controllerPort: Int,
         controllerSecret: String,
         customYAML: String = ""
@@ -177,6 +180,7 @@ struct ProxyOverrides: Codable, Equatable {
         self.allowLAN = allowLAN
         self.ipv6Enabled = ipv6Enabled
         self.dnsEnabled = dnsEnabled
+        self.externalControllerEnabled = externalControllerEnabled
         self.controllerPort = controllerPort
         self.controllerSecret = controllerSecret
         self.customYAML = customYAML
@@ -190,6 +194,7 @@ struct ProxyOverrides: Codable, Equatable {
         allowLAN = try container.decode(Bool.self, forKey: .allowLAN)
         ipv6Enabled = try container.decode(Bool.self, forKey: .ipv6Enabled)
         dnsEnabled = try container.decode(Bool.self, forKey: .dnsEnabled)
+        externalControllerEnabled = try container.decodeIfPresent(Bool.self, forKey: .externalControllerEnabled) ?? false
         controllerPort = try container.decode(Int.self, forKey: .controllerPort)
         controllerSecret = try container.decode(String.self, forKey: .controllerSecret)
         customYAML = try container.decodeIfPresent(String.self, forKey: .customYAML) ?? ""
@@ -203,6 +208,7 @@ struct ProxyOverrides: Codable, Equatable {
         try container.encode(allowLAN, forKey: .allowLAN)
         try container.encode(ipv6Enabled, forKey: .ipv6Enabled)
         try container.encode(dnsEnabled, forKey: .dnsEnabled)
+        try container.encode(externalControllerEnabled, forKey: .externalControllerEnabled)
         try container.encode(controllerPort, forKey: .controllerPort)
         try container.encode(controllerSecret, forKey: .controllerSecret)
         try container.encode(customYAML, forKey: .customYAML)
@@ -563,8 +569,6 @@ struct MihomoControllerQueryItem: Codable {
 struct MihomoControllerRequest: Codable {
     let path: String
     let method: String
-    let controllerPort: Int
-    let controllerSecret: String
     let body: Data?
     let queryItems: [MihomoControllerQueryItem]
 }
@@ -802,8 +806,6 @@ struct TunnelProviderRequest: Codable {
     let resourceContents: Data?
     let path: String?
     let method: String?
-    let controllerPort: Int?
-    let controllerSecret: String?
     let body: Data?
     let queryItems: [MihomoControllerQueryItem]?
 
@@ -819,8 +821,6 @@ struct TunnelProviderRequest: Codable {
         self.resourceContents = resourceContents
         path = controllerRequest?.path
         method = controllerRequest?.method
-        controllerPort = controllerRequest?.controllerPort
-        controllerSecret = controllerRequest?.controllerSecret
         body = controllerRequest?.body
         queryItems = controllerRequest?.queryItems
     }

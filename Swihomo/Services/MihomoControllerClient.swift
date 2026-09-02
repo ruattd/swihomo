@@ -7,11 +7,10 @@ actor MihomoControllerClient {
         self.tunnel = tunnel
     }
 
-    func proxyGroups(using overrides: ProxyOverrides) async throws -> [MihomoProxyGroup] {
+    func proxyGroups() async throws -> [MihomoProxyGroup] {
         let response: MihomoProxyResponse = try await request(
             path: "proxies",
             method: "GET",
-            overrides: overrides
         )
 
         return response.proxies
@@ -28,47 +27,41 @@ actor MihomoControllerClient {
     func select(
         node: String,
         in group: String,
-        using overrides: ProxyOverrides
     ) async throws {
         struct Selection: Encodable { let name: String }
         let body = try JSONEncoder().encode(Selection(name: node))
         let _: EmptyResponse = try await request(
             path: "proxies/\(group)",
             method: "PUT",
-            overrides: overrides,
             body: body
         )
     }
 
     func delay(
         for proxy: String,
-        using overrides: ProxyOverrides,
         testURL: URL = URL(string: "https://www.gstatic.com/generate_204")!
     ) async throws -> Int? {
         do {
             let response: MihomoDelayResponse = try await request(
                 path: "proxies/\(proxy)/delay",
                 method: "GET",
-                overrides: overrides,
                 queryItems: delayQueryItems(testURL: testURL)
             )
             return response.delay
         } catch ClientError.httpFailure(let code) where code == 404 {
             // Provider-backed nodes are absent from mihomo's global proxy map, so the generic
             // endpoint 404s; test them through their owning provider's healthcheck instead.
-            return try await providerNodeDelay(for: proxy, using: overrides, testURL: testURL)
+            return try await providerNodeDelay(for: proxy, testURL: testURL)
         }
     }
 
     private func providerNodeDelay(
         for proxy: String,
-        using overrides: ProxyOverrides,
         testURL: URL
     ) async throws -> Int? {
         let providers: MihomoProviderResponse = try await request(
             path: "providers/proxies",
             method: "GET",
-            overrides: overrides
         )
         guard let providerName = providers.providers.first(where: {
             $0.value.proxies?.contains { $0.name == proxy } == true
@@ -78,7 +71,6 @@ actor MihomoControllerClient {
         let response: MihomoDelayResponse = try await request(
             path: "providers/proxies/\(providerName)/\(proxy)/healthcheck",
             method: "GET",
-            overrides: overrides,
             queryItems: delayQueryItems(testURL: testURL)
         )
         return response.delay
@@ -88,13 +80,11 @@ actor MihomoControllerClient {
     /// absent candidates are the failures — timeout and test error are not distinguished.
     func groupDelay(
         for group: String,
-        using overrides: ProxyOverrides,
         testURL: URL = URL(string: "https://www.gstatic.com/generate_204")!
     ) async throws -> [String: Int] {
         try await request(
             path: "group/\(group)/delay",
             method: "GET",
-            overrides: overrides,
             queryItems: delayQueryItems(testURL: testURL)
         )
     }
@@ -106,34 +96,30 @@ actor MihomoControllerClient {
         ]
     }
 
-    func connections(using overrides: ProxyOverrides) async throws -> [MihomoConnection] {
+    func connections() async throws -> [MihomoConnection] {
         let response: MihomoConnectionResponse = try await request(
             path: "connections",
             method: "GET",
-            overrides: overrides
         )
         return response.connections
     }
 
-    func closeConnection(id: String, using overrides: ProxyOverrides) async throws {
+    func closeConnection(id: String) async throws {
         let _: EmptyResponse = try await request(
             path: "connections/\(id)",
             method: "DELETE",
-            overrides: overrides
         )
     }
 
-    func closeAllConnections(using overrides: ProxyOverrides) async throws {
+    func closeAllConnections() async throws {
         let _: EmptyResponse = try await request(
             path: "connections",
             method: "DELETE",
-            overrides: overrides
         )
     }
 
     func updateExternalResource(
         _ resource: ExternalResource,
-        using overrides: ProxyOverrides
     ) async throws {
         let providerType = switch resource.kind {
         case .proxyProvider: "proxies"
@@ -144,34 +130,30 @@ actor MihomoControllerClient {
         let _: EmptyResponse = try await request(
             path: "providers/\(providerType)/\(resource.name)",
             method: "PUT",
-            overrides: overrides
         )
     }
 
-    func updateGeoData(using overrides: ProxyOverrides) async throws {
+    func updateGeoData() async throws {
         let _: EmptyResponse = try await request(
             path: "upgrade/geo",
             method: "POST",
-            overrides: overrides
         )
     }
 
-    func externalResourceDetails(using overrides: ProxyOverrides) async throws -> [String: MihomoProviderDetails] {
+    func externalResourceDetails() async throws -> [String: MihomoProviderDetails] {
         async let proxyProviderDetailsTask = providerDetails(
             path: "providers/proxies",
             kind: .proxyProvider,
-            using: overrides
         )
         async let ruleProviderDetailsTask = providerDetails(
             path: "providers/rules",
             kind: .ruleProvider,
-            using: overrides
         )
         let (proxyProviderDetails, ruleProviderDetails) = try await (proxyProviderDetailsTask, ruleProviderDetailsTask)
         return proxyProviderDetails.merging(ruleProviderDetails) { _, latest in latest }
     }
 
-    func updateLogLevel(_ level: MihomoLogLevel, using overrides: ProxyOverrides) async throws {
+    func updateLogLevel(_ level: MihomoLogLevel) async throws {
         struct Configuration: Encodable {
             let logLevel: MihomoLogLevel
 
@@ -184,12 +166,11 @@ actor MihomoControllerClient {
         let _: EmptyResponse = try await request(
             path: "configs",
             method: "PATCH",
-            overrides: overrides,
             body: body
         )
     }
 
-    func updateRoutingMode(_ mode: ProxyMode, using overrides: ProxyOverrides) async throws {
+    func updateRoutingMode(_ mode: ProxyMode) async throws {
         struct Configuration: Encodable {
             let mode: ProxyMode
         }
@@ -198,7 +179,6 @@ actor MihomoControllerClient {
         let _: EmptyResponse = try await request(
             path: "configs",
             method: "PATCH",
-            overrides: overrides,
             body: body
         )
     }
@@ -206,15 +186,12 @@ actor MihomoControllerClient {
     private func request<Response: Decodable>(
         path: String,
         method: String,
-        overrides: ProxyOverrides,
         body: Data? = nil,
         queryItems: [URLQueryItem] = []
     ) async throws -> Response {
         let message = MihomoControllerRequest(
             path: path,
             method: method,
-            controllerPort: overrides.controllerPort,
-            controllerSecret: overrides.controllerSecret,
             body: body,
             queryItems: queryItems.map {
                 MihomoControllerQueryItem(name: $0.name, value: $0.value)
@@ -240,12 +217,10 @@ actor MihomoControllerClient {
     private func providerDetails(
         path: String,
         kind: ExternalResourceKind,
-        using overrides: ProxyOverrides
     ) async throws -> [String: MihomoProviderDetails] {
         let response: MihomoProviderResponse = try await request(
             path: path,
             method: "GET",
-            overrides: overrides
         )
         return response.providers.reduce(into: [:]) { details, provider in
             details["\(kind.rawValue):\(provider.key)"] = MihomoProviderDetails(

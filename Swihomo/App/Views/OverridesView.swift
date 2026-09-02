@@ -22,7 +22,8 @@ struct OverridesView: View {
 
     private var changesRequireReconnect: Bool {
         let saved = model.snapshot.overrides
-        return draft.mixedPort != saved.mixedPort
+        return draft.externalControllerEnabled != saved.externalControllerEnabled
+            || draft.mixedPort != saved.mixedPort
             || draft.allowLAN != saved.allowLAN
             || draft.ipv6Enabled != saved.ipv6Enabled
             || draft.dnsEnabled != saved.dnsEnabled
@@ -129,6 +130,7 @@ struct OverridesView: View {
         NavigationStack {
             Form {
                 basicSection
+                controllerSection
                 yamlSection
             }
             .formStyle(.grouped)
@@ -193,9 +195,32 @@ struct OverridesView: View {
             PreferenceRow(title: Text("overrides.mixedPort")) {
                 portField("overrides.mixedPort", value: $draft.mixedPort)
             }
+        } header: {
+            VStack(alignment: .leading, spacing: 6) {
+                Label("overrides.basicSettings", systemImage: "slider.horizontal.3")
+                    .font(.title3.weight(.semibold))
+                Text("overrides.basicSettings.description")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var controllerSection: some View {
+        Section {
+            PreferenceRow(
+                title: Text("overrides.externalController.enable"),
+                description: Text("overrides.externalController.description")
+            ) {
+                Toggle("overrides.externalController.enable", isOn: $draft.externalControllerEnabled)
+                    .labelsHidden()
+            }
+
             PreferenceRow(title: Text("overrides.controllerPort")) {
                 controllerPortField
             }
+            .disabled(!draft.externalControllerEnabled)
+
             ViewThatFits(in: .horizontal) {
                 PreferenceRow(title: Text("overrides.controllerSecret")) {
                     controllerSecretField(maxWidth: 200)
@@ -205,14 +230,10 @@ struct OverridesView: View {
                     controllerSecretField(maxWidth: nil)
                 }
             }
+            .disabled(!draft.externalControllerEnabled)
         } header: {
-            VStack(alignment: .leading, spacing: 6) {
-                Label("overrides.basicSettings", systemImage: "slider.horizontal.3")
-                    .font(.title3.weight(.semibold))
-                Text("overrides.basicSettings.description")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            Label("overrides.externalController", systemImage: "network")
+                .font(.title3.weight(.semibold))
         }
     }
 

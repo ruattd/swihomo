@@ -7,6 +7,15 @@ int SwihomoCoreStart(
     const char *homeDirectory
 );
 int SwihomoCoreInputPacket(uint8_t *packet, size_t length, int family);
+// Positive return values are HTTP status codes; values below 100 are bridge error codes.
+int SwihomoCoreAPIRequest(
+    const char *method,
+    const char *target,
+    uint8_t *body,
+    size_t bodyLength,
+    uint8_t **response,
+    size_t *responseLength
+);
 void SwihomoCoreStop(void);
 void SwihomoCoreFreeMemory(uint64_t *before, uint64_t *after);
 char *SwihomoCoreLastError(void);
