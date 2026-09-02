@@ -200,10 +200,20 @@ private struct LogEntryRow: View {
                     .foregroundStyle(levelColor)
             }
             Text(entry.message)
-                .font(.callout.monospaced())
+                .font(messageFont)
                 .textSelection(.enabled)
         }
         .padding(.vertical, 2)
+    }
+
+    // callout (16pt) reads oversized for dense console lines on a phone; caption (12pt)
+    // matches the timestamp line above it.
+    private var messageFont: Font {
+        #if os(macOS)
+        .callout.monospaced()
+        #else
+        .caption.monospaced()
+        #endif
     }
 
     private var levelColor: Color {
