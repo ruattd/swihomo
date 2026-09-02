@@ -88,10 +88,20 @@ struct SettingsPickerRow<Selection: Hashable>: View {
 
 enum SurfaceMetrics {
     static let panelCornerRadius: Double = 20
+    // Larger radius suits the roomier touch cards on iOS; macOS pointer rows stay tighter.
+    #if os(macOS)
     static let rowCornerRadius: Double = 12
+    #else
+    static let rowCornerRadius: Double = 16
+    #endif
 
     /// Measured from a real-window GroupBox render on macOS 26: fill = quaternarySystemFill, radius ≈ 10.5.
+    /// iOS uses a much rounder box to match its roomier touch surfaces.
+    #if os(macOS)
     static let boxCornerRadius: Double = 10.5
+    #else
+    static let boxCornerRadius: Double = 20
+    #endif
 
     /// Semantic content-surface fill matching the native GroupBox / grouped-Form box exactly.
     static var contentCardFill: Color {

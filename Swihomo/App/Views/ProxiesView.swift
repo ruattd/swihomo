@@ -192,7 +192,7 @@ private struct ProxyGroupSection: View {
 
     var body: some View {
         sectionContent
-            .padding(8)
+            .padding(12)
             .contentCard()
             // Keep collapsing content inside the card during the height animation.
             .clipShape(RoundedRectangle(cornerRadius: SurfaceMetrics.boxCornerRadius, style: .continuous))
