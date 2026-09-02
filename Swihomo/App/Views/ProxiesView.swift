@@ -241,6 +241,7 @@ private struct ProxyGroupSection: View {
                             .labelStyle(.iconOnly)
                     }
                 }
+                .liquidGlassButton()
                 .disabled(isTesting)
                 .accessibilityLabel(Text("accessibility.testAllDelays") + Text(verbatim: " \(group.name)"))
             }
@@ -285,27 +286,38 @@ private struct ProxyNodeCard: View {
         model.testingProxyNodeNames.contains(node)
     }
 
-    var body: some View {
-        // Selection and delay test are sibling controls: nesting a Button inside the
-        // selection Button makes the inner action unreliable (gate 2 review).
-        ZStack(alignment: .bottomTrailing) {
-            Button {
-                guard !isSelected else { return }
-                Task { await model.select(node: node, in: group) }
-            } label: {
-                VStack(alignment: .leading, spacing: usesCompactLayout ? 8 : 12) {
-                    HStack(alignment: .top, spacing: usesCompactLayout ? 6 : 8) {
-                        Text(node)
-                            .font(usesCompactLayout ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
-                            .lineLimit(2)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        if isSelected {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
-                        }
-                    }
+    private func selectNode() {
+        guard !isSelected else { return }
+        Task { await model.select(node: node, in: group) }
+    }
 
-                    HStack {
+    var body: some View {
+        // Two rows: name + selection mark on top, test result + test button below.
+        // Both text rows are their own selection buttons — nesting the test Button inside
+        // a wrapping selection Button makes the inner action unreliable (gate 2 review).
+        VStack(alignment: .leading, spacing: usesCompactLayout ? 8 : 12) {
+            Button(action: selectNode) {
+                HStack(alignment: .top, spacing: usesCompactLayout ? 6 : 8) {
+                    Text(node)
+                        .font(usesCompactLayout ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if isSelected {
+                        // Match the title font: the default body-sized symbol is taller
+                        // than the text line, making selected cards higher than the rest.
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(usesCompactLayout ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
+                            .foregroundStyle(.green)
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(LocalizedStringKey(isSelected ? "accessibility.currentlySelected" : "accessibility.selectNode"))
+
+            HStack(alignment: .bottom, spacing: 8) {
+                Button(action: selectNode) {
+                    Group {
                         if let delay {
                             Text("\(delay) ms")
                                 .font(.caption.monospacedDigit().weight(.semibold))
@@ -319,42 +331,41 @@ private struct ProxyNodeCard: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
-                        Spacer(minLength: 28)
                     }
-
+                    .frame(maxWidth: .infinity, alignment: .bottomLeading)
+                    .contentShape(Rectangle())
                 }
-                .padding(usesCompactLayout ? 10 : 12)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .background(
-                    isSelected ? Color.green.opacity(0.2) : Color.clear,
-                    in: RoundedRectangle(cornerRadius: SurfaceMetrics.rowCornerRadius, style: .continuous)
-                )
-                .contentCard(cornerRadius: SurfaceMetrics.rowCornerRadius)
-                .contentShape(RoundedRectangle(cornerRadius: SurfaceMetrics.rowCornerRadius, style: .continuous))
-                .overlay {
-                    if isSelected {
-                        RoundedRectangle(cornerRadius: SurfaceMetrics.rowCornerRadius, style: .continuous)
-                            .stroke(Color.green.opacity(0.45), lineWidth: 1)
+                .buttonStyle(.plain)
+                .accessibilityHint(LocalizedStringKey(isSelected ? "accessibility.currentlySelected" : "accessibility.selectNode"))
+
+                Button {
+                    Task { await model.testDelay(for: node) }
+                } label: {
+                    if isTesting {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Label("proxies.testDelay", systemImage: "timer")
+                            .labelStyle(.iconOnly)
                     }
                 }
+                .liquidGlassButton()
+                .disabled(isTesting)
+                .controlSize(.small)
             }
-            .buttonStyle(.plain)
-            .accessibilityHint(LocalizedStringKey(isSelected ? "accessibility.currentlySelected" : "accessibility.selectNode"))
-
-            Button {
-                Task { await model.testDelay(for: node) }
-            } label: {
-                if isTesting {
-                    ProgressView()
-                        .controlSize(.small)
-                } else {
-                    Label("proxies.testDelay", systemImage: "timer")
-                        .labelStyle(.iconOnly)
-                }
+        }
+        .padding(usesCompactLayout ? 10 : 12)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(
+            isSelected ? Color.green.opacity(0.2) : Color.clear,
+            in: RoundedRectangle(cornerRadius: SurfaceMetrics.rowCornerRadius, style: .continuous)
+        )
+        .contentCard(cornerRadius: SurfaceMetrics.rowCornerRadius)
+        .overlay {
+            if isSelected {
+                RoundedRectangle(cornerRadius: SurfaceMetrics.rowCornerRadius, style: .continuous)
+                    .stroke(Color.green.opacity(0.45), lineWidth: 1)
             }
-            .disabled(isTesting)
-            .controlSize(usesCompactLayout ? .small : .regular)
-            .padding(usesCompactLayout ? 10 : 12)
         }
     }
 }
