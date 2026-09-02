@@ -292,51 +292,42 @@ private struct ProxyNodeCard: View {
     }
 
     var body: some View {
-        // Two rows: name + selection mark on top, test result + test button below.
-        // Both text rows are their own selection buttons — nesting the test Button inside
-        // a wrapping selection Button makes the inner action unreliable (gate 2 review).
+        // Parallel two-row layout; the container owns selection taps for the whole card
+        // and the test capsule — a parallel child control — intercepts its own touches.
+        // (No overlay/nesting: those made the capsule's action unreliable.)
         VStack(alignment: .leading, spacing: usesCompactLayout ? 8 : 12) {
-            Button(action: selectNode) {
-                HStack(alignment: .top, spacing: usesCompactLayout ? 6 : 8) {
-                    Text(node)
+            HStack(alignment: .top, spacing: usesCompactLayout ? 6 : 8) {
+                Text(node)
+                    .font(usesCompactLayout ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if isSelected {
+                    // Match the title font: the default body-sized symbol is taller
+                    // than the text line, making selected cards higher than the rest.
+                    Image(systemName: "checkmark.circle.fill")
                         .font(usesCompactLayout ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
-                        .lineLimit(2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    if isSelected {
-                        // Match the title font: the default body-sized symbol is taller
-                        // than the text line, making selected cards higher than the rest.
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(usesCompactLayout ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
-                            .foregroundStyle(.green)
-                    }
+                        .foregroundStyle(.green)
+                        .transition(.opacity)
                 }
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .accessibilityHint(LocalizedStringKey(isSelected ? "accessibility.currentlySelected" : "accessibility.selectNode"))
 
             HStack(alignment: .bottom, spacing: 8) {
-                Button(action: selectNode) {
-                    Group {
-                        if let delay {
-                            Text("\(delay) ms")
-                                .font(.caption.monospacedDigit().weight(.semibold))
-                                .foregroundStyle(delay < 300 ? .green : .orange)
-                        } else if let failure = model.failedDelayTests[node] {
-                            Text(failure == .timeout ? "proxies.testTimeout" : "proxies.testFailed")
-                                .font(.caption)
-                                .foregroundStyle(.red)
-                        } else {
-                            Text(LocalizedStringKey(usesCompactLayout ? "proxies.noResult" : "proxies.noDelayResult"))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                Group {
+                    if let delay {
+                        Text("\(delay) ms")
+                            .font(.caption.monospacedDigit().weight(.semibold))
+                            .foregroundStyle(delay < 300 ? .green : .orange)
+                    } else if let failure = model.failedDelayTests[node] {
+                        Text(failure == .timeout ? "proxies.testTimeout" : "proxies.testFailed")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    } else {
+                        Text(LocalizedStringKey(usesCompactLayout ? "proxies.noResult" : "proxies.noDelayResult"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    .frame(maxWidth: .infinity, alignment: .bottomLeading)
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .accessibilityHint(LocalizedStringKey(isSelected ? "accessibility.currentlySelected" : "accessibility.selectNode"))
+                .frame(maxWidth: .infinity, alignment: .bottomLeading)
 
                 Button {
                     Task { await model.testDelay(for: node) }
@@ -356,6 +347,10 @@ private struct ProxyNodeCard: View {
         }
         .padding(usesCompactLayout ? 10 : 12)
         .frame(maxWidth: .infinity, alignment: .topLeading)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: selectNode)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint(LocalizedStringKey(isSelected ? "accessibility.currentlySelected" : "accessibility.selectNode"))
         .background(
             isSelected ? Color.green.opacity(0.2) : Color.clear,
             in: RoundedRectangle(cornerRadius: SurfaceMetrics.rowCornerRadius, style: .continuous)
@@ -367,5 +362,8 @@ private struct ProxyNodeCard: View {
                     .stroke(Color.green.opacity(0.45), lineWidth: 1)
             }
         }
+        // Scoped to isSelected only — animating on model-wide values would replay on
+        // every 2s group poll.
+        .animation(.easeInOut(duration: 0.25), value: isSelected)
     }
 }
