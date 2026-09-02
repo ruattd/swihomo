@@ -153,29 +153,39 @@ actor MihomoControllerClient {
         return proxyProviderDetails.merging(ruleProviderDetails) { _, latest in latest }
     }
 
-    func updateLogLevel(_ level: MihomoLogLevel) async throws {
+    /// Hot-updates the basic settings mihomo supports on PATCH /configs. Nil fields are
+    /// omitted from the payload, so callers pass only what changed. dns and the external
+    /// controller have no patch path — those still require a reconnect.
+    func updateGeneral(
+        mode: ProxyMode? = nil,
+        logLevel: MihomoLogLevel? = nil,
+        mixedPort: Int? = nil,
+        allowLAN: Bool? = nil,
+        ipv6Enabled: Bool? = nil
+    ) async throws {
         struct Configuration: Encodable {
-            let logLevel: MihomoLogLevel
+            var mode: ProxyMode?
+            var logLevel: MihomoLogLevel?
+            var mixedPort: Int?
+            var allowLAN: Bool?
+            var ipv6: Bool?
 
             enum CodingKeys: String, CodingKey {
+                case mode
                 case logLevel = "log-level"
+                case mixedPort = "mixed-port"
+                case allowLAN = "allow-lan"
+                case ipv6
             }
         }
 
-        let body = try JSONEncoder().encode(Configuration(logLevel: level))
-        let _: EmptyResponse = try await request(
-            path: "configs",
-            method: "PATCH",
-            body: body
-        )
-    }
-
-    func updateRoutingMode(_ mode: ProxyMode) async throws {
-        struct Configuration: Encodable {
-            let mode: ProxyMode
-        }
-
-        let body = try JSONEncoder().encode(Configuration(mode: mode))
+        let body = try JSONEncoder().encode(Configuration(
+            mode: mode,
+            logLevel: logLevel,
+            mixedPort: mixedPort,
+            allowLAN: allowLAN,
+            ipv6: ipv6Enabled
+        ))
         let _: EmptyResponse = try await request(
             path: "configs",
             method: "PATCH",

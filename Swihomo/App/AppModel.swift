@@ -402,21 +402,28 @@ final class AppModel: ObservableObject {
             record(.info, module: "Configuration", "Saved runtime overrides.")
             guard tunnelStatus == .connected else { return true }
 
-            if previousOverrides.logLevel != overrides.logLevel {
+            // Hot-apply every basic setting mihomo's PATCH supports; dns, the external
+            // controller, and custom YAML still apply on reconnect.
+            let hotChanges = (
+                mode: previousOverrides.mode != overrides.mode ? overrides.mode : nil,
+                logLevel: previousOverrides.logLevel != overrides.logLevel ? overrides.logLevel : nil,
+                mixedPort: previousOverrides.mixedPort != overrides.mixedPort ? overrides.mixedPort : nil,
+                allowLAN: previousOverrides.allowLAN != overrides.allowLAN ? overrides.allowLAN : nil,
+                ipv6Enabled: previousOverrides.ipv6Enabled != overrides.ipv6Enabled ? overrides.ipv6Enabled : nil
+            )
+            if hotChanges.mode != nil || hotChanges.logLevel != nil || hotChanges.mixedPort != nil
+                || hotChanges.allowLAN != nil || hotChanges.ipv6Enabled != nil {
                 do {
-                    try await controller.updateLogLevel(overrides.logLevel)
-                    record(.info, module: "Configuration", "Applied log level to the running core.")
+                    try await controller.updateGeneral(
+                        mode: hotChanges.mode,
+                        logLevel: hotChanges.logLevel,
+                        mixedPort: hotChanges.mixedPort,
+                        allowLAN: hotChanges.allowLAN,
+                        ipv6Enabled: hotChanges.ipv6Enabled
+                    )
+                    record(.info, module: "Configuration", "Applied basic settings to the running core.")
                 } catch {
-                    record(.warning, module: "Configuration", "Saved log level. Reconnect to apply it to the running core.")
-                }
-            }
-
-            if previousOverrides.mode != overrides.mode {
-                do {
-                    try await controller.updateRoutingMode(overrides.mode)
-                    record(.info, module: "Configuration", "Applied routing mode to the running core.")
-                } catch {
-                    record(.warning, module: "Configuration", "Saved routing mode. Reconnect to apply it to the running core.")
+                    record(.warning, module: "Configuration", "Saved basic settings. Reconnect to apply them to the running core.")
                 }
             }
             return true

@@ -274,7 +274,7 @@
 "overrides.escapeKey" = "转义字面量加号前缀或后缀的键";
 "overrides.allSaved" = "所有更改已保存";
 "overrides.unsavedChanges" = "有未保存的更改";
-"overrides.saveDescription" = "路由模式和日志级别会实时更新, 其他更改在重新连接后生效";
+"overrides.saveDescription" = "基础设置会实时更新, DNS、外部控制器和 YAML 的更改在重新连接后生效";
 "overrides.reconnect.confirmationTitle" = "重新连接以应用更改？";
 "overrides.reconnect.description" = "已保存的网络, 控制器, DNS 或自定义 YAML 更改需要重新连接后才能生效";
 

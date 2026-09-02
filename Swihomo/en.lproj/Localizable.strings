@@ -274,7 +274,7 @@
 "overrides.escapeKey" = "Escape a literal plus-prefixed or plus-suffixed key";
 "overrides.allSaved" = "All changes saved";
 "overrides.unsavedChanges" = "Unsaved changes";
-"overrides.saveDescription" = "Routing mode and log level update live, other changes apply after reconnect";
+"overrides.saveDescription" = "Basic settings update live, DNS, external controller, and YAML changes apply after reconnect";
 "overrides.reconnect.confirmationTitle" = "Reconnect to Apply Changes?";
 "overrides.reconnect.description" = "Your saved network, controller, DNS, or custom YAML changes require reconnecting to take effect.";
 

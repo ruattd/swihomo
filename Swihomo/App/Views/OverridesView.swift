@@ -22,10 +22,8 @@ struct OverridesView: View {
 
     private var changesRequireReconnect: Bool {
         let saved = model.snapshot.overrides
+        // Basic settings hot-update via PATCH /configs; only these still need a reconnect.
         return draft.externalControllerEnabled != saved.externalControllerEnabled
-            || draft.mixedPort != saved.mixedPort
-            || draft.allowLAN != saved.allowLAN
-            || draft.ipv6Enabled != saved.ipv6Enabled
             || draft.dnsEnabled != saved.dnsEnabled
             || draft.controllerPort != saved.controllerPort
             || draft.controllerSecret != saved.controllerSecret
