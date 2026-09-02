@@ -66,8 +66,7 @@ struct PreferencesView: View {
             }
         } header: {
             VStack(alignment: .leading, spacing: 6) {
-                Label("preferences.appearance.title", systemImage: "paintpalette")
-                    .font(.title3.weight(.semibold))
+                SectionHeaderLabel("preferences.appearance.title", systemImage: "paintpalette")
                 Text("preferences.appearance.description")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -124,8 +123,7 @@ struct PreferencesView: View {
             }
             .disabled(!realtimeDelayTest)
         } header: {
-            Label("preferences.experimental", systemImage: "flask")
-                .font(.title3.weight(.semibold))
+            SectionHeaderLabel("preferences.experimental", systemImage: "flask")
         }
     }
 
@@ -159,8 +157,7 @@ struct PreferencesView: View {
                     .labelsHidden()
             }
         } header: {
-            Label("preferences.application.title", systemImage: "app.badge")
-                .font(.title3.weight(.semibold))
+            SectionHeaderLabel("preferences.application.title", systemImage: "app.badge")
         }
     }
 
@@ -260,8 +257,7 @@ struct PreferencesView: View {
             )
         } header: {
             VStack(alignment: .leading, spacing: 6) {
-                Label("preferences.packetTunnel.title", systemImage: "point.3.connected.trianglepath.dotted")
-                    .font(.title3.weight(.semibold))
+                SectionHeaderLabel("preferences.packetTunnel.title", systemImage: "point.3.connected.trianglepath.dotted")
                 Text("preferences.packetTunnel.reconnectDescription")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -444,8 +440,7 @@ struct PreferencesView: View {
             }
             .disabled(!showsMenuBar)
         } header: {
-            Label("preferences.menuBar.title", systemImage: "menubar.rectangle")
-                .font(.title3.weight(.semibold))
+            SectionHeaderLabel("preferences.menuBar.title", systemImage: "menubar.rectangle")
         }
     }
 #endif

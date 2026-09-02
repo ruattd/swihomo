@@ -197,8 +197,7 @@ struct OverridesView: View {
             }
         } header: {
             VStack(alignment: .leading, spacing: 6) {
-                Label("overrides.basicSettings", systemImage: "slider.horizontal.3")
-                    .font(.title3.weight(.semibold))
+                SectionHeaderLabel("overrides.basicSettings", systemImage: "slider.horizontal.3")
                 Text("overrides.basicSettings.description")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -232,8 +231,7 @@ struct OverridesView: View {
             }
             .disabled(!draft.externalControllerEnabled)
         } header: {
-            Label("overrides.externalController", systemImage: "network")
-                .font(.title3.weight(.semibold))
+            SectionHeaderLabel("overrides.externalController", systemImage: "network")
         }
     }
 
@@ -252,8 +250,7 @@ struct OverridesView: View {
             .help("accessibility.openOverrideReference")
         } header: {
             VStack(alignment: .leading, spacing: 8) {
-                Label("overrides.customYAML", systemImage: "curlybraces.square")
-                    .font(.title3.weight(.semibold))
+                SectionHeaderLabel("overrides.customYAML", systemImage: "curlybraces.square")
                 Text("overrides.customYAML.description")
                     .font(.caption)
                     .foregroundStyle(.secondary)

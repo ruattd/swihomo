@@ -38,6 +38,29 @@ struct PreferenceRow<Control: View>: View {
     }
 }
 
+/// Grouped-form section header: icon + title with tight, fixed spacing — Label's
+/// icon-to-text gap renders too wide inside form section headers.
+struct SectionHeaderLabel: View {
+    let title: Text
+    let systemImage: String
+
+    init(_ titleKey: LocalizedStringKey, systemImage: String) {
+        self.title = Text(titleKey)
+        self.systemImage = systemImage
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            // Fixed slot: SF Symbol widths vary, so icons would otherwise push the
+            // titles out of vertical alignment across sections.
+            Image(systemName: systemImage)
+                .frame(width: 24)
+            title
+        }
+        .font(.title3.weight(.semibold))
+    }
+}
+
 enum SurfaceMetrics {
     static let panelCornerRadius: Double = 20
     static let rowCornerRadius: Double = 12
