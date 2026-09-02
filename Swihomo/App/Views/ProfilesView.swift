@@ -14,12 +14,16 @@ struct ProfilesView: View {
 
     var body: some View {
         NavigationStack {
-            List {
+            Form {
                 ForEach(model.snapshot.profiles) { profile in
-                    ProfileCard(profile: profile)
+                    // One profile per section: the whole card is the section's single row.
+                    Section {
+                        ProfileCard(profile: profile)
+                    }
                 }
             }
-            .listStyle(.plain)
+            .formStyle(.grouped)
+            .compactSectionSpacing()
             .uniformTopScrollEdge()
             .animation(reduceMotion ? nil : .snappy, value: model.snapshot.profiles)
             .overlay {
@@ -142,24 +146,12 @@ private struct ProfileCard: View {
     }
 
     var body: some View {
+        // The section's grouped container is the visual surface; active profiles tint
+        // the row background instead of layering a custom card + ring.
         cardContent
-            .padding(14)
-            .background {
-                if isActive {
-                    RoundedRectangle(cornerRadius: CGFloat(SurfaceMetrics.boxCornerRadius), style: .continuous)
-                        .fill(Color.green.opacity(0.12))
-                }
-            }
-            .contentCard()
-            .overlay {
-                if isActive {
-                    RoundedRectangle(cornerRadius: CGFloat(SurfaceMetrics.boxCornerRadius), style: .continuous)
-                        .stroke(Color.green.opacity(0.42), lineWidth: 1)
-                }
-            }
-            .listRowSeparator(.hidden)
-            .listRowInsets(EdgeInsets(top: 7, leading: 16, bottom: 7, trailing: 16))
-        .animation(.snappy, value: isActive)
+            .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+            .listRowBackground(isActive ? Color.green.opacity(0.12) : nil)
+            .animation(.snappy, value: isActive)
         .sheet(isPresented: $showingRemoteEditor) {
             RemoteProfileSheet(profile: profile) { name, url, customUserAgent in
                 Task { await model.updateRemoteProfile(profile, name: name, url: url, customUserAgent: customUserAgent) }
@@ -283,6 +275,16 @@ private struct ProfileCard: View {
                     }
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
+
+                    if let expirationDate = subscriptionInfo.expirationDate {
+                        HStack(spacing: 7) {
+                            Label("resources.expires", systemImage: "calendar")
+                            Spacer()
+                            Text(expirationDate, format: .dateTime.year().month().day())
+                        }
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    }
                 }
 
             }

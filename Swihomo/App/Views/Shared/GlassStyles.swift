@@ -86,6 +86,18 @@ struct SettingsPickerRow<Selection: Hashable>: View {
     }
 }
 
+extension View {
+    /// Tighter than the roomy grouped-Form section defaults. iOS-only: macOS grouped
+    /// forms have no section-spacing API and are already compact.
+    func compactSectionSpacing() -> some View {
+        #if os(iOS)
+        self.listSectionSpacing(14)
+        #else
+        self
+        #endif
+    }
+}
+
 enum SurfaceMetrics {
     static let panelCornerRadius: Double = 20
     // Larger radius suits the roomier touch cards on iOS; macOS pointer rows stay tighter.

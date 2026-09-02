@@ -33,8 +33,7 @@ struct ExternalResourcesView: View {
                 }
             }
             .formStyle(.grouped)
-            // Tighter than the roomy grouped defaults.
-            .listSectionSpacing(14)
+            .compactSectionSpacing()
             .uniformTopScrollEdge()
             .overlay {
                 if model.externalResources.isEmpty {
