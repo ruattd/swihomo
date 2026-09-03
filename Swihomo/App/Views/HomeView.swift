@@ -87,6 +87,10 @@ struct HomeView: View {
                 navigationGrid
             }
             .padding()
+            // macOS scroll indicators overlay the grid cards; reserve their lane.
+            #if os(macOS)
+            .padding(.trailing, 4)
+            #endif
         }
         .uniformTopScrollEdge()
         #if os(macOS)
