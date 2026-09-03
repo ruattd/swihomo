@@ -16,9 +16,9 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             HomeView()
-                .navigationSplitViewColumnWidth(min: 336, ideal: 336, max: 516)
+                .navigationSplitViewColumnWidth(min: 310, ideal: 310, max: 516)
                 #if os(macOS)
-                .frame(minWidth: 280)
+                .frame(minWidth: 310)
                 #endif
                 .navigationDestination(for: HomeSection.self) { section in
                     FeatureDetailView(section: section)
