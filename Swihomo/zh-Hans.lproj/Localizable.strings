@@ -106,6 +106,10 @@
 "preferences.application.logLevel" = "应用日志级别";
 "preferences.application.language" = "语言";
 "preferences.application.autoCollapseProxyGroups" = "自动折叠其他代理组";
+"preferences.application.showSubscriptionInfo" = "显示订阅信息";
+"preferences.subscriptionInfo.hidden" = "隐藏";
+"preferences.subscriptionInfo.used" = "已使用";
+"preferences.subscriptionInfo.remaining" = "剩余";
 "preferences.application.autoCollapseProxyGroups.description" = "展开任意代理组时, 自动折叠其他已展开的代理组";
 "preferences.application.logLevel.description" = "仅控制 Swihomo 应用日志, mihomo 核心日志请在覆盖设置中配置";
 "preferences.packetTunnel.title" = "数据包隧道";

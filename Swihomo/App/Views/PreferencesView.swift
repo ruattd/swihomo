@@ -10,6 +10,7 @@ struct PreferencesView: View {
     @AppStorage("realtimeDelayTest") private var realtimeDelayTest = false
     @AppStorage("delayTestMaxConcurrency") private var delayTestMaxConcurrency = 4
     @AppStorage("autoCollapseProxyGroups") private var autoCollapseProxyGroups = false
+    @AppStorage("subscriptionInfoDisplay") private var subscriptionInfoDisplay = SubscriptionInfoDisplay.used.rawValue
     @AppStorage("showsMenuBar") private var showsMenuBar = true
     @AppStorage("menuBarDisplay") private var menuBarDisplay = "iconAndSpeed"
     @AppStorage("appLogLevel") private var appLogLevel = LogLevel.info.rawValue
@@ -159,6 +160,12 @@ struct PreferencesView: View {
                 Toggle("preferences.application.autoCollapseProxyGroups", isOn: $autoCollapseProxyGroups)
                     .labelsHidden()
             }
+
+            SettingsPickerRow(
+                "preferences.application.showSubscriptionInfo",
+                selection: $subscriptionInfoDisplay,
+                options: SubscriptionInfoDisplay.allCases.map { ($0.rawValue, Text(LocalizedStringKey($0.localizationKey))) }
+            )
         } header: {
             SectionHeaderLabel("preferences.application.title", systemImage: "app.badge")
         }

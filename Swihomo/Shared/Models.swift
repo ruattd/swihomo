@@ -588,6 +588,21 @@ enum LogSource: String, Codable, CaseIterable {
     var localizationKey: String { "logs.source.\(rawValue)" }
 }
 
+/// How subscription usage appears in resources and profiles rows.
+enum SubscriptionInfoDisplay: String, CaseIterable {
+    case hidden
+    case used
+    case remaining
+
+    var localizationKey: String {
+        switch self {
+        case .hidden: "preferences.subscriptionInfo.hidden"
+        case .used: "preferences.subscriptionInfo.used"
+        case .remaining: "preferences.subscriptionInfo.remaining"
+        }
+    }
+}
+
 enum LogLevel: String, Codable, CaseIterable {
     case debug
     case info

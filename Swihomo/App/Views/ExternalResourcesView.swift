@@ -100,6 +100,7 @@ private extension ExternalResourcesView {
 
 private struct ExternalResourceCard: View {
     @EnvironmentObject private var model: AppModel
+    @AppStorage("subscriptionInfoDisplay") private var subscriptionInfoDisplay = SubscriptionInfoDisplay.used.rawValue
     let resource: ExternalResource
     let edit: () -> Void
     let replace: () -> Void
@@ -120,6 +121,10 @@ private struct ExternalResourceCard: View {
         }
     }
     private var subscriptionInfo: MihomoSubscriptionInfo? { resource.kind == .proxyProvider ? resource.subscriptionInfo : nil }
+
+    private var subscriptionDisplay: SubscriptionInfoDisplay {
+        SubscriptionInfoDisplay(rawValue: subscriptionInfoDisplay) ?? .used
+    }
 
     // Plain row content: the section's grouped container is the visual surface, so no
     // card chrome of its own. The old edge-to-edge usage wash can't sit inside a native
@@ -178,11 +183,12 @@ private struct ExternalResourceCard: View {
                         }
                     }
 
-                    if resource.kind != .geoData, let subscriptionInfo {
+                    // Hidden mode suppresses the expiration row along with the usage row.
+                    if resource.kind != .geoData, let subscriptionInfo, subscriptionDisplay != .hidden {
                         HStack(spacing: 8) {
                             Label("common.subscription", systemImage: "chart.pie.fill")
                             Spacer()
-                            subscriptionSummary(subscriptionInfo)
+                            subscriptionSummary(subscriptionInfo, display: subscriptionDisplay)
                                 .lineLimit(1)
                         }
                         if let expirationDate = subscriptionInfo.expirationDate {

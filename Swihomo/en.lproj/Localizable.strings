@@ -106,6 +106,10 @@
 "preferences.application.logLevel" = "App Log Level";
 "preferences.application.language" = "Language";
 "preferences.application.autoCollapseProxyGroups" = "Auto-collapse other proxy groups";
+"preferences.application.showSubscriptionInfo" = "Show Subscription Info";
+"preferences.subscriptionInfo.hidden" = "Hidden";
+"preferences.subscriptionInfo.used" = "Used";
+"preferences.subscriptionInfo.remaining" = "Remaining";
 "preferences.application.autoCollapseProxyGroups.description" = "Expanding a proxy group automatically collapses the other expanded groups.";
 "preferences.application.logLevel.description" = "Controls Swihomo app logs only. Configure mihomo core logging in Overrides.";
 "preferences.packetTunnel.title" = "Packet Tunnel";

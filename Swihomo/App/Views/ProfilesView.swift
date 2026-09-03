@@ -129,6 +129,7 @@ struct ProfilesView: View {
 private struct ProfileCard: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.locale) private var locale
+    @AppStorage("subscriptionInfoDisplay") private var subscriptionInfoDisplay = SubscriptionInfoDisplay.used.rawValue
     let profile: Profile
     @State private var showingRemoteEditor = false
     @State private var showingContentEditor = false
@@ -138,6 +139,10 @@ private struct ProfileCard: View {
 
     private var isActive: Bool {
         model.snapshot.activeProfileID == profile.id
+    }
+
+    private var subscriptionDisplay: SubscriptionInfoDisplay {
+        SubscriptionInfoDisplay(rawValue: subscriptionInfoDisplay) ?? .used
     }
 
     private var deletionConfirmationTitle: Text {
@@ -266,11 +271,13 @@ private struct ProfileCard: View {
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
 
-                if let subscriptionInfo = profile.subscriptionInfo {
+                // Hidden mode suppresses the expiration row along with the usage row.
+                if let subscriptionInfo = profile.subscriptionInfo,
+                   subscriptionDisplay != .hidden {
                     HStack(spacing: 7) {
                         Label("common.subscription", systemImage: "chart.pie.fill")
                         Spacer()
-                        subscriptionSummary(subscriptionInfo)
+                        subscriptionSummary(subscriptionInfo, display: subscriptionDisplay)
                             .lineLimit(1)
                     }
                     .font(.caption.weight(.medium))
