@@ -66,6 +66,15 @@ struct HomeView: View {
     // Drives the toggle card's press bounce on the whole glass surface; the switch
     // sits outside the link and never triggers it.
     @State private var toggleCardContracted = false
+    #if os(macOS)
+    // macOS navigates by driving the detail column's selection: pushing links
+    // inside the sidebar column would tear down this whole grid on every switch.
+    @Binding var activeSection: HomeSection
+
+    init(activeSection: Binding<HomeSection>) {
+        _activeSection = activeSection
+    }
+    #endif
 
     var body: some View {
         ScrollView {
@@ -104,7 +113,7 @@ struct HomeView: View {
     // toggling it must not trigger the card's press animation.
     private var connectionToggle: some View {
         HStack(spacing: 12) {
-            NavigationLink(value: HomeSection.profiles) {
+            homeNavigation(to: .profiles, contracted: $toggleCardContracted) {
                 HStack(spacing: 12) {
                     Image(systemName: model.isConnected ? "checkmark.shield.fill" : "shield.lefthalf.filled")
                         .font(.title3.weight(.semibold))
@@ -126,7 +135,6 @@ struct HomeView: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(NavigationCardButtonStyle(contracted: $toggleCardContracted))
 
             Toggle("common.connect", isOn: connectionBinding)
                 .labelsHidden()
@@ -199,7 +207,7 @@ struct HomeView: View {
                 spacing: 12
             ) {
                 ForEach(gridSections) { section in
-                    NavigationLink(value: section) {
+                    homeNavigation(to: section) {
                         HomeFeatureCard(
                             section: section,
                             value: value(for: section),
@@ -210,21 +218,44 @@ struct HomeView: View {
                             isHighlighted: section == .connection && model.isConnected
                         )
                     }
-                    .buttonStyle(NavigationCardButtonStyle())
                 }
             }
 
             ForEach(bannerSections) { section in
-                NavigationLink(value: section) {
+                homeNavigation(to: section) {
                     HomeBannerRow(
                         section: section,
                         subtitle: subtitle(for: section),
                         subtitleKey: subtitleKey(for: section)
                     )
                 }
-                .buttonStyle(NavigationCardButtonStyle())
             }
         }
+    }
+
+    // iOS pushes destinations onto the sidebar column's stack; macOS drives the
+    // detail column's selection instead, so this grid survives page switches.
+    @ViewBuilder
+    private func homeNavigation<Label: View>(
+        to section: HomeSection,
+        contracted: Binding<Bool>? = nil,
+        @ViewBuilder label: () -> Label
+    ) -> some View {
+        #if os(macOS)
+        Button {
+            withAnimation(.snappy(duration: 0.25)) {
+                activeSection = section
+            }
+        } label: {
+            label()
+        }
+        .buttonStyle(NavigationCardButtonStyle(contracted: contracted))
+        #else
+        NavigationLink(value: section) {
+            label()
+        }
+        .buttonStyle(NavigationCardButtonStyle(contracted: contracted))
+        #endif
     }
 
     private func value(for section: HomeSection) -> String {
@@ -310,7 +341,9 @@ struct HomeView: View {
     }
 }
 
-private struct HomeFeatureCard: View {
+// Equatable: navigation-triggered publishes (page loads firing on appear) must not
+// re-render the glass grid mid-transition.
+private struct HomeFeatureCard: View, Equatable {
     let section: HomeSection
     let value: String
     let valueKey: String?
@@ -361,7 +394,7 @@ private struct HomeFeatureCard: View {
 }
 
 // Full-width banner variant of the feature card, for utility sections under the grid.
-private struct HomeBannerRow: View {
+private struct HomeBannerRow: View, Equatable {
     let section: HomeSection
     let subtitle: String
     let subtitleKey: String?

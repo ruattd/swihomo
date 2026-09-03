@@ -13,18 +13,35 @@ struct ContentView: View {
         AppTheme(rawValue: selectedTheme)?.colorScheme
     }
 
+    #if os(macOS)
+    // macOS navigates by swapping the detail column; pushing destinations inside
+    // the sidebar column tears down the whole home grid on every page switch.
+    @State private var activeSection: HomeSection = .connection
+    #endif
+
     var body: some View {
         NavigationSplitView {
+            #if os(macOS)
+            HomeView(activeSection: $activeSection)
+                .navigationSplitViewColumnWidth(min: 310, ideal: 310, max: 516)
+                .frame(minWidth: 310)
+            #else
             HomeView()
                 .navigationSplitViewColumnWidth(min: 310, ideal: 310, max: 516)
-                #if os(macOS)
-                .frame(minWidth: 310)
-                #endif
                 .navigationDestination(for: HomeSection.self) { section in
                     FeatureDetailView(section: section)
                 }
+            #endif
         } detail: {
+            #if os(macOS)
+            FeatureDetailView(section: activeSection)
+                // Fresh identity per section → the opacity transition runs on swap;
+                // the selection setter wraps the change in withAnimation.
+                .id(activeSection)
+                .transition(.opacity)
+            #else
             FeatureDetailView(section: .connection)
+            #endif
         }
         .navigationSplitViewStyle(.balanced)
         .preferredColorScheme(preferredColorScheme)
