@@ -3,6 +3,13 @@
 # Requires Go 1.26.5 on PATH (CI provides it via actions/setup-go).
 set -euo pipefail
 
+# Xcode's GUI runs build phases with a minimal PATH; pick up common Go installs.
+export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
+command -v go >/dev/null 2>&1 || {
+    printf 'error: Go toolchain not found on PATH; install Go or set SWIHOMO_SKIP_MIHOMO_BUILD=1.\n' >&2
+    exit 1
+}
+
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CORE_ROOT="$ROOT/Vendor/mihomo"
 BUILD_ROOT="$CORE_ROOT/.build-mihomo"
