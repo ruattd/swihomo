@@ -411,6 +411,39 @@ private struct ConnectionProcessIcon: View {
 
 #if os(macOS)
     private var icon: NSImage? {
+        Self.iconCache.icon(for: metadata)
+    }
+
+    private static let iconCache = ProcessIconCache()
+#endif
+}
+
+#if os(macOS)
+// Process icons were resolved per body evaluation: every rendered row re-scanned
+// NSWorkspace.runningApplications and synchronously disk-loaded the NSImage.
+// Cache hits AND misses by process path/name so each process pays the lookup once.
+private final class ProcessIconCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private let icons = NSCache<NSString, NSImage>()
+    private let misses = NSMutableSet()
+
+    func icon(for metadata: MihomoConnectionMetadata) -> NSImage? {
+        let key = metadata.processPath.isEmpty ? metadata.process : metadata.processPath
+        guard !key.isEmpty else { return nil }
+        lock.lock()
+        defer { lock.unlock() }
+        let cacheKey = key as NSString
+        if let cached = icons.object(forKey: cacheKey) { return cached }
+        if misses.contains(cacheKey) { return nil }
+        guard let found = Self.lookup(metadata) else {
+            misses.add(cacheKey)
+            return nil
+        }
+        icons.setObject(found, forKey: cacheKey)
+        return found
+    }
+
+    private static func lookup(_ metadata: MihomoConnectionMetadata) -> NSImage? {
         NSWorkspace.shared.runningApplications.first { application in
             let matchesPath = !metadata.processPath.isEmpty && application.executableURL?.path == metadata.processPath
             let matchesBundleID = !metadata.process.isEmpty && application.bundleIdentifier == metadata.process
@@ -418,5 +451,5 @@ private struct ConnectionProcessIcon: View {
             return matchesPath || matchesBundleID || matchesName
         }?.icon
     }
-#endif
 }
+#endif

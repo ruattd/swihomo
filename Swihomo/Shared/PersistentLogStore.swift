@@ -4,6 +4,9 @@ final class PersistentLogStore: @unchecked Sendable {
     private static let maximumEntries = 1_000
 
     private let queue = DispatchQueue(label: "com.swihomo.log-store")
+    // Encoding + atomic disk writes happen here so callers (often the main thread)
+    // never block on IO. Serial ⇒ writes stay ordered, last one wins.
+    private let persistQueue = DispatchQueue(label: "com.swihomo.log-store.persist", qos: .utility)
     private let fileURL: URL?
     private var storedEntries: [LogEntry]
 
@@ -51,7 +54,7 @@ final class PersistentLogStore: @unchecked Sendable {
             storedEntries.append(contentsOf: entries)
             storedEntries.sort { $0.timestamp < $1.timestamp }
             trimLocked()
-            persistLocked()
+            schedulePersistLocked()
             return storedEntries
         }
     }
@@ -64,7 +67,7 @@ final class PersistentLogStore: @unchecked Sendable {
             } else {
                 storedEntries = []
             }
-            persistLocked()
+            schedulePersistLocked()
             return storedEntries
         }
     }
@@ -72,17 +75,21 @@ final class PersistentLogStore: @unchecked Sendable {
     private func appendLocked(_ entry: LogEntry) {
         storedEntries.append(entry)
         trimLocked()
-        persistLocked()
+        schedulePersistLocked()
     }
 
     private func trimLocked() {
         storedEntries = Self.trimmed(storedEntries)
     }
 
-    private func persistLocked() {
-        guard let fileURL,
-              let data = try? JSONEncoder().encode(storedEntries) else { return }
-        try? data.write(to: fileURL, options: .atomic)
+    // Must be called on `queue`; snapshots and hops to `persistQueue`.
+    private func schedulePersistLocked() {
+        guard let fileURL else { return }
+        let snapshot = storedEntries
+        persistQueue.async {
+            guard let data = try? JSONEncoder().encode(snapshot) else { return }
+            try? data.write(to: fileURL, options: .atomic)
+        }
     }
 
     private static func load(from fileURL: URL) -> [LogEntry] {
