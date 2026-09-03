@@ -3,17 +3,74 @@ import SwiftUI
 import AppKit
 #endif
 
+// Shell only: monitoring lifecycle, selection, and the destination. The list lives in
+// ConnectionListView so unrelated AppModel publishes (log stream, traffic) never touch it.
 struct DashboardView: View {
     @EnvironmentObject private var model: AppModel
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("connectionSortCriterion") private var connectionSortCriterion = ConnectionSortCriterion.process
     @AppStorage("connectionSortDirection") private var connectionSortDirection = ProxySortDirection.ascending
     @State private var selectedConnection: MihomoConnectionActivity?
-    @State private var showingCloseAllConfirmation = false
-    @State private var connectionSearchText = ""
 
     private var showsConnections: Bool {
         model.tunnelStatus == .connected
+    }
+
+    var body: some View {
+        ConnectionListView(
+            activities: connections,
+            showsConnections: showsConnections,
+            isClosingAll: model.isClosingAllConnections,
+            onCloseAll: { await model.closeAllConnections() },
+            onSelect: { selectedConnection = $0 }
+        )
+        .onAppear {
+            model.setConnectionMonitoringEnabled(true)
+        }
+        .task(id: showsConnections) {
+            guard showsConnections else { return }
+            model.setConnectionMonitoringEnabled(true)
+        }
+        .onDisappear {
+            model.setConnectionMonitoringEnabled(false)
+        }
+        .navigationDestination(item: $selectedConnection) { activity in
+            ConnectionDetailView(activity: activity, model: model)
+        }
+    }
+
+    private var connections: [MihomoConnectionActivity] {
+        model.sortedConnectionActivities(by: connectionSortCriterion, direction: connectionSortDirection)
+    }
+}
+
+// Equatable shell around the live list: identical inputs skip the whole subtree — the
+// Form and its per-section rows never diff against a refresh that changed nothing.
+// Actions are compared by identity of intent, so == ignores the closures.
+private struct ConnectionListView: View, Equatable {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage("connectionSortCriterion") private var connectionSortCriterion = ConnectionSortCriterion.process
+    @AppStorage("connectionSortDirection") private var connectionSortDirection = ProxySortDirection.ascending
+    @State private var showingCloseAllConfirmation = false
+    @State private var connectionSearchText = ""
+    // While the user is scrolling, the list renders this frozen snapshot instead of the
+    // live activities — a mid-scroll publish otherwise invalidates cells mid-frame and
+    // drops scroll frames.
+    @State private var frozenActivities: [MihomoConnectionActivity]?
+
+    let activities: [MihomoConnectionActivity]
+    let showsConnections: Bool
+    let isClosingAll: Bool
+    let onCloseAll: () async -> Void
+    let onSelect: (MihomoConnectionActivity) -> Void
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.activities == rhs.activities
+            && lhs.showsConnections == rhs.showsConnections
+            && lhs.isClosingAll == rhs.isClosingAll
+    }
+
+    private var displayedActivities: [MihomoConnectionActivity] {
+        frozenActivities ?? activities
     }
 
     var body: some View {
@@ -23,17 +80,36 @@ struct DashboardView: View {
             ForEach(filteredConnections) { activity in
                 Section {
                     Button {
-                        selectedConnection = activity
+                        onSelect(activity)
                     } label: {
-                        ConnectionRow(activity: activity)
+                        VStack(alignment: .leading, spacing: 8) {
+                            ConnectionRow(
+                                metadata: activity.connection.metadata,
+                                processName: activity.connection.processName,
+                                destination: activity.connection.destination,
+                                routingDescription: activity.connection.routingDescription
+                            )
+                            ConnectionSpeeds(
+                                uploadSpeed: activity.uploadSpeed,
+                                downloadSpeed: activity.downloadSpeed
+                            )
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        // Plain buttons only hit-test covered pixels without an explicit shape.
+                        .contentShape(Rectangle())
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("\(activity.connection.processName), \(byteRate(activity.totalSpeed)), \(activity.connection.routingDescription)")
+                        .accessibilityHint("accessibility.connectionDetails")
                     }
                     .buttonStyle(.plain)
+                    .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
                 }
             }
         }
         .formStyle(.grouped)
         .compactSectionSpacing()
         .uniformTopScrollEdge()
+        .freezeWhileScrolling(activities, into: $frozenActivities)
         .overlay {
             if !showsConnections {
                 ContentUnavailableView(
@@ -42,7 +118,7 @@ struct DashboardView: View {
                     description: Text(LocalizedStringKey("connections.connectToView.description"))
                 )
                 .transition(.opacity)
-            } else if connections.isEmpty {
+            } else if activities.isEmpty {
                 ContentUnavailableView(
                     LocalizedStringKey("connections.empty"),
                     systemImage: "point.3.connected.trianglepath.dotted",
@@ -59,28 +135,15 @@ struct DashboardView: View {
             }
         }
         .animation(reduceMotion ? nil : .snappy, value: showsConnections)
-        .animation(reduceMotion ? nil : .snappy, value: connections.isEmpty)
+        .animation(reduceMotion ? nil : .snappy, value: activities.isEmpty)
         .searchable(text: $connectionSearchText, prompt: "connections.search")
-        .onAppear {
-            model.setConnectionMonitoringEnabled(true)
-        }
-        .task(id: showsConnections) {
-            guard showsConnections else { return }
-            model.setConnectionMonitoringEnabled(true)
-        }
-        .onDisappear {
-            model.setConnectionMonitoringEnabled(false)
-        }
-        .navigationDestination(item: $selectedConnection) { activity in
-            ConnectionDetailView(activity: activity, model: model)
-        }
         .confirmationDialog(
             Text(LocalizedStringKey("connection.closeAll.confirmationTitle")),
             isPresented: $showingCloseAllConfirmation,
             titleVisibility: .visible
         ) {
             Button("connection.closeAll", role: .destructive) {
-                Task { await model.closeAllConnections() }
+                Task { await onCloseAll() }
             }
         } message: {
             Text(LocalizedStringKey("connection.closeAll.confirmationMessage"))
@@ -92,7 +155,7 @@ struct DashboardView: View {
                 } label: {
                     Label("connection.closeAll", systemImage: "xmark.circle")
                 }
-                .disabled(connections.isEmpty || model.isClosingAllConnections)
+                .disabled(activities.isEmpty || isClosingAll)
 
                 Menu {
                     Section("common.sortBy") {
@@ -128,14 +191,10 @@ struct DashboardView: View {
         }
     }
 
-    private var connections: [MihomoConnectionActivity] {
-        model.sortedConnectionActivities(by: connectionSortCriterion, direction: connectionSortDirection)
-    }
-
     private var filteredConnections: [MihomoConnectionActivity] {
         let query = connectionSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return connections }
-        return connections.filter { activity in
+        guard !query.isEmpty else { return displayedActivities }
+        return displayedActivities.filter { activity in
             let metadata = activity.connection.metadata
             return [
                 activity.connection.processName,
@@ -148,29 +207,25 @@ struct DashboardView: View {
     }
 }
 
-private struct ConnectionRow: View {
-    let activity: MihomoConnectionActivity
+// Static per-connection content, keyed on exactly the fields it displays. Synthesized
+// Equatable skips the row (and its section container) whenever a refresh only moved
+// the speeds or transfer totals.
+private struct ConnectionRow: View, Equatable {
+    let metadata: MihomoConnectionMetadata
+    let processName: String
+    let destination: String
+    let routingDescription: String
 
     var body: some View {
-        rowContent
-            // Plain buttons only hit-test covered pixels without an explicit shape.
-            .contentShape(Rectangle())
-            .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("\(activity.connection.processName), \(byteRate(activity.totalSpeed)), \(activity.connection.routingDescription)")
-            .accessibilityHint("accessibility.connectionDetails")
-    }
-
-    private var rowContent: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 12) {
-                ConnectionProcessIcon(metadata: activity.connection.metadata)
+                ConnectionProcessIcon(metadata: metadata)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(activity.connection.processName)
+                    Text(processName)
                         .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
-                    Text(activity.connection.destination)
+                    Text(destination)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -184,27 +239,37 @@ private struct ConnectionRow: View {
             }
 
             Group {
-                if activity.connection.routingDescription.isEmpty {
+                if routingDescription.isEmpty {
                     Text("connection.noMatchingRule")
                 } else {
-                    Text(activity.connection.routingDescription)
+                    Text(routingDescription)
                 }
             }
                 .font(.caption2)
                 .foregroundStyle(.cyan)
                 .lineLimit(2)
-
-            HStack(spacing: 10) {
-                Label(byteRate(activity.downloadSpeed), systemImage: "arrow.down")
-                Label(byteRate(activity.uploadSpeed), systemImage: "arrow.up")
-                Spacer()
-                Text(byteRate(activity.totalSpeed))
-                    .font(.caption.monospacedDigit().weight(.semibold))
-            }
-            .font(.caption2.monospacedDigit())
-            .foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// The only part of a row that changes every refresh — isolated so its re-render is a
+// three-label HStack instead of the whole section.
+private struct ConnectionSpeeds: View {
+    let uploadSpeed: Int64
+    let downloadSpeed: Int64
+
+    private var totalSpeed: Int64 { uploadSpeed + downloadSpeed }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Label(byteRate(downloadSpeed), systemImage: "arrow.down")
+            Label(byteRate(uploadSpeed), systemImage: "arrow.up")
+            Spacer()
+            Text(byteRate(totalSpeed))
+                .font(.caption.monospacedDigit().weight(.semibold))
+        }
+        .font(.caption2.monospacedDigit())
+        .foregroundStyle(.secondary)
     }
 }
 

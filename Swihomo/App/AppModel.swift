@@ -637,15 +637,29 @@ final class AppModel: ObservableObject {
             case .process:
                 comparison = left.connection.processName.localizedCaseInsensitiveCompare(right.connection.processName)
             case .speed:
-                if left.totalSpeed == right.totalSpeed {
+                // Sort by speed TIER, not the raw value: live speeds change every poll,
+                // and re-sorting on every fluctuation makes the whole list reorder each
+                // second. Rows only move when they cross a tier boundary.
+                let leftTier = connectionSpeedTier(left.totalSpeed)
+                let rightTier = connectionSpeedTier(right.totalSpeed)
+                if leftTier == rightTier {
                     comparison = .orderedSame
                 } else {
-                    comparison = left.totalSpeed < right.totalSpeed ? .orderedAscending : .orderedDescending
+                    comparison = leftTier < rightTier ? .orderedAscending : .orderedDescending
                 }
             case .rule:
                 comparison = left.connection.ruleDescription.localizedCaseInsensitiveCompare(right.connection.ruleDescription)
             }
             return isOrdered(comparison, direction: direction, fallback: { left.id < right.id })
+        }
+    }
+
+    private func connectionSpeedTier(_ speed: Int64) -> Int {
+        switch speed {
+        case ..<1_024: return 0
+        case ..<65_536: return 1
+        case ..<1_048_576: return 2
+        default: return 3
         }
     }
 
@@ -875,7 +889,7 @@ final class AppModel: ObservableObject {
 
     private func updateConnectionActivities(_ connections: [MihomoConnection], at timestamp: Date) {
         var latestSamples: [String: ConnectionTransferSample] = [:]
-        connectionActivities = connections.map { connection in
+        let activities = connections.map { connection in
             let previous = connectionTransferSamples[connection.id]
             let elapsed = timestamp.timeIntervalSince(previous?.timestamp ?? timestamp)
             let uploadSpeed: Int64
@@ -904,6 +918,10 @@ final class AppModel: ObservableObject {
             )
         }
         connectionTransferSamples = latestSamples
+        // Skip the publish when nothing moved — idle connections produce identical
+        // snapshots every poll, and every publish re-renders the whole page.
+        guard activities != connectionActivities else { return }
+        connectionActivities = activities
     }
 
     private func reloadProxyGroupOrder(showErrors: Bool) async {

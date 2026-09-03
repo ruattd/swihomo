@@ -131,6 +131,24 @@ extension EdgeInsets {
 }
 
 extension View {
+    /// Freezes `frozen` to `value` while a scroll is in flight and releases it back to nil
+    /// on idle, so high-frequency publishes never invalidate list cells mid-scroll.
+    /// Requires iOS 18/macOS 15; older systems fall through to live updates.
+    @ViewBuilder
+    func freezeWhileScrolling<Value: Equatable>(_ value: Value, into frozen: Binding<Value?>) -> some View {
+        if #available(iOS 18, macOS 15, *) {
+            self.onScrollPhaseChange { _, phase in
+                if phase == .idle {
+                    frozen.wrappedValue = nil
+                } else if frozen.wrappedValue == nil {
+                    frozen.wrappedValue = value
+                }
+            }
+        } else {
+            self
+        }
+    }
+
     /// Pins the top scroll-edge effect to the soft style (progressive blur). Every page uses
     /// ScrollView/Form containers, so the window no longer latches the style of the last-visited page.
     /// macOS only: iOS must keep the default automatic style — pinning .soft leaves the
