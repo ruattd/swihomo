@@ -35,7 +35,6 @@
 "common.notReported" = "未报告";
 "common.unavailable" = "不可用";
 "common.noSelection" = "未选择";
-"common.backToTop" = "返回顶部";
 "common.sortBy" = "排序方式";
 "common.direction" = "方向";
 "common.exportTo" = "导出到...";
@@ -59,6 +58,7 @@
 
 "navigation.home" = "主页";
 "navigation.connection" = "连接";
+"navigation.connections" = "连接";
 "navigation.profiles" = "配置文件";
 "navigation.proxies" = "代理";
 "navigation.overrides" = "覆盖设置";
@@ -75,8 +75,6 @@
 "home.controlCenter" = "控制中心";
 "home.appSettings" = "应用程序设置";
 "home.chooseProfile" = "选择配置文件以开始";
-"home.chooseConfiguration" = "选择配置文件以开始";
-"home.importProfiles" = "在配置文件中导入本地 YAML 文件或添加在线订阅";
 "home.profilesSubtitle" = "导入本地文件或刷新在线订阅";
 "home.proxies.connectedSubtitle" = "选择节点并运行延迟测试";
 "home.proxies.disconnectedSubtitle" = "连接配置文件以加载代理组";
@@ -86,8 +84,6 @@
 "home.logsSubtitle" = "应用活动和 mihomo 核心事件";
 "home.preferencesSubtitle" = "为此设备配置 Swihomo";
 "home.aboutSubtitle" = "应用详情和开源许可证";
-"home.mode" = "模式";
-"home.groups" = "代理组";
 
 "preferences.language.systemDefault" = "系统默认";
 "preferences.appearance.title" = "外观";
@@ -141,22 +137,22 @@
 "preferences.menuBar.hideDockIcon" = "隐藏 Dock 图标";
 "preferences.menuBar.hideDockIcon.description" = "隐藏 Dock 图标前请先启用菜单栏显示";
 
-"connections.search" = "搜索进程或目标地址";
-"connections.live.title" = "实时连接";
-"connections.live.description" = "每秒从 mihomo 更新";
 "connections.liveSpeed" = "实时速度";
 "connections.traffic" = "流量";
 "connections.empty" = "没有活动连接";
 "connections.empty.description" = "新流量会自动显示在这里";
+"connections.connectToView" = "连接后查看连接";
+"connections.connectToView.description" = "连接配置文件以查看实时连接";
+"connections.search" = "搜索进程或目标地址";
 "connections.noMatch" = "没有匹配的连接";
 "connections.noMatch.description" = "尝试输入进程名, 域名或 IP 地址";
+"connection.closeAll" = "全部关闭";
+"connection.closeAll.confirmationTitle" = "关闭全部连接？";
+"connection.closeAll.confirmationMessage" = "这会立即关闭 mihomo 管理的所有连接";
 "connections.sort.process" = "进程";
 "connections.sort.liveSpeed" = "实时速度";
 "connections.sort.rule" = "规则";
 
-"connection.closeAll" = "全部关闭";
-"connection.closeAll.confirmationTitle" = "关闭全部连接？";
-"connection.closeAll.confirmationMessage" = "这会立即关闭 mihomo 管理的所有连接";
 "connection.noMatchingRule" = "未报告匹配规则";
 "connection.details" = "连接详情";
 "connection.protocol" = "协议";

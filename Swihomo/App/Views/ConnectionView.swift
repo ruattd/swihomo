@@ -9,31 +9,58 @@ struct DashboardView: View {
     @AppStorage("connectionSortCriterion") private var connectionSortCriterion = ConnectionSortCriterion.process
     @AppStorage("connectionSortDirection") private var connectionSortDirection = ProxySortDirection.ascending
     @State private var selectedConnection: MihomoConnectionActivity?
-    @State private var connectionSearchText = ""
-    @State private var showsBackToTopButton = false
     @State private var showingCloseAllConfirmation = false
+    @State private var connectionSearchText = ""
 
     private var showsConnections: Bool {
         model.tunnelStatus == .connected
     }
 
     var body: some View {
-        Group {
-            if showsConnections {
-                connectedDashboard
-            } else {
-                VStack(spacing: 24) {
-                    Spacer(minLength: 20)
-                    connectionSummary
-                    Spacer(minLength: 20)
+        // Live connections only — one connection per section, its row the section's
+        // single content (same shape as resources/profiles).
+        Form {
+            ForEach(filteredConnections) { activity in
+                Section {
+                    Button {
+                        selectedConnection = activity
+                    } label: {
+                        ConnectionRow(activity: activity)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(20)
             }
         }
-        .animation(reduceMotion ? nil : .bouncy, value: showsConnections)
-        .animation(reduceMotion ? nil : .snappy, value: model.isConnected)
-        .animation(reduceMotion ? nil : .snappy, value: model.snapshot.activeProfileID)
+        .formStyle(.grouped)
+        .compactSectionSpacing()
+        .uniformTopScrollEdge()
+        .overlay {
+            if !showsConnections {
+                ContentUnavailableView(
+                    LocalizedStringKey("connections.connectToView"),
+                    systemImage: "network.slash",
+                    description: Text(LocalizedStringKey("connections.connectToView.description"))
+                )
+                .transition(.opacity)
+            } else if connections.isEmpty {
+                ContentUnavailableView(
+                    LocalizedStringKey("connections.empty"),
+                    systemImage: "point.3.connected.trianglepath.dotted",
+                    description: Text(LocalizedStringKey("connections.empty.description"))
+                )
+                .transition(.opacity)
+            } else if filteredConnections.isEmpty {
+                ContentUnavailableView(
+                    LocalizedStringKey("connections.noMatch"),
+                    systemImage: "point.3.connected.trianglepath.dotted",
+                    description: Text(LocalizedStringKey("connections.noMatch.description"))
+                )
+                .transition(.opacity)
+            }
+        }
+        .animation(reduceMotion ? nil : .snappy, value: showsConnections)
+        .animation(reduceMotion ? nil : .snappy, value: connections.isEmpty)
+        .searchable(text: $connectionSearchText, prompt: "connections.search")
         .onAppear {
             model.setConnectionMonitoringEnabled(true)
         }
@@ -44,231 +71,29 @@ struct DashboardView: View {
         .onDisappear {
             model.setConnectionMonitoringEnabled(false)
         }
-        .onChange(of: showsConnections) { _, isConnected in
-            if !isConnected {
-                showsBackToTopButton = false
-            }
-        }
         .navigationDestination(item: $selectedConnection) { activity in
             ConnectionDetailView(activity: activity, model: model)
         }
-    }
-
-    private var connectionSummary: some View {
-        VStack(spacing: showsConnections ? 10 : 24) {
-            Image(systemName: model.isConnected ? "checkmark.shield.fill" : "shield.lefthalf.filled")
-                .font(.system(size: showsConnections ? 48 : 72))
-                .foregroundStyle(model.isConnected ? .green : .secondary)
-                .contentTransition(.symbolEffect(.replace))
-                .symbolEffect(.pulse, value: model.isConnected)
-            Text(LocalizedStringKey(model.connectionStatusLocalizationKey))
-                .font(showsConnections ? .title2.bold() : .largeTitle.bold())
-            Group {
-                if let profile = model.snapshot.activeProfile {
-                    Text(profile.name)
-                } else {
-                    Text("home.chooseConfiguration")
-                }
+        .confirmationDialog(
+            Text(LocalizedStringKey("connection.closeAll.confirmationTitle")),
+            isPresented: $showingCloseAllConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("connection.closeAll", role: .destructive) {
+                Task { await model.closeAllConnections() }
             }
-                .font(showsConnections ? .footnote : .body)
-                .foregroundStyle(.secondary)
-            if let profile = model.snapshot.activeProfile {
-                Button(LocalizedStringKey(model.isConnected ? "common.disconnect" : "common.connect")) {
-                    if model.isConnected {
-                        model.disconnect()
-                    } else {
-                        Task { await model.connect(profile: profile) }
-                    }
-                }
-                .liquidGlassButton(prominent: true)
-                .controlSize(showsConnections ? .regular : .large)
-            } else {
-                Text("home.importProfiles")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-            Divider().frame(maxWidth: showsConnections ? 620 : 480)
-            HStack(spacing: showsConnections ? 22 : 28) {
-                Metric(label: "home.mode", value: model.snapshot.overrides.mode.displayName, valueKey: model.snapshot.overrides.mode.localizationKey, compact: showsConnections)
-                Metric(label: "navigation.profiles", value: "\(model.snapshot.profiles.count)", compact: showsConnections)
-                Metric(label: "home.groups", value: "\(model.proxyGroups.count)", compact: showsConnections)
-            }
+        } message: {
+            Text(LocalizedStringKey("connection.closeAll.confirmationMessage"))
         }
-    }
-
-    private var connections: [MihomoConnectionActivity] {
-        model.sortedConnectionActivities(by: connectionSortCriterion, direction: connectionSortDirection)
-    }
-
-    private var filteredConnections: [MihomoConnectionActivity] {
-        let query = connectionSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return connections }
-        return connections.filter { activity in
-            let metadata = activity.connection.metadata
-            return [
-                activity.connection.processName,
-                activity.connection.destination,
-                metadata.destinationIP,
-                metadata.remoteDestination,
-                address(metadata.destinationIP, port: metadata.destinationPort)
-            ].contains { $0.localizedCaseInsensitiveContains(query) }
-        }
-    }
-
-    private var connectedDashboard: some View {
-        ScrollViewReader { proxy in
-            List {
-                connectionSummary
-                    .frame(maxWidth: .infinity)
-                    .background(
-                        GeometryReader { geometry in
-                            Color.clear.preference(
-                                key: ConnectionDashboardScrollOffsetKey.self,
-                                value: geometry.frame(in: .named("connection-dashboard-scroll")).minY
-                            )
-                        }
-                    )
-                    .id("connection-dashboard-top")
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 16, leading: 16, bottom: 8, trailing: 16))
-
-                panelHeader
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 2, trailing: 16))
-
-                controlsRow
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 8, trailing: 16))
-
-                if filteredConnections.isEmpty {
-                    ContentUnavailableView(
-                        LocalizedStringKey(connections.isEmpty ? "connections.empty" : "connections.noMatch"),
-                        systemImage: "point.3.connected.trianglepath.dotted",
-                        description: Text(LocalizedStringKey(connections.isEmpty ? "connections.empty.description" : "connections.noMatch.description"))
-                    )
-                    .frame(maxWidth: .infinity, minHeight: 260)
-                    .listRowSeparator(.hidden)
-                } else {
-                    ForEach(filteredConnections) { activity in
-                        Button {
-                            selectedConnection = activity
-                        } label: {
-                            ConnectionRow(activity: activity)
-                        }
-                        .buttonStyle(.plain)
-                        .listRowSeparator(.hidden)
-                    }
-                }
-            }
-            .listStyle(.plain)
-            .coordinateSpace(name: "connection-dashboard-scroll")
-            .confirmationDialog(
-                Text(LocalizedStringKey("connection.closeAll.confirmationTitle")),
-                isPresented: $showingCloseAllConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("connection.closeAll", role: .destructive) {
-                    Task { await model.closeAllConnections() }
-                }
-            } message: {
-                Text(LocalizedStringKey("connection.closeAll.confirmationMessage"))
-            }
-            .onPreferenceChange(ConnectionDashboardScrollOffsetKey.self) { offset in
-                let shouldShow = offset < -180
-                guard shouldShow != showsBackToTopButton else { return }
-                withAnimation(reduceMotion ? nil : .snappy) {
-                    showsBackToTopButton = shouldShow
-                }
-            }
-            .searchable(text: $connectionSearchText, prompt: "connections.search")
-            .overlay(alignment: .bottomTrailing) {
-                if showsBackToTopButton {
-                    Button {
-                        withAnimation(reduceMotion ? nil : .snappy) {
-                            proxy.scrollTo("connection-dashboard-top", anchor: .top)
-                        }
-                    } label: {
-                        Label("common.backToTop", systemImage: "arrow.up")
-                            .labelStyle(.iconOnly)
-                            .frame(width: 42, height: 42)
-                    }
-                    .liquidGlassButton()
-                    .accessibilityLabel("common.backToTop")
-                    .padding(20)
-                    .transition(.scale.combined(with: .opacity))
-                }
-            }
-        }
-    }
-
-}
-
-private struct ConnectionDashboardScrollOffsetKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
-private struct Metric: View {
-    let label: LocalizedStringKey
-    let value: String
-    let valueKey: String?
-    var compact = false
-
-    init(label: LocalizedStringKey, value: String, valueKey: String? = nil, compact: Bool = false) {
-        self.label = label
-        self.value = value
-        self.valueKey = valueKey
-        self.compact = compact
-    }
-
-    var body: some View {
-        VStack(spacing: 4) {
-            if let valueKey {
-                Text(LocalizedStringKey(valueKey))
-                    .font(compact ? .body.weight(.semibold) : .title3.weight(.semibold))
-            } else {
-                Text(value)
-                    .font(compact ? .body.weight(.semibold) : .title3.weight(.semibold))
-            }
-            Text(label).font(.caption).foregroundStyle(.secondary)
-        }
-    }
-}
-
-extension DashboardView {
-
-    fileprivate var panelHeader: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("connections.live.title")
-                    .font(.headline)
-                Text("connections.live.description")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Text("\(connections.count)")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .background(Color.cyan.opacity(0.14), in: Capsule())
-        }
-    }
-
-    fileprivate var controlsRow: some View {
-        HStack(spacing: 10) {
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
                 Button(role: .destructive) {
                     showingCloseAllConfirmation = true
                 } label: {
                     Label("connection.closeAll", systemImage: "xmark.circle")
                 }
-                                    .liquidGlassButton()
                 .disabled(connections.isEmpty || model.isClosingAllConnections)
-                Spacer()
+
                 Menu {
                     Section("common.sortBy") {
                         ForEach(ConnectionSortCriterion.allCases) { criterion in
@@ -296,13 +121,29 @@ extension DashboardView {
                         }
                     }
                 } label: {
-                    Label(
-                        LocalizedStringKey(connectionSortCriterion.localizationKey),
-                        systemImage: connectionSortDirection.systemImage
-                    )
+                    Label(LocalizedStringKey(connectionSortCriterion.localizationKey), systemImage: connectionSortDirection.systemImage)
                         .font(.subheadline.weight(.medium))
                 }
-                .liquidGlassButton()
+            }
+        }
+    }
+
+    private var connections: [MihomoConnectionActivity] {
+        model.sortedConnectionActivities(by: connectionSortCriterion, direction: connectionSortDirection)
+    }
+
+    private var filteredConnections: [MihomoConnectionActivity] {
+        let query = connectionSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return connections }
+        return connections.filter { activity in
+            let metadata = activity.connection.metadata
+            return [
+                activity.connection.processName,
+                activity.connection.destination,
+                metadata.destinationIP,
+                metadata.remoteDestination,
+                address(metadata.destinationIP, port: metadata.destinationPort)
+            ].contains { $0.localizedCaseInsensitiveContains(query) }
         }
     }
 }
@@ -312,10 +153,9 @@ private struct ConnectionRow: View {
 
     var body: some View {
         rowContent
-            .padding(6)
-            .contentCard()
-            .contentShape(RoundedRectangle(cornerRadius: SurfaceMetrics.boxCornerRadius, style: .continuous))
-            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+            // Plain buttons only hit-test covered pixels without an explicit shape.
+            .contentShape(Rectangle())
+            .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(activity.connection.processName), \(byteRate(activity.totalSpeed)), \(activity.connection.routingDescription)")
             .accessibilityHint("accessibility.connectionDetails")

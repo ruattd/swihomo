@@ -35,7 +35,6 @@
 "common.notReported" = "Not reported";
 "common.unavailable" = "Unavailable";
 "common.noSelection" = "No selection";
-"common.backToTop" = "Back to Top";
 "common.sortBy" = "Sort by";
 "common.direction" = "Direction";
 "common.exportTo" = "Export to...";
@@ -59,6 +58,7 @@
 
 "navigation.home" = "Home";
 "navigation.connection" = "Connection";
+"navigation.connections" = "Connections";
 "navigation.profiles" = "Profiles";
 "navigation.proxies" = "Proxies";
 "navigation.overrides" = "Overrides";
@@ -75,8 +75,6 @@
 "home.controlCenter" = "Control center";
 "home.appSettings" = "App settings";
 "home.chooseProfile" = "Choose a profile to begin";
-"home.chooseConfiguration" = "Choose a configuration profile to begin";
-"home.importProfiles" = "Import a local YAML file or add an online subscription in Profiles.";
 "home.profilesSubtitle" = "Import local files or refresh online subscriptions";
 "home.proxies.connectedSubtitle" = "Select nodes and run delay tests";
 "home.proxies.disconnectedSubtitle" = "Connect a profile to load proxy groups";
@@ -86,8 +84,6 @@
 "home.logsSubtitle" = "App activity and mihomo core events";
 "home.preferencesSubtitle" = "Configure Swihomo for this device";
 "home.aboutSubtitle" = "App details and open-source licenses";
-"home.mode" = "Mode";
-"home.groups" = "Groups";
 
 "preferences.language.systemDefault" = "System Default";
 "preferences.appearance.title" = "Appearance";
@@ -141,22 +137,22 @@
 "preferences.menuBar.hideDockIcon" = "Hide Dock icon";
 "preferences.menuBar.hideDockIcon.description" = "Enable the menu bar item before hiding the Dock icon.";
 
-"connections.search" = "Search process or destination";
-"connections.live.title" = "Live Connections";
-"connections.live.description" = "Updates every second from mihomo";
 "connections.liveSpeed" = "Live Speed";
 "connections.traffic" = "Traffic";
 "connections.empty" = "No Active Connections";
 "connections.empty.description" = "New traffic will appear here automatically.";
+"connections.connectToView" = "Connect to View Connections";
+"connections.connectToView.description" = "Connect a profile to inspect live connections.";
+"connections.search" = "Search process or destination";
 "connections.noMatch" = "No Matching Connections";
 "connections.noMatch.description" = "Try a process name, domain, or IP address.";
+"connection.closeAll" = "Close All";
+"connection.closeAll.confirmationTitle" = "Close All Connections?";
+"connection.closeAll.confirmationMessage" = "This immediately closes every connection managed by mihomo.";
 "connections.sort.process" = "Process";
 "connections.sort.liveSpeed" = "Live Speed";
 "connections.sort.rule" = "Rule";
 
-"connection.closeAll" = "Close All";
-"connection.closeAll.confirmationTitle" = "Close All Connections?";
-"connection.closeAll.confirmationMessage" = "This immediately closes every connection managed by mihomo.";
 "connection.noMatchingRule" = "No matching rule reported";
 "connection.details" = "Connection Details";
 "connection.protocol" = "Protocol";

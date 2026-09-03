@@ -16,7 +16,7 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             HomeView()
-                .navigationSplitViewColumnWidth(min: 280, ideal: 280, max: 460)
+                .navigationSplitViewColumnWidth(min: 336, ideal: 336, max: 516)
                 #if os(macOS)
                 .frame(minWidth: 280)
                 #endif

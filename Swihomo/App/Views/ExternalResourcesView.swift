@@ -126,9 +126,6 @@ private struct ExternalResourceCard: View {
         SubscriptionInfoDisplay(rawValue: subscriptionInfoDisplay) ?? .used
     }
 
-    // Plain row content: the section's grouped container is the visual surface, so no
-    // card chrome of its own. The old edge-to-edge usage wash can't sit inside a native
-    // section row — the percentage stays in the subscription summary text.
     var body: some View {
         cardContent
             .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))

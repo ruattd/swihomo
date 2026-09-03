@@ -23,7 +23,7 @@ enum HomeSection: String, CaseIterable, Hashable, Identifiable {
 
     var titleKey: LocalizedStringKey {
         switch self {
-        case .connection: "navigation.connection"
+        case .connection: "navigation.connections"
         case .profiles: "navigation.profiles"
         case .proxies: "navigation.proxies"
         case .overrides: "navigation.overrides"
@@ -36,7 +36,7 @@ enum HomeSection: String, CaseIterable, Hashable, Identifiable {
 
     var icon: String {
         switch self {
-        case .connection: "bolt.shield"
+        case .connection: "network"
         case .profiles: "doc.on.doc"
         case .proxies: "point.3.connected.trianglepath.dotted"
         case .overrides: "slider.horizontal.3"
@@ -76,12 +76,76 @@ struct HomeView: View {
                 }
                 .padding(.bottom, 2)
 
+                // The connection toggle card doubles as the profiles-page entry; the
+                // toggle inside wins its own touches over the link.
+                NavigationLink(value: HomeSection.profiles) {
+                    connectionToggle
+                }
+                .buttonStyle(.plain)
+
                 navigationGrid
             }
             .padding()
         }
         .uniformTopScrollEdge()
         .navigationTitle(Text(LocalizedStringKey("navigation.home")))
+    }
+
+    private var connectionToggle: some View {
+        HStack(spacing: 12) {
+            Image(systemName: model.isConnected ? "checkmark.shield.fill" : "shield.lefthalf.filled")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(model.isConnected ? .green : .secondary)
+                .frame(width: 38, height: 38)
+                .background(
+                    (model.isConnected ? Color.green : Color.gray).opacity(0.14),
+                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                )
+            VStack(alignment: .leading, spacing: 3) {
+                Text(LocalizedStringKey(model.connectionStatusLocalizationKey))
+                    .font(.headline)
+                Text(model.snapshot.activeProfile?.name ?? String(localized: "home.chooseProfile"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            Toggle("common.connect", isOn: connectionBinding)
+                .labelsHidden()
+                // macOS renders a bare Toggle as a checkbox; this control is a switch.
+                .toggleStyle(.switch)
+                .disabled(connectionToggleDisabled)
+        }
+        .padding(12)
+        .contentShape(RoundedRectangle(cornerRadius: CGFloat(SurfaceMetrics.panelCornerRadius), style: .continuous))
+        .liquidGlassCard(interactive: true)
+    }
+
+    private var connectionBinding: Binding<Bool> {
+        Binding(
+            get: { model.isConnected },
+            set: { on in
+                if on {
+                    guard let profile = model.snapshot.activeProfile else { return }
+                    Task { await model.connect(profile: profile) }
+                } else {
+                    model.disconnect()
+                }
+            }
+        )
+    }
+
+    // Disabled mid-transition (connecting/disconnecting/reasserting) and with no profile.
+    private var connectionToggleDisabled: Bool {
+        model.snapshot.activeProfile == nil
+            || model.tunnelStatus == .connecting
+            || model.tunnelStatus == .disconnecting
+            || model.tunnelStatus == .reasserting
+    }
+
+    // Profiles has no grid card of its own; the top toggle card leads there.
+    private var gridSections: [HomeSection] {
+        HomeSection.allCases.filter { $0 != .profiles }
     }
 
     @ViewBuilder
@@ -103,7 +167,7 @@ struct HomeView: View {
             ],
             spacing: 12
         ) {
-            ForEach(HomeSection.allCases) { section in
+            ForEach(gridSections) { section in
                 NavigationLink(value: section) {
                     HomeFeatureCard(
                         section: section,
@@ -278,7 +342,7 @@ struct FeatureDetailView: View {
             case .connection:
                 NavigationStack {
                     DashboardView()
-                        .navigationTitle(Text(LocalizedStringKey("navigation.connection")))
+                        .navigationTitle(Text(LocalizedStringKey("navigation.connections")))
                 }
             case .profiles:
                 ProfilesView()

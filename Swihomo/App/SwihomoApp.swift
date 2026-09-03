@@ -44,7 +44,7 @@ struct SwihomoApp: App {
                     await model.load()
                 }
         }
-        .defaultSize(width: 900, height: 680)
+        .defaultSize(width: 956, height: 680)
 
         MenuBarExtra(isInserted: $showsMenuBar) {
             MenuBarContentView()
