@@ -94,6 +94,7 @@ final class DetailPageViewController: NSViewController {
     func show(_ newSection: HomeSection) {
         guard isViewLoaded else { return }
         guard newSection != section || currentView == nil else { return }
+        let isInitial = currentView == nil
         section = newSection
 
         let page = hostingController(for: newSection)
@@ -101,10 +102,6 @@ final class DetailPageViewController: NSViewController {
         newView.frame = view.bounds
         newView.autoresizingMask = [.width, .height]
 
-        // Instant swap. A cross-fade was tried and dropped: bitmap snapshots cannot
-        // reproduce the pages' translucent material backgrounds (visible color dip),
-        // and NSHostingView alpha animation needs layer backing SwiftUI does not
-        // reliably provide. Instant swaps are already smooth with this host.
         let oldView = currentView
         let oldPage = currentPage
 
@@ -123,7 +120,50 @@ final class DetailPageViewController: NSViewController {
         }
         currentView = newView
         currentPage = page
-        oldView?.removeFromSuperview()
+
+        // Fade + slight rise on the incoming page, animated on the layer (GPU
+        // compositing — no SwiftUI re-layout). The old page stays until the
+        // animation completes: the incoming page's translucency cross-fades
+        // against it naturally. Layer animation also sidesteps the bitmap-
+        // snapshot color dip that killed the earlier cross-fade attempt.
+        let animate = !isInitial && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        if animate, let layer = newView.layer {
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = 0
+            fade.toValue = 1
+
+            let rise = CABasicAnimation(keyPath: "transform.translation.y")
+            rise.fromValue = 10
+            rise.toValue = 0
+
+            let group = CAAnimationGroup()
+            group.animations = [fade, rise]
+            group.duration = 0.22
+            group.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            group.isRemovedOnCompletion = true
+            layer.add(group, forKey: "pageTransition")
+        }
+        // Symmetric fade-out: translucent pages (glass cards) would otherwise let
+        // the old page show through the incoming one for the whole animation.
+        if animate, let oldView, oldView !== newView, let oldLayer = oldView.layer {
+            let fadeOut = CABasicAnimation(keyPath: "opacity")
+            fadeOut.fromValue = 1
+            fadeOut.toValue = 0
+            fadeOut.duration = 0.22
+            fadeOut.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            fadeOut.isRemovedOnCompletion = true
+            oldLayer.add(fadeOut, forKey: "pageTransition")
+        }
+
+        guard oldView !== newView else { return }
+        if let oldView {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                // Only remove if it hasn't become visible again meanwhile.
+                if oldView !== self.currentView {
+                    oldView.removeFromSuperview()
+                }
+            }
+        }
     }
 
     // Pages are cached after their first build: revisiting re-attaches the existing
@@ -152,6 +192,8 @@ final class DetailPageViewController: NSViewController {
             )
         )
         host.sizingOptions = []
+        // Layer backing enables GPU-composited transition animations.
+        host.view.wantsLayer = true
         pages[section] = host
         return host
     }
