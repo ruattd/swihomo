@@ -57,7 +57,7 @@ Prerequisites:
 ```sh
 git clone --recurse-submodules https://github.com/ruattd/swihomo.git
 cd swihomo
-bash scripts/build-mihomo-core.sh
+bash scripts/build-mihomo.sh
 open Swihomo.xcodeproj
 ```
 
@@ -99,7 +99,7 @@ The mihomo fork is a submodule pinned to the `swihomo` branch of [ruattd/swihomo
 
 ```sh
 git submodule update --remote --merge Vendor/mihomo
-bash scripts/build-mihomo-core.sh
+bash scripts/build-mihomo.sh
 ```
 
 The build also generates `Swihomo/Shared/MihomoCoreVersion.swift` from mihomo's `constant.Version`, keeping the default subscription `User-Agent` in sync with the core.

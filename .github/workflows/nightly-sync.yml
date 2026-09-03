@@ -54,29 +54,12 @@ jobs:
           export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $github_app_basic_auth"
           git config --local user.name 'swihomo-automation[bot]'
           git config --local user.email '315911239+swihomo-automation[bot]@users.noreply.github.com'
-          git submodule sync --recursive
-          git submodule update --init --recursive
+          scripts/init-submodules.sh
           git -C Vendor/mihomo config --local user.name 'swihomo-automation[bot]'
           git -C Vendor/mihomo config --local user.email '315911239+swihomo-automation[bot]@users.noreply.github.com'
-          git -C Vendor/mihomo fetch origin swihomo
-          git -C Vendor/mihomo checkout --track -b swihomo origin/swihomo
-          scripts/sync-mihomo-core.sh
-
-      - name: Push rebased mihomo branch
-        shell: bash
-        env:
-          APP_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          set -euo pipefail
-          if [[ -z "${APP_TOKEN:-}" ]]; then
-            printf '%s\n' 'GitHub App token is empty.' >&2
-            exit 1
-          fi
-          github_app_basic_auth="$(printf 'x-access-token:%s' "$APP_TOKEN" | base64 | tr -d '\n')"
-          export GIT_CONFIG_COUNT=1
-          export GIT_CONFIG_KEY_0='http.https://github.com/.extraheader'
-          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $github_app_basic_auth"
-          git -C Vendor/mihomo push --force-with-lease origin swihomo swihomo-alpha-base
+          # The script fetches its remote sources, rebases and pushes swihomo, saves
+          # the sync base to the remote, and cleans up local scratch branches.
+          scripts/rebase-mihomo.sh
 
       - name: Commit updated mihomo submodule reference
         shell: bash

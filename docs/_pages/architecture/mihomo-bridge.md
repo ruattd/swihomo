@@ -79,7 +79,7 @@ profile's control.
 Run this after changing `Vendor/mihomo` or the Go bridge:
 
 ```sh
-bash scripts/build-mihomo-core.sh
+bash scripts/build-mihomo.sh
 ```
 
 The script produces device, simulator, and macOS slices in

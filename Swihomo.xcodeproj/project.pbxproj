@@ -333,6 +333,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 600000000000000000000003 /* Build configuration list for PBXNativeTarget "PacketTunnel" */;
 			buildPhases = (
+				300000000000000000000007 /* Build mihomo */,
 				300000000000000000000005 /* Sources */,
 				300000000000000000000003 /* Frameworks */,
 			);
@@ -434,6 +435,24 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		300000000000000000000007 /* Build mihomo */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Build mihomo";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "if [[ \"${SWIHOMO_SKIP_MIHOMO_BUILD:-}\" == \"1\" || \"${SWIHOMO_SKIP_MIHOMO_BUILD:-}\" == \"true\" ]]; then\n\techo \"Skipping mihomo build (SWIHOMO_SKIP_MIHOMO_BUILD is set).\"\n\texit 0\nfi\nbash \"$SRCROOT/scripts/build-mihomo.sh\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		300000000000000000000004 /* Sources */ = {

@@ -70,7 +70,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bash scripts/prepare-mihomo-core.sh --submodule-only
+          bash scripts/init-submodules.sh
 
       - name: Calculate MihomoCore cache key
         id: mihomo_cache_key
@@ -93,12 +93,20 @@ jobs:
             Vendor/MihomoCore.xcframework
             Swihomo/Shared/MihomoCoreVersion.swift
 
+      - name: Set up Go
+        if: steps.mihomo_core_cache.outputs.cache-hit != 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.5'
+
       - name: Build MihomoCore
         if: steps.mihomo_core_cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -euo pipefail
-          bash scripts/prepare-mihomo-core.sh
+          bash scripts/set-mihomo-version.sh
+          bash scripts/build-mihomo.sh
+          bash scripts/export-mihomo-version.sh
 
       - name: Verify MihomoCore cache output
         if: ${{ always() }}
@@ -125,6 +133,10 @@ jobs:
 
       - name: Build and package iOS app
         shell: bash
+        env:
+          # The workflow builds the core explicitly; the project's auto-build phase
+          # must not redo it.
+          SWIHOMO_SKIP_MIHOMO_BUILD: 'true'
         run: |
           set -euo pipefail
           ios_derived_data="$RUNNER_TEMP/Swihomo-iOS-DerivedData"
@@ -155,6 +167,8 @@ jobs:
 
       - name: Build and package macOS app
         shell: bash
+        env:
+          SWIHOMO_SKIP_MIHOMO_BUILD: 'true'
         run: |
           set -euo pipefail
           macos_derived_data="$RUNNER_TEMP/Swihomo-macOS-DerivedData"

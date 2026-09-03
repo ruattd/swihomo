@@ -145,7 +145,7 @@ jobs:
 
       - name: Prepare mihomo submodule
         shell: bash
-        run: bash scripts/prepare-mihomo-core.sh --submodule-only
+        run: bash scripts/init-submodules.sh
 
       - name: Calculate MihomoCore cache key
         id: mihomo_cache_key
@@ -168,10 +168,20 @@ jobs:
             Vendor/MihomoCore.xcframework
             Swihomo/Shared/MihomoCoreVersion.swift
 
+      - name: Set up Go
+        if: steps.mihomo_core_cache.outputs.cache-hit != 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.5'
+
       - name: Build MihomoCore
         if: steps.mihomo_core_cache.outputs.cache-hit != 'true'
         shell: bash
-        run: bash scripts/prepare-mihomo-core.sh
+        run: |
+          set -euo pipefail
+          bash scripts/set-mihomo-version.sh
+          bash scripts/build-mihomo.sh
+          bash scripts/export-mihomo-version.sh
 
       - name: Verify MihomoCore cache output
         if: ${{ always() }}
@@ -462,6 +472,9 @@ jobs:
       - name: Archive and export signed packages
         shell: bash
         env:
+          # The workflow builds the core explicitly; the project's auto-build phase
+          # must not redo it.
+          SWIHOMO_SKIP_MIHOMO_BUILD: 'true'
           MARKETING_VERSION: ${{ steps.version.outputs.marketing-version }}
           IOS_BUILD_NUMBER: ${{ needs.allocate-build-number.outputs.ios_build_number }}
           MACOS_BUILD_NUMBER: ${{ needs.allocate-build-number.outputs.macos_build_number }}

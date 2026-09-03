@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Compiles the mihomo core for all Apple targets and assembles MihomoCore.xcframework.
+# Requires Go 1.26.5 on PATH (CI provides it via actions/setup-go).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -7,8 +9,6 @@ BUILD_ROOT="$CORE_ROOT/.build-mihomo"
 OUTPUT="$ROOT/Vendor/MihomoCore.xcframework"
 IOS_MINIMUM=17.0
 MACOS_MINIMUM=14.0
-
-bash "$ROOT/scripts/sync-mihomo-core-version.sh"
 
 build_archive() {
     local name="$1"
