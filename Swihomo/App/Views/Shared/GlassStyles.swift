@@ -130,6 +130,65 @@ extension EdgeInsets {
     static var settingsRow: EdgeInsets { EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12) }
 }
 
+/// Looks exactly like `.plain`, but adds a press effect on macOS for navigation cards:
+/// a dim while held, plus a one-shot shrink-and-bounce that always plays to completion
+/// even on the quickest tap (iOS gets that feedback from the interactive glass itself).
+/// Pass `contracted` to report the contraction to a container OUTSIDE the label (e.g.
+/// a glass card wrapping siblings that must not animate), instead of scaling the label.
+struct NavigationCardButtonStyle: ButtonStyle {
+    var contracted: Binding<Bool>? = nil
+
+    @State private var localContracted = false
+    @State private var pressStart = Date.distantPast
+    @State private var pressID = 0
+
+    private var isContracted: Bool { contracted?.wrappedValue ?? localContracted }
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+#if os(macOS)
+            .opacity(configuration.isPressed ? 0.6 : 1)
+            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+            .scaleEffect(contracted == nil && isContracted ? 0.96 : 1)
+            // Contract on press-down; bounce back only on release, and never earlier
+            // than 120ms in — a quick tap still plays the full shrink, a hold stays
+            // shrunk until let go.
+            .onChange(of: configuration.isPressed) { _, pressed in
+                if pressed {
+                    guard !isContracted else { return }
+                    pressID += 1
+                    pressStart = .now
+                    withAnimation(.spring(duration: 0.15)) {
+                        setContraction(true)
+                    }
+                } else {
+                    guard isContracted else { return }
+                    let id = pressID
+                    let remaining = max(0, 0.12 - Date.now.timeIntervalSince(pressStart))
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(Int(remaining * 1000)))
+                        // A newer press supersedes this release.
+                        guard id == pressID else { return }
+                        withAnimation(.spring(duration: 0.35, bounce: 0.45)) {
+                            setContraction(false)
+                        }
+                    }
+                }
+            }
+#endif
+    }
+
+#if os(macOS)
+    private func setContraction(_ value: Bool) {
+        if let contracted {
+            contracted.wrappedValue = value
+        } else {
+            localContracted = value
+        }
+    }
+#endif
+}
+
 extension View {
     /// Freezes `frozen` to `value` while a scroll is in flight and releases it back to nil
     /// on idle, so high-frequency publishes never invalidate list cells mid-scroll.

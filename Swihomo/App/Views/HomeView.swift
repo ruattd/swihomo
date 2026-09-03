@@ -63,10 +63,15 @@ enum HomeSection: String, CaseIterable, Hashable, Identifiable {
 
 struct HomeView: View {
     @EnvironmentObject private var model: AppModel
+    // Drives the toggle card's press bounce on the whole glass surface; the switch
+    // sits outside the link and never triggers it.
+    @State private var toggleCardContracted = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                // macOS keeps the in-content title header; iOS uses the navigation title.
+                #if os(macOS)
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Swihomo")
                         .font(.title.bold())
@@ -75,41 +80,50 @@ struct HomeView: View {
                         .foregroundStyle(.secondary)
                 }
                 .padding(.bottom, 2)
+                #endif
 
-                // The connection toggle card doubles as the profiles-page entry; the
-                // toggle inside wins its own touches over the link.
-                NavigationLink(value: HomeSection.profiles) {
-                    connectionToggle
-                }
-                .buttonStyle(.plain)
+                connectionToggle
 
                 navigationGrid
             }
             .padding()
         }
         .uniformTopScrollEdge()
+        #if os(macOS)
         .navigationTitle(Text(LocalizedStringKey("navigation.home")))
+        #else
+        .navigationTitle("Swihomo")
+        #endif
     }
 
+    // The card is the profiles-page entry, but the switch sits OUTSIDE the link —
+    // toggling it must not trigger the card's press animation.
     private var connectionToggle: some View {
         HStack(spacing: 12) {
-            Image(systemName: model.isConnected ? "checkmark.shield.fill" : "shield.lefthalf.filled")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(model.isConnected ? .green : .secondary)
-                .frame(width: 38, height: 38)
-                .background(
-                    (model.isConnected ? Color.green : Color.gray).opacity(0.14),
-                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                )
-            VStack(alignment: .leading, spacing: 3) {
-                Text(LocalizedStringKey(model.connectionStatusLocalizationKey))
-                    .font(.headline)
-                Text(model.snapshot.activeProfile?.name ?? String(localized: "home.chooseProfile"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+            NavigationLink(value: HomeSection.profiles) {
+                HStack(spacing: 12) {
+                    Image(systemName: model.isConnected ? "checkmark.shield.fill" : "shield.lefthalf.filled")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(model.isConnected ? .green : .secondary)
+                        .frame(width: 38, height: 38)
+                        .background(
+                            (model.isConnected ? Color.green : Color.gray).opacity(0.14),
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        )
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(LocalizedStringKey(model.connectionStatusLocalizationKey))
+                            .font(.headline)
+                        Text(model.snapshot.activeProfile?.name ?? String(localized: "home.chooseProfile"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                }
+                .contentShape(Rectangle())
             }
-            Spacer()
+            .buttonStyle(NavigationCardButtonStyle(contracted: $toggleCardContracted))
+
             Toggle("common.connect", isOn: connectionBinding)
                 .labelsHidden()
                 // macOS renders a bare Toggle as a checkbox; this control is a switch.
@@ -117,8 +131,9 @@ struct HomeView: View {
                 .disabled(connectionToggleDisabled)
         }
         .padding(12)
-        .contentShape(RoundedRectangle(cornerRadius: CGFloat(SurfaceMetrics.panelCornerRadius), style: .continuous))
+        // Scale must wrap the glass surface, not just its content.
         .liquidGlassCard(interactive: true)
+        .scaleEffect(toggleCardContracted ? 0.96 : 1)
     }
 
     private var connectionBinding: Binding<Bool> {
@@ -143,42 +158,67 @@ struct HomeView: View {
             || model.tunnelStatus == .reasserting
     }
 
-    // Profiles has no grid card of its own; the top toggle card leads there.
+    // Profiles has no grid card of its own (the top toggle card leads there);
+    // preferences/about render as wide banners below the grid instead.
     private var gridSections: [HomeSection] {
-        HomeSection.allCases.filter { $0 != .profiles }
+        [.proxies, .connection, .overrides, .externalResources, .logs]
+    }
+
+    private var bannerSections: [HomeSection] {
+        [.preference, .about]
     }
 
     @ViewBuilder
     private var navigationGrid: some View {
-        if #available(iOS 26.0, macOS 26.0, *) {
+        // GlassEffectContainer merges the cards' glass on iOS; on macOS it swallows the
+        // interactive glass press effect, so the cards stay ungrouped there.
+        #if os(macOS)
+        navigationGridContent
+        #else
+        if #available(iOS 26.0, *) {
             GlassEffectContainer {
                 navigationGridContent
             }
         } else {
             navigationGridContent
         }
+        #endif
     }
 
     private var navigationGridContent: some View {
-        LazyVGrid(
-            columns: [
-                GridItem(.flexible(), spacing: 12),
-                GridItem(.flexible(), spacing: 12)
-            ],
-            spacing: 12
-        ) {
-            ForEach(gridSections) { section in
+        VStack(spacing: 12) {
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: 12),
+                    GridItem(.flexible(), spacing: 12)
+                ],
+                spacing: 12
+            ) {
+                ForEach(gridSections) { section in
+                    NavigationLink(value: section) {
+                        HomeFeatureCard(
+                            section: section,
+                            value: value(for: section),
+                            valueKey: valueKey(for: section),
+                            subtitle: subtitle(for: section),
+                            subtitleKey: subtitleKey(for: section),
+                            helpKey: section == .connection ? "home.connectionsHint" : subtitleKey(for: section),
+                            isHighlighted: section == .connection && model.isConnected
+                        )
+                    }
+                    .buttonStyle(NavigationCardButtonStyle())
+                }
+            }
+
+            ForEach(bannerSections) { section in
                 NavigationLink(value: section) {
-                    HomeFeatureCard(
+                    HomeBannerRow(
                         section: section,
-                        value: value(for: section),
-                        valueKey: valueKey(for: section),
                         subtitle: subtitle(for: section),
-                        subtitleKey: subtitleKey(for: section),
-                        isHighlighted: section == .connection && model.isConnected
+                        subtitleKey: subtitleKey(for: section)
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(NavigationCardButtonStyle())
             }
         }
     }
@@ -272,6 +312,7 @@ private struct HomeFeatureCard: View {
     let valueKey: String?
     let subtitle: String
     let subtitleKey: String?
+    let helpKey: String?
     let isHighlighted: Bool
 
     var body: some View {
@@ -297,10 +338,10 @@ private struct HomeFeatureCard: View {
             }
         }
         .padding(10)
-        .frame(maxWidth: .infinity, minHeight: 112, maxHeight: 112, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: 96, maxHeight: 96, alignment: .topLeading)
         .contentShape(RoundedRectangle(cornerRadius: CGFloat(SurfaceMetrics.panelCornerRadius), style: .continuous))
         .liquidGlassCard(interactive: true)
-        .modifier(HomeFeatureCardHelp(text: subtitle, key: subtitleKey))
+        .modifier(HomeFeatureCardHelp(text: subtitle, key: helpKey ?? subtitleKey))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text(section.titleKey) + Text(verbatim: ", ") + valueText)
         .accessibilityHint(subtitle)
@@ -312,6 +353,48 @@ private struct HomeFeatureCard: View {
         } else {
             Text(verbatim: value)
         }
+    }
+}
+
+// Full-width banner variant of the feature card, for utility sections under the grid.
+private struct HomeBannerRow: View {
+    let section: HomeSection
+    let subtitle: String
+    let subtitleKey: String?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: section.icon)
+                .font(.title3.weight(.medium))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(section.tint)
+                .frame(width: 28, height: 28)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(section.titleKey)
+                    .font(.subheadline.weight(.semibold))
+                if let subtitleKey {
+                    Text(LocalizedStringKey(subtitleKey))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                } else {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(12)
+        .contentShape(RoundedRectangle(cornerRadius: CGFloat(SurfaceMetrics.panelCornerRadius), style: .continuous))
+        .liquidGlassCard(interactive: true)
+        .modifier(HomeFeatureCardHelp(text: subtitle, key: subtitleKey))
+        .accessibilityElement(children: .combine)
+        .accessibilityHint(subtitle)
     }
 }
 

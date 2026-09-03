@@ -56,10 +56,10 @@
 "common.ascending" = "升序";
 "common.descending" = "降序";
 
-"navigation.home" = "主页";
 "navigation.connection" = "连接";
 "navigation.connections" = "连接";
 "navigation.profiles" = "配置文件";
+"navigation.home" = "主页";
 "navigation.proxies" = "代理";
 "navigation.overrides" = "覆盖设置";
 "navigation.resources" = "资源";
@@ -72,9 +72,10 @@
 "status.connecting" = "连接中";
 "status.disconnecting" = "断开连接中";
 
-"home.controlCenter" = "控制中心";
 "home.appSettings" = "应用程序设置";
+"home.controlCenter" = "控制中心";
 "home.chooseProfile" = "选择配置文件以开始";
+"home.connectionsHint" = "查看实时连接";
 "home.profilesSubtitle" = "导入本地文件或刷新在线订阅";
 "home.proxies.connectedSubtitle" = "选择节点并运行延迟测试";
 "home.proxies.disconnectedSubtitle" = "连接配置文件以加载代理组";

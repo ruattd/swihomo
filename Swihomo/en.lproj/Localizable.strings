@@ -56,10 +56,10 @@
 "common.ascending" = "Ascending";
 "common.descending" = "Descending";
 
-"navigation.home" = "Home";
 "navigation.connection" = "Connection";
 "navigation.connections" = "Connections";
 "navigation.profiles" = "Profiles";
+"navigation.home" = "Home";
 "navigation.proxies" = "Proxies";
 "navigation.overrides" = "Overrides";
 "navigation.resources" = "Resources";
@@ -72,9 +72,10 @@
 "status.connecting" = "Connecting";
 "status.disconnecting" = "Disconnecting";
 
-"home.controlCenter" = "Control center";
 "home.appSettings" = "App settings";
+"home.controlCenter" = "Control center";
 "home.chooseProfile" = "Choose a profile to begin";
+"home.connectionsHint" = "View live connections";
 "home.profilesSubtitle" = "Import local files or refresh online subscriptions";
 "home.proxies.connectedSubtitle" = "Select nodes and run delay tests";
 "home.proxies.disconnectedSubtitle" = "Connect a profile to load proxy groups";
