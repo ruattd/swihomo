@@ -16,6 +16,17 @@ int SwihomoCoreAPIRequest(
     uint8_t **response,
     size_t *responseLength
 );
+// Positive return values are stream IDs; smaller values are bridge error codes.
+int SwihomoCoreAPIStreamOpen(
+    const char *method,
+    const char *target,
+    uint8_t *body,
+    size_t bodyLength
+);
+// Blocks up to timeoutMs when the buffer is empty. 0 means more data may follow;
+// other values mean the stream ended.
+int SwihomoCoreAPIStreamRead(int id, int timeoutMs, uint8_t **data, size_t *dataLength);
+void SwihomoCoreAPIStreamClose(int id);
 void SwihomoCoreStop(void);
 void SwihomoCoreFreeMemory(uint64_t *before, uint64_t *after);
 char *SwihomoCoreLastError(void);

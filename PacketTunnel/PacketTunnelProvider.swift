@@ -110,6 +110,48 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                     resourceContents: nil,
                     errorMessage: nil
                 )
+            case .controllerStreamOpen:
+                guard let controllerRequest = request.controllerRequest else {
+                    throw ClientError.controllerRequestFailed("The controller stream request is missing.")
+                }
+                var response = TunnelProviderResponse(
+                    controllerResponse: nil,
+                    coreLogs: nil,
+                    proxyGroupOrder: nil,
+                    externalResources: nil,
+                    resourceContents: nil,
+                    errorMessage: nil
+                )
+                response.streamID = try openControllerStream(controllerRequest)
+                return response
+            case .controllerStreamRead:
+                guard let streamID = request.streamID else {
+                    throw ClientError.controllerRequestFailed("The controller stream identifier is missing.")
+                }
+                var response = TunnelProviderResponse(
+                    controllerResponse: nil,
+                    coreLogs: nil,
+                    proxyGroupOrder: nil,
+                    externalResources: nil,
+                    resourceContents: nil,
+                    errorMessage: nil
+                )
+                let (data, eof) = readControllerStream(streamID)
+                response.streamData = data
+                response.streamEOF = eof
+                return response
+            case .controllerStreamClose:
+                if let streamID = request.streamID {
+                    SwihomoCoreAPIStreamClose(Int32(streamID))
+                }
+                return TunnelProviderResponse(
+                    controllerResponse: nil,
+                    coreLogs: nil,
+                    proxyGroupOrder: nil,
+                    externalResources: nil,
+                    resourceContents: nil,
+                    errorMessage: nil
+                )
             case .coreLogs:
                 return TunnelProviderResponse(
                     controllerResponse: nil,
@@ -197,6 +239,48 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 errorMessage: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             )
         }
+    }
+
+    private func openControllerStream(_ request: MihomoControllerRequest) throws -> Int {
+        // Same in-process dispatch as performControllerRequest, but for endpoints that
+        // stream chunks until closed.
+        var components = URLComponents()
+        components.path = "/\(request.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")))"
+        components.queryItems = request.queryItems.map {
+            URLQueryItem(name: $0.name, value: $0.value)
+        }
+        let target = components.path + (components.percentEncodedQuery.map { "?\($0)" } ?? "")
+
+        var bodyBytes = [UInt8](request.body ?? Data())
+        let bodyLength = bodyBytes.count
+        let status = request.method.withCString { methodPointer in
+            target.withCString { targetPointer in
+                bodyBytes.withUnsafeMutableBufferPointer { bodyBuffer in
+                    SwihomoCoreAPIStreamOpen(
+                        methodPointer,
+                        targetPointer,
+                        bodyBuffer.baseAddress,
+                        bodyLength
+                    )
+                }
+            }
+        }
+        // Stream IDs start above the bridge error-code range.
+        guard status > 100 else {
+            throw ClientError.controllerRequestFailed(Self.lastCoreError())
+        }
+        return Int(status)
+    }
+
+    private func readControllerStream(_ streamID: Int) -> (Data, Bool) {
+        var dataPointer: UnsafeMutablePointer<UInt8>?
+        var dataLength = 0
+        // Long-poll: block in the core until a chunk lands (or the stream ends), so
+        // frames reach the app the moment they are produced.
+        let status = SwihomoCoreAPIStreamRead(Int32(streamID), 2_000, &dataPointer, &dataLength)
+        defer { if let dataPointer { SwihomoCoreFreeData(dataPointer) } }
+        let data = dataPointer.map { Data(bytes: $0, count: dataLength) } ?? Data()
+        return (data, status != 0)
     }
 
     private func performControllerRequest(_ request: MihomoControllerRequest) async throws -> (Data, Int) {

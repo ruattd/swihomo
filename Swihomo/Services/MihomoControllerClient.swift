@@ -104,6 +104,43 @@ actor MihomoControllerClient {
         return response.connections
     }
 
+    /// Live traffic frames from the /traffic stream, carried over the IPC stream
+    /// channel. The stream closes when the core stops; cancel to hang up.
+    nonisolated func trafficFrames() -> AsyncThrowingStream<MihomoTrafficFrame, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    let streamID = try await tunnel.openControllerStream(
+                        MihomoControllerRequest(path: "traffic", method: "GET", body: nil, queryItems: [])
+                    )
+                    let decoder = JSONDecoder()
+                    var lineBuffer = Data()
+                    while !Task.isCancelled {
+                        let (chunk, eof) = try await tunnel.readControllerStream(streamID)
+                        lineBuffer.append(chunk)
+                        while let newlineIndex = lineBuffer.firstIndex(of: UInt8(ascii: "\n")) {
+                            let line = Data(lineBuffer.prefix(upTo: newlineIndex))
+                            lineBuffer = lineBuffer.suffix(from: lineBuffer.index(after: newlineIndex))
+                            if let frame = try? decoder.decode(MihomoTrafficFrame.self, from: line) {
+                                continuation.yield(frame)
+                            }
+                        }
+                        if eof { break }
+                        // No sleep: reads long-poll in the core and return the moment
+                        // a frame lands, keeping the producer's cadence.
+                    }
+                    await tunnel.closeControllerStream(streamID)
+                    continuation.finish()
+                } catch where error is CancellationError {
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
     func closeConnection(id: String) async throws {
         let _: EmptyResponse = try await request(
             path: "connections/\(id)",

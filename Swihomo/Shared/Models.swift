@@ -810,6 +810,9 @@ struct MihomoProviderDetails: Hashable {
 
 enum TunnelProviderOperation: String, Codable {
     case controller
+    case controllerStreamOpen
+    case controllerStreamRead
+    case controllerStreamClose
     case coreLogs
     case clearCoreLogs
     case proxyGroupOrder
@@ -823,6 +826,7 @@ struct TunnelProviderRequest: Codable {
     let controllerRequest: MihomoControllerRequest?
     let resourceIdentifier: String?
     let resourceContents: Data?
+    let streamID: Int?
     let path: String?
     let method: String?
     let body: Data?
@@ -832,12 +836,14 @@ struct TunnelProviderRequest: Codable {
         operation: TunnelProviderOperation,
         controllerRequest: MihomoControllerRequest? = nil,
         resourceIdentifier: String? = nil,
-        resourceContents: Data? = nil
+        resourceContents: Data? = nil,
+        streamID: Int? = nil
     ) {
         self.operation = operation
         self.controllerRequest = controllerRequest
         self.resourceIdentifier = resourceIdentifier
         self.resourceContents = resourceContents
+        self.streamID = streamID
         path = controllerRequest?.path
         method = controllerRequest?.method
         body = controllerRequest?.body
@@ -852,6 +858,10 @@ struct TunnelProviderResponse: Codable {
     let externalResources: [ExternalResource]?
     let resourceContents: Data?
     let errorMessage: String?
+    // Streaming replies: identifier on open, drained chunk + end-of-stream on read.
+    var streamID: Int? = nil
+    var streamData: Data? = nil
+    var streamEOF: Bool? = nil
 }
 
 enum ClientError: LocalizedError {

@@ -1017,22 +1017,12 @@ final class AppModel: ObservableObject {
         trafficDownloadTotal = 0
     }
 
+    // The /traffic stream rides the IPC stream channel — no external controller.
     private func consumeTrafficStream() async {
         guard !screenshotDemoMode else { return }
-        let overrides = snapshot.overrides
-        guard let url = URL(string: "http://127.0.0.1:\(overrides.controllerPort)/traffic") else { return }
-        var request = URLRequest(url: url)
-        if !overrides.controllerSecret.isEmpty {
-            request.setValue("Bearer \(overrides.controllerSecret)", forHTTPHeaderField: "Authorization")
-        }
-        let decoder = JSONDecoder()
         do {
-            let (bytes, response) = try await URLSession.shared.bytes(for: request)
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200..<300).contains(httpResponse.statusCode) else { return }
-            for try await line in bytes.lines {
+            for try await frame in controller.trafficFrames() {
                 if Task.isCancelled { break }
-                guard let frame = try? decoder.decode(MihomoTrafficFrame.self, from: Data(line.utf8)) else { continue }
                 trafficUploadSpeed = frame.up
                 trafficDownloadSpeed = frame.down
                 trafficUploadTotal = frame.upTotal

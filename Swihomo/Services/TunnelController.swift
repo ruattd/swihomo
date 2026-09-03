@@ -146,6 +146,30 @@ final class TunnelController {
         return controllerResponse
     }
 
+    func openControllerStream(_ request: MihomoControllerRequest) async throws -> Int {
+        let response = try await sendProviderRequest(
+            TunnelProviderRequest(operation: .controllerStreamOpen, controllerRequest: request)
+        )
+        guard let streamID = response.streamID else {
+            throw ClientError.controllerRequestFailed("The Packet Tunnel did not open a controller stream.")
+        }
+        return streamID
+    }
+
+    /// Drains the buffered chunk of a controller stream; eof means the stream ended.
+    func readControllerStream(_ streamID: Int) async throws -> (Data, Bool) {
+        let response = try await sendProviderRequest(
+            TunnelProviderRequest(operation: .controllerStreamRead, streamID: streamID)
+        )
+        return (response.streamData ?? Data(), response.streamEOF ?? true)
+    }
+
+    func closeControllerStream(_ streamID: Int) async {
+        _ = try? await sendProviderRequest(
+            TunnelProviderRequest(operation: .controllerStreamClose, streamID: streamID)
+        )
+    }
+
     func coreLogs() async throws -> [LogEntry] {
         let response = try await sendProviderRequest(
             TunnelProviderRequest(operation: .coreLogs, controllerRequest: nil)
@@ -213,7 +237,8 @@ final class TunnelController {
                     resourceContents: nil,
                     errorMessage: nil
                 )
-            case .coreLogs, .clearCoreLogs, .proxyGroupOrder, .externalResources, .readExternalResource, .writeExternalResource:
+            case .controllerStreamOpen, .controllerStreamRead, .controllerStreamClose,
+                 .coreLogs, .clearCoreLogs, .proxyGroupOrder, .externalResources, .readExternalResource, .writeExternalResource:
                 throw ClientError.controllerRequestFailed(
                     "This operation requires reconnecting the Packet Tunnel with the current extension build."
                 )
