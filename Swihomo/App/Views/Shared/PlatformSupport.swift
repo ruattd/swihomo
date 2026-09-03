@@ -3,6 +3,20 @@ import SwiftUI
 import AppKit
 #endif
 
+extension View {
+    /// Page navigation title — iOS only. On macOS the detail container owns the
+    /// window title; titles declared inside nested hosting controllers bridge into
+    /// the shared window titlebar unpredictably (wrong/flickering titles).
+    @ViewBuilder
+    func detailPageTitle(_ key: LocalizedStringKey) -> some View {
+        #if os(iOS)
+        navigationTitle(Text(key))
+        #else
+        self
+        #endif
+    }
+}
+
 #if os(macOS)
 struct WindowToolbarBaselineHider: NSViewRepresentable {
     func makeNSView(context: Context) -> ToolbarBaselineView {

@@ -155,7 +155,7 @@ struct OverridesView: View {
                 .padding(.trailing, verticalScrollerInset)
                 .padding(.bottom, 10)
             }
-            .navigationTitle(Text(LocalizedStringKey("navigation.overrides")))
+            .detailPageTitle("navigation.overrides")
             .onAppear { draft = model.snapshot.overrides }
             .onChange(of: model.snapshot.overrides) { _, overrides in
                 draft = overrides

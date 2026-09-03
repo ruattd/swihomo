@@ -102,29 +102,34 @@ struct LogsView: View {
                     )
                 }
             }
-            .navigationTitle(Text(LocalizedStringKey("navigation.logs")))
+            .detailPageTitle("navigation.logs")
+            #if os(macOS)
+            // Chrome is hoisted to the detail container; per-page .toolbar/.searchable
+            // inside nested hosting controllers collide in the shared window toolbar.
+            .background(ChromeProvider(
+                section: .logs,
+                toolbar: {
+                    AnyView(LogsToolbarContent(
+                        filter: $filter,
+                        levelFilter: $levelFilter,
+                        showingClearLogsConfirmation: $showingClearLogsConfirmation
+                    ))
+                },
+                searchText: $searchText,
+                searchPrompt: "logs.search"
+            ))
+            #else
             .searchable(text: $searchText, prompt: "logs.search")
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
-                    Menu {
-                        sourceFilterSection
-                        levelFilterSection
-                    } label: {
-                        Label(filter.titleKey, systemImage: "line.3.horizontal.decrease")
-                            .font(.subheadline.weight(.medium))
-                    }
-
-                    Menu {
-                        Button(role: .destructive) {
-                            showingClearLogsConfirmation = true
-                        } label: {
-                            Label("logs.clearLogs", systemImage: "trash")
-                        }
-                    } label: {
-                        Label("common.more", systemImage: "ellipsis.circle")
-                    }
+                    LogsToolbarContent(
+                        filter: $filter,
+                        levelFilter: $levelFilter,
+                        showingClearLogsConfirmation: $showingClearLogsConfirmation
+                    )
                 }
             }
+            #endif
             .confirmationDialog(
                 Text(LocalizedStringKey("logs.clearLogs.confirmationTitle")),
                 isPresented: $showingClearLogsConfirmation,
@@ -144,6 +149,35 @@ struct LogsView: View {
                 Text(LocalizedStringKey("logs.clearLogs.description"))
             }
             .task { await model.reloadLogs() }
+        }
+    }
+
+}
+
+// Toolbar content for the logs page, rendered by the container on macOS (via
+// ChromeProvider) and in-page on iOS.
+private struct LogsToolbarContent: View {
+    @Binding var filter: LogFilter
+    @Binding var levelFilter: LogLevelFilter
+    @Binding var showingClearLogsConfirmation: Bool
+
+    var body: some View {
+        Menu {
+            sourceFilterSection
+            levelFilterSection
+        } label: {
+            Label(filter.titleKey, systemImage: "line.3.horizontal.decrease")
+                .font(.subheadline.weight(.medium))
+        }
+
+        Menu {
+            Button(role: .destructive) {
+                showingClearLogsConfirmation = true
+            } label: {
+                Label("logs.clearLogs", systemImage: "trash")
+            }
+        } label: {
+            Label("common.more", systemImage: "ellipsis.circle")
         }
     }
 

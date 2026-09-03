@@ -54,7 +54,7 @@ struct AboutView: View {
         }
         .formStyle(.grouped)
         .uniformTopScrollEdge()
-        .navigationTitle(Text(LocalizedStringKey("navigation.about")))
+        .detailPageTitle("navigation.about")
     }
 
     @ViewBuilder

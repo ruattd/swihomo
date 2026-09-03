@@ -25,6 +25,7 @@
 		100000000000000000000047 /* FormattingHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000047 /* FormattingHelpers.swift */; };
 		100000000000000000000048 /* GlassStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000048 /* GlassStyles.swift */; };
 		100000000000000000000049 /* MultilineCodeEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000049 /* MultilineCodeEditor.swift */; };
+		100000000000000000000054 /* DetailPageHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000054 /* DetailPageHost.swift */; };
 		100000000000000000000050 /* ThemeOptionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000050 /* ThemeOptionCard.swift */; };
 		100000000000000000000003 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000003 /* AppModel.swift */; };
 		100000000000000000000004 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000004 /* Models.swift */; };
@@ -100,6 +101,7 @@
 		200000000000000000000047 /* FormattingHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormattingHelpers.swift; sourceTree = "<group>"; };
 		200000000000000000000048 /* GlassStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassStyles.swift; sourceTree = "<group>"; };
 		200000000000000000000049 /* MultilineCodeEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultilineCodeEditor.swift; sourceTree = "<group>"; };
+		200000000000000000000054 /* DetailPageHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailPageHost.swift; sourceTree = "<group>"; };
 		200000000000000000000050 /* ThemeOptionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeOptionCard.swift; sourceTree = "<group>"; };
 		200000000000000000000003 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		200000000000000000000004 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
@@ -284,6 +286,7 @@
 				200000000000000000000047 /* FormattingHelpers.swift */,
 				200000000000000000000048 /* GlassStyles.swift */,
 				200000000000000000000049 /* MultilineCodeEditor.swift */,
+				200000000000000000000054 /* DetailPageHost.swift */,
 				200000000000000000000050 /* ThemeOptionCard.swift */,
 				200000000000000000000051 /* QRCodeScannerSheet.swift */,
 			);
@@ -476,6 +479,7 @@
 				100000000000000000000047 /* FormattingHelpers.swift in Sources */,
 				100000000000000000000048 /* GlassStyles.swift in Sources */,
 				100000000000000000000049 /* MultilineCodeEditor.swift in Sources */,
+				100000000000000000000054 /* DetailPageHost.swift in Sources */,
 				100000000000000000000050 /* ThemeOptionCard.swift in Sources */,
 				100000000000000000000051 /* QRCodeScannerSheet.swift in Sources */,
 				100000000000000000000003 /* AppModel.swift in Sources */,

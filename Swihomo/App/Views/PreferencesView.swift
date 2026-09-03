@@ -41,7 +41,7 @@ struct PreferencesView: View {
         }
         .formStyle(.grouped)
         .uniformTopScrollEdge()
-        .navigationTitle(Text(LocalizedStringKey("navigation.preferences")))
+        .detailPageTitle("navigation.preferences")
     }
 
     private var appearanceSettings: some View {

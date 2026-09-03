@@ -17,6 +17,8 @@ struct ContentView: View {
     // macOS navigates by swapping the detail column; pushing destinations inside
     // the sidebar column tears down the whole home grid on every page switch.
     @State private var activeSection: HomeSection = .connection
+    // One stable window chrome; pages register their toolbar/search content here.
+    @StateObject private var detailChrome = DetailChrome()
     #endif
 
     var body: some View {
@@ -34,11 +36,43 @@ struct ContentView: View {
             #endif
         } detail: {
             #if os(macOS)
-            FeatureDetailView(section: activeSection)
-                // Fresh identity per section → the opacity transition runs on swap;
-                // the selection setter wraps the change in withAnimation.
-                .id(activeSection)
-                .transition(.opacity)
+            // Imperative page swaps inside a stable container whose identity never
+            // changes. The window chrome (title, toolbar, search) is declared HERE,
+            // once, by the container — pages register their actions via
+            // DetailChrome instead of bridging their own .toolbar/.searchable from
+            // nested hosting controllers (which collided in the shared NSToolbar).
+            // Only the toolbar's *items* swap on page change; the shell persists.
+            let entry = detailChrome.entries[activeSection]
+            NavigationStack {
+                DetailPageHost(section: activeSection)
+                    .environmentObject(detailChrome)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // Reference-probed (HEAD): the liquid glass is the detail
+                    // column's own NSScrollPocket, active only when the page's
+                    // scroll view physically extends into the 52pt titlebar zone.
+                    // The representable is laid out below that zone unless the
+                    // safe area is ignored here (titlebar transparency is NOT
+                    // involved — the working build has it off).
+                    .ignoresSafeArea(.container, edges: .top)
+                    .navigationTitle(Text(activeSection.titleKey))
+                    .toolbar {
+                        if let toolbar = entry?.toolbar {
+                            ToolbarItemGroup(placement: .primaryAction) {
+                                toolbar()
+                            }
+                        }
+                        // .searchable never attaches through the representable
+                        // boundary (probed: no search item in the toolbar), so the
+                        // search field is an explicit toolbar item instead.
+                        if let searchText = entry?.searchText, let prompt = entry?.searchPrompt {
+                            ToolbarItem(placement: .primaryAction) {
+                                TextField(prompt, text: searchText)
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(width: 200)
+                            }
+                        }
+                    }
+            }
             #else
             FeatureDetailView(section: .connection)
             #endif

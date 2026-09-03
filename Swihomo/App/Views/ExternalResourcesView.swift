@@ -59,7 +59,7 @@ struct ExternalResourcesView: View {
                     }
                 }
             }
-            .navigationTitle(Text(LocalizedStringKey("navigation.resources")))
+            .detailPageTitle("navigation.resources")
             .task { await model.reloadExternalResources() }
             .sheet(item: $editingResource) { resource in
                 ExternalResourceEditor(resource: resource)

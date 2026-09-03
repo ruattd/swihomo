@@ -243,9 +243,9 @@ struct HomeView: View {
     ) -> some View {
         #if os(macOS)
         Button {
-            withAnimation(.snappy(duration: 0.25)) {
-                activeSection = section
-            }
+            // The fade lives inside DetailPageHost (layer-driven); no SwiftUI
+            // transaction needed here.
+            activeSection = section
         } label: {
             label()
         }
@@ -462,7 +462,7 @@ struct FeatureDetailView: View {
             case .connection:
                 NavigationStack {
                     DashboardView()
-                        .navigationTitle(Text(LocalizedStringKey("navigation.connections")))
+                        .detailPageTitle("navigation.connections")
                 }
             case .profiles:
                 ProfilesView()

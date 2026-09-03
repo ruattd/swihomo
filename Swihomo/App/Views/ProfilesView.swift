@@ -36,29 +36,30 @@ struct ProfilesView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
                 }
             }
-            .navigationTitle(Text(LocalizedStringKey("navigation.profiles")))
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { showingRemoteSheet = true } label: {
-                        Label("profiles.networkSource", systemImage: "link.badge.plus")
-                    }
+            .detailPageTitle("navigation.profiles")
+            #if os(macOS)
+            // Chrome is hoisted to the detail container; per-page .toolbar inside
+            // nested hosting controllers collides in the shared window toolbar.
+            .background(ChromeProvider(
+                section: .profiles,
+                toolbar: {
+                    AnyView(ProfilesToolbarContent(
+                        showingRemoteSheet: $showingRemoteSheet,
+                        showingImporter: $showingImporter
+                    ))
                 }
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        Button { showingImporter = true } label: {
-                            Label("profiles.import", systemImage: "doc.badge.plus")
-                        }
-#if os(iOS)
-                        Button { showingQRCodeScanner = true } label: {
-                            Label("profiles.import.qr", systemImage: "qrcode.viewfinder")
-                        }
-#endif
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                    }
-                    .accessibilityLabel(Text("common.more"))
+            ))
+            #else
+            .toolbar {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    ProfilesToolbarContent(
+                        showingRemoteSheet: $showingRemoteSheet,
+                        showingImporter: $showingImporter,
+                        showingQRCodeScanner: $showingQRCodeScanner
+                    )
                 }
             }
+            #endif
         }
         .fileImporter(
             isPresented: $showingImporter,
@@ -124,6 +125,35 @@ struct ProfilesView: View {
         return url
     }
 #endif
+}
+
+// Toolbar content for the profiles page, rendered by the container on macOS (via
+// ChromeProvider) and in-page on iOS.
+private struct ProfilesToolbarContent: View {
+    @Binding var showingRemoteSheet: Bool
+    @Binding var showingImporter: Bool
+    #if os(iOS)
+    @Binding var showingQRCodeScanner: Bool
+    #endif
+
+    var body: some View {
+        Button { showingRemoteSheet = true } label: {
+            Label("profiles.networkSource", systemImage: "link.badge.plus")
+        }
+        Menu {
+            Button { showingImporter = true } label: {
+                Label("profiles.import", systemImage: "doc.badge.plus")
+            }
+            #if os(iOS)
+            Button { showingQRCodeScanner = true } label: {
+                Label("profiles.import.qr", systemImage: "qrcode.viewfinder")
+            }
+            #endif
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .accessibilityLabel(Text("common.more"))
+    }
 }
 
 private struct ProfileCard: View {

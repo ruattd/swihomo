@@ -56,64 +56,21 @@ struct ProxiesView: View {
                     }
                 }
             }
-            .navigationTitle(Text(LocalizedStringKey("navigation.proxies")))
+            .detailPageTitle("navigation.proxies")
+            #if os(macOS)
+            // Chrome is hoisted to the detail container; per-page .toolbar inside
+            // nested hosting controllers collides in the shared window toolbar.
+            .background(ChromeProvider(
+                section: .proxies,
+                toolbar: { AnyView(ProxiesToolbarContent()) }
+            ))
+            #else
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
-                    Menu {
-                        Section("proxies.sort.groupCards.sortBy") {
-                            ForEach(ProxyGroupSortCriterion.allCases) { criterion in
-                                Button {
-                                    groupSortCriterion = criterion
-                                } label: {
-                                    Label(
-                                        LocalizedStringKey(criterion.localizationKey),
-                                        systemImage: groupSortCriterion == criterion ? "checkmark" : "circle"
-                                    )
-                                }
-                            }
-                        }
-                        Section("proxies.sort.groupCards.direction") {
-                            ForEach(ProxySortDirection.allCases) { direction in
-                                Button {
-                                    groupSortDirection = direction
-                                } label: {
-                                    Label(
-                                        LocalizedStringKey(direction.localizationKey),
-                                        systemImage: groupSortDirection == direction ? "checkmark" : direction.systemImage
-                                    )
-                                }
-                            }
-                        }
-                        Section("proxies.sort.nodes.sortBy") {
-                            ForEach(ProxyNodeSortCriterion.allCases) { criterion in
-                                Button {
-                                    nodeSortCriterion = criterion
-                                } label: {
-                                    Label(
-                                        LocalizedStringKey(criterion.localizationKey),
-                                        systemImage: nodeSortCriterion == criterion ? "checkmark" : "circle"
-                                    )
-                                }
-                            }
-                        }
-                        Section("proxies.sort.nodes.direction") {
-                            ForEach(ProxySortDirection.allCases) { direction in
-                                Button {
-                                    nodeSortDirection = direction
-                                } label: {
-                                    Label(
-                                        LocalizedStringKey(direction.localizationKey),
-                                        systemImage: nodeSortDirection == direction ? "checkmark" : direction.systemImage
-                                    )
-                                }
-                            }
-                        }
-                    } label: {
-                        Label(LocalizedStringKey(groupSortCriterion.localizationKey), systemImage: groupSortDirection.systemImage)
-                            .font(.subheadline.weight(.medium))
-                    }
+                    ProxiesToolbarContent()
                 }
             }
+            #endif
             .task(id: model.tunnelStatus == .connected) {
                 guard model.tunnelStatus == .connected else { return }
                 await model.reloadProxyGroups()
@@ -161,6 +118,72 @@ struct ProxiesView: View {
             return
         }
         expandedGroupNames.formIntersection(availableNames)
+    }
+}
+
+// Toolbar content for the proxies page, rendered by the container on macOS (via
+// ChromeProvider) and in-page on iOS. Declares its own AppStorage so it stays
+// reactive in whichever view graph renders it.
+private struct ProxiesToolbarContent: View {
+    @AppStorage("proxyGroupSortCriterion") private var groupSortCriterion = ProxyGroupSortCriterion.original
+    @AppStorage("proxyGroupSortDirection") private var groupSortDirection = ProxySortDirection.ascending
+    @AppStorage("proxyNodeSortCriterion") private var nodeSortCriterion = ProxyNodeSortCriterion.original
+    @AppStorage("proxyNodeSortDirection") private var nodeSortDirection = ProxySortDirection.ascending
+
+    var body: some View {
+        Menu {
+            Section("proxies.sort.groupCards.sortBy") {
+                ForEach(ProxyGroupSortCriterion.allCases) { criterion in
+                    Button {
+                        groupSortCriterion = criterion
+                    } label: {
+                        Label(
+                            LocalizedStringKey(criterion.localizationKey),
+                            systemImage: groupSortCriterion == criterion ? "checkmark" : "circle"
+                        )
+                    }
+                }
+            }
+            Section("proxies.sort.groupCards.direction") {
+                ForEach(ProxySortDirection.allCases) { direction in
+                    Button {
+                        groupSortDirection = direction
+                    } label: {
+                        Label(
+                            LocalizedStringKey(direction.localizationKey),
+                            systemImage: groupSortDirection == direction ? "checkmark" : direction.systemImage
+                        )
+                    }
+                }
+            }
+            Section("proxies.sort.nodes.sortBy") {
+                ForEach(ProxyNodeSortCriterion.allCases) { criterion in
+                    Button {
+                        nodeSortCriterion = criterion
+                    } label: {
+                        Label(
+                            LocalizedStringKey(criterion.localizationKey),
+                            systemImage: nodeSortCriterion == criterion ? "checkmark" : "circle"
+                        )
+                    }
+                }
+            }
+            Section("proxies.sort.nodes.direction") {
+                ForEach(ProxySortDirection.allCases) { direction in
+                    Button {
+                        nodeSortDirection = direction
+                    } label: {
+                        Label(
+                            LocalizedStringKey(direction.localizationKey),
+                            systemImage: nodeSortDirection == direction ? "checkmark" : direction.systemImage
+                        )
+                    }
+                }
+            }
+        } label: {
+            Label(LocalizedStringKey(groupSortCriterion.localizationKey), systemImage: groupSortDirection.systemImage)
+                .font(.subheadline.weight(.medium))
+        }
     }
 }
 

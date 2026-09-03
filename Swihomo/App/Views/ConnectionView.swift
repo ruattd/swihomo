@@ -43,6 +43,56 @@ struct DashboardView: View {
     }
 }
 
+// Toolbar content for the connections page, rendered by the container on macOS (via
+// ChromeProvider) and in-page on iOS. Reads model/AppStorage directly so it stays
+// reactive no matter which view graph renders it.
+private struct ConnectionToolbarContent: View {
+    @EnvironmentObject private var model: AppModel
+    @AppStorage("connectionSortCriterion") private var sortCriterion = ConnectionSortCriterion.process
+    @AppStorage("connectionSortDirection") private var sortDirection = ProxySortDirection.ascending
+    @Binding var showingCloseAllConfirmation: Bool
+
+    var body: some View {
+        Button(role: .destructive) {
+            showingCloseAllConfirmation = true
+        } label: {
+            Label("connection.closeAll", systemImage: "xmark.circle")
+        }
+        .disabled(model.connectionActivities.isEmpty || model.isClosingAllConnections)
+
+        Menu {
+            Section("common.sortBy") {
+                ForEach(ConnectionSortCriterion.allCases) { criterion in
+                    Button {
+                        sortCriterion = criterion
+                        sortDirection = criterion == .speed ? .descending : .ascending
+                    } label: {
+                        Label(
+                            LocalizedStringKey(criterion.localizationKey),
+                            systemImage: sortCriterion == criterion ? "checkmark" : "circle"
+                        )
+                    }
+                }
+            }
+            Section("common.direction") {
+                ForEach(ProxySortDirection.allCases) { direction in
+                    Button {
+                        sortDirection = direction
+                    } label: {
+                        Label(
+                            LocalizedStringKey(direction.localizationKey),
+                            systemImage: sortDirection == direction ? "checkmark" : direction.systemImage
+                        )
+                    }
+                }
+            }
+        } label: {
+            Label(LocalizedStringKey(sortCriterion.localizationKey), systemImage: sortDirection.systemImage)
+                .font(.subheadline.weight(.medium))
+        }
+    }
+}
+
 // Equatable shell around the live list: identical inputs skip the whole subtree — the
 // Form and its per-section rows never diff against a refresh that changed nothing.
 // Actions are compared by identity of intent, so == ignores the closures.
@@ -136,7 +186,18 @@ private struct ConnectionListView: View, Equatable {
         }
         .animation(reduceMotion ? nil : .snappy, value: showsConnections)
         .animation(reduceMotion ? nil : .snappy, value: activities.isEmpty)
+        #if os(macOS)
+        // Chrome is hoisted to the detail container; per-page .toolbar/.searchable
+        // inside nested hosting controllers collide in the shared window toolbar.
+        .background(ChromeProvider(
+            section: .connection,
+            toolbar: { AnyView(ConnectionToolbarContent(showingCloseAllConfirmation: $showingCloseAllConfirmation)) },
+            searchText: $connectionSearchText,
+            searchPrompt: "connections.search"
+        ))
+        #else
         .searchable(text: $connectionSearchText, prompt: "connections.search")
+        #endif
         .confirmationDialog(
             Text(LocalizedStringKey("connection.closeAll.confirmationTitle")),
             isPresented: $showingCloseAllConfirmation,
@@ -148,47 +209,13 @@ private struct ConnectionListView: View, Equatable {
         } message: {
             Text(LocalizedStringKey("connection.closeAll.confirmationMessage"))
         }
+        #if !os(macOS)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                Button(role: .destructive) {
-                    showingCloseAllConfirmation = true
-                } label: {
-                    Label("connection.closeAll", systemImage: "xmark.circle")
-                }
-                .disabled(activities.isEmpty || isClosingAll)
-
-                Menu {
-                    Section("common.sortBy") {
-                        ForEach(ConnectionSortCriterion.allCases) { criterion in
-                            Button {
-                                connectionSortCriterion = criterion
-                                connectionSortDirection = criterion == .speed ? .descending : .ascending
-                            } label: {
-                                Label(
-                                    LocalizedStringKey(criterion.localizationKey),
-                                    systemImage: connectionSortCriterion == criterion ? "checkmark" : "circle"
-                                )
-                            }
-                        }
-                    }
-                    Section("common.direction") {
-                        ForEach(ProxySortDirection.allCases) { direction in
-                            Button {
-                                connectionSortDirection = direction
-                            } label: {
-                                Label(
-                                    LocalizedStringKey(direction.localizationKey),
-                                    systemImage: connectionSortDirection == direction ? "checkmark" : direction.systemImage
-                                )
-                            }
-                        }
-                    }
-                } label: {
-                    Label(LocalizedStringKey(connectionSortCriterion.localizationKey), systemImage: connectionSortDirection.systemImage)
-                        .font(.subheadline.weight(.medium))
-                }
+                ConnectionToolbarContent(showingCloseAllConfirmation: $showingCloseAllConfirmation)
             }
         }
+        #endif
     }
 
     private var filteredConnections: [MihomoConnectionActivity] {
@@ -342,7 +369,10 @@ private struct ConnectionDetailView: View {
                 }
             }
         }
-        .navigationTitle(Text(LocalizedStringKey("connection.details")))
+        .detailPageTitle("connection.details")
+        // macOS: chrome bridging from nested hosting controllers collides in the
+        // shared window toolbar; the close action stays available in the list.
+        #if !os(macOS)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button(role: .destructive) {
@@ -360,6 +390,7 @@ private struct ConnectionDetailView: View {
                 Button("common.done") { dismiss() }
             }
         }
+        #endif
     }
 }
 
