@@ -236,7 +236,8 @@ actor MihomoControllerClient {
             details["\(kind.rawValue):\(provider.key)"] = MihomoProviderDetails(
                 updatedAt: date(from: provider.value.updatedAt),
                 subscriptionInfo: kind == .proxyProvider ? provider.value.subscriptionInfo : nil,
-                ruleCount: kind == .ruleProvider ? provider.value.ruleCount : nil
+                ruleCount: kind == .ruleProvider ? provider.value.ruleCount : nil,
+                format: kind == .ruleProvider ? provider.value.format : nil
             )
         }
     }

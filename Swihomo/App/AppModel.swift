@@ -936,6 +936,7 @@ final class AppModel: ObservableObject {
                     resource.updatedAt = details.updatedAt
                     resource.subscriptionInfo = details.subscriptionInfo
                     resource.ruleCount = details.ruleCount
+                    resource.format = details.format
                 }
                 if resource.kind == .geoData,
                    let lastUpdated = UserDefaults.standard.object(forKey: Self.geoDataLastUpdatedKey(resource.id)) as? Date,

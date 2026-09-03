@@ -18,17 +18,27 @@ struct ExternalResourcesView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                ForEach(model.externalResources) { resource in
-                    // One resource per section: the whole card is the section's single row.
-                    Section {
-                        ExternalResourceCard(
-                            resource: resource,
-                            edit: { editingResource = resource },
-                            replace: {
-                                importedResource = resource
-                                showingImporter = true
+                // Group by kind: one section per type, same-type resources as rows within it.
+                ForEach(ExternalResourceKind.allCases, id: \.self) { kind in
+                    let resources = model.externalResources.filter { $0.kind == kind }
+                    if !resources.isEmpty {
+                        Section {
+                            ForEach(resources) { resource in
+                                ExternalResourceCard(
+                                    resource: resource,
+                                    edit: { editingResource = resource },
+                                    replace: {
+                                        importedResource = resource
+                                        showingImporter = true
+                                    }
+                                )
                             }
-                        )
+                        } header: {
+                            SectionHeaderLabel(
+                                LocalizedStringKey(kind.localizationKey),
+                                systemImage: Self.sectionIcon(for: kind)
+                            )
+                        }
                     }
                 }
             }
@@ -78,6 +88,16 @@ struct ExternalResourcesView: View {
     }
 }
 
+private extension ExternalResourcesView {
+    static func sectionIcon(for kind: ExternalResourceKind) -> String {
+        switch kind {
+        case .proxyProvider: "point.3.connected.trianglepath.dotted"
+        case .ruleProvider: "list.bullet.rectangle"
+        case .geoData: "globe.americas.fill"
+        }
+    }
+}
+
 private struct ExternalResourceCard: View {
     @EnvironmentObject private var model: AppModel
     let resource: ExternalResource
@@ -121,11 +141,14 @@ private struct ExternalResourceCard: View {
                         Text(resource.name)
                             .font(.headline)
                             .lineLimit(1)
+                        // No kind label — the section header names the type already.
                         HStack(spacing: 6) {
-                            Text(LocalizedStringKey(resource.kind.localizationKey))
                             Text(resource.providerType.uppercased())
                             if let behavior = resource.behavior, !behavior.isEmpty {
                                 Text(behavior.uppercased())
+                            }
+                            if let format = resource.format, !format.isEmpty {
+                                Text(format.uppercased())
                             }
                         }
                         .font(.caption.weight(.medium))
@@ -190,19 +213,23 @@ private struct ExternalResourceCard: View {
                                 .controlSize(.small)
                         } else {
                             Label("common.update", systemImage: "arrow.down.circle")
-                                .foregroundStyle(.white)
                         }
                     }
-                    .liquidGlassButton(prominent: true)
+                    // Perf: dozens of rows × glass buttons stutter while scrolling
+                    // (liquid glass renders offscreen). Plain bordered here.
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
                     .disabled(!model.isConnected || isUpdating)
 
                     if resource.kind != .geoData {
                         Button("common.edit", action: edit)
-                            .liquidGlassButton()
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
                             .disabled(!resource.isPresent || isUpdating)
                     }
                     Button("common.replace", action: replace)
-                        .liquidGlassButton()
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
                         .disabled(isUpdating)
                 }
         }

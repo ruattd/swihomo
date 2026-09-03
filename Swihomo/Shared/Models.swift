@@ -697,6 +697,8 @@ struct ExternalResource: Codable, Identifiable, Hashable {
     var updatedAt: Date?
     var subscriptionInfo: MihomoSubscriptionInfo?
     var ruleCount: Int?
+    /// Rule-provider file format from the API (e.g. "Yaml", "Text"); nil for other kinds.
+    var format: String? = nil
 }
 
 struct MihomoProviderResponse: Decodable {
@@ -707,6 +709,7 @@ struct MihomoProvider: Decodable {
     let updatedAt: String?
     let subscriptionInfo: MihomoSubscriptionInfo?
     let ruleCount: Int?
+    let format: String?
     let proxies: [MihomoProviderProxy]?
 }
 
@@ -787,6 +790,7 @@ struct MihomoProviderDetails: Hashable {
     let updatedAt: Date?
     let subscriptionInfo: MihomoSubscriptionInfo?
     let ruleCount: Int?
+    let format: String?
 }
 
 enum TunnelProviderOperation: String, Codable {
