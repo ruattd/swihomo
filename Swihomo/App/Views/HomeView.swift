@@ -494,7 +494,12 @@ private struct HomeBannerRow: View, Equatable {
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.tertiary)
         }
+        // iOS keeps the enlarged touch target; macOS sidebar banners stay tight.
+        #if os(macOS)
+        .padding(12)
+        #else
         .padding(16)
+        #endif
         .contentShape(RoundedRectangle(cornerRadius: CGFloat(SurfaceMetrics.panelCornerRadius), style: .continuous))
         .liquidGlassCard(interactive: true)
         .modifier(HomeFeatureCardHelp(text: subtitle, key: subtitleKey))

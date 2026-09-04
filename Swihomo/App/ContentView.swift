@@ -39,6 +39,7 @@ struct ContentView: View {
             .preferredColorScheme(preferredColorScheme)
             #if os(macOS)
             .background(WindowToolbarBaselineHider())
+            .background(InitialFocusClearer())
             #endif
             .overlay(alignment: .bottom) {
                 if let error = model.errorMessage {

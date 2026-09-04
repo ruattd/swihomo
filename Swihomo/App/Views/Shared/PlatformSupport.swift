@@ -46,6 +46,33 @@ extension View {
 }
 
 #if os(macOS)
+/// Clears the window's automatic initial first responder, so no focus ring
+/// shows at launch. Keyboard navigation is unaffected — pressing Tab re-enters
+/// the key view loop and the ring returns.
+struct InitialFocusClearer: NSViewRepresentable {
+    func makeNSView(context: Context) -> InitialFocusClearingView {
+        InitialFocusClearingView()
+    }
+
+    func updateNSView(_ nsView: InitialFocusClearingView, context: Context) {
+        nsView.clearFocus()
+    }
+}
+
+final class InitialFocusClearingView: NSView {
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        clearFocus()
+    }
+
+    func clearFocus() {
+        // The initial responder is assigned during window ordering; defer.
+        DispatchQueue.main.async { [weak self] in
+            self?.window?.makeFirstResponder(nil)
+        }
+    }
+}
+
 struct WindowToolbarBaselineHider: NSViewRepresentable {
     func makeNSView(context: Context) -> ToolbarBaselineView {
         ToolbarBaselineView()
