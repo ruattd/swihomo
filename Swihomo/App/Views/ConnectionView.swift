@@ -7,33 +7,32 @@ import AppKit
 // ConnectionListView so unrelated AppModel publishes (log stream, traffic) never touch it.
 struct DashboardView: View {
     @EnvironmentObject private var model: AppModel
+    #if os(macOS)
+    // Container-level drill-in: the selection becomes a DetailPage swap so the
+    // window chrome (title, menu, search) leaves with the list.
+    @EnvironmentObject private var connectionDrill: ConnectionDrill
+    #endif
     #if os(iOS)
     @Environment(\.pushCompactRoute) private var pushCompactRoute
+    @State private var selectedConnection: MihomoConnectionActivity?
     #endif
     @AppStorage("connectionSortCriterion") private var connectionSortCriterion = ConnectionSortCriterion.process
     @AppStorage("connectionSortDirection") private var connectionSortDirection = ProxySortDirection.ascending
-    @State private var selectedConnection: MihomoConnectionActivity?
 
     private var showsConnections: Bool {
         model.tunnelStatus == .connected
     }
 
     var body: some View {
-        ConnectionListView(
-            activities: connections,
-            showsConnections: showsConnections,
-            isClosingAll: model.isClosingAllConnections,
-            onCloseAll: { await model.closeAllConnections() },
-            onSelect: { activity in
-                #if os(iOS)
-                if let pushCompactRoute {
-                    pushCompactRoute(.connection(activity))
-                    return
-                }
-                #endif
-                selectedConnection = activity
-            }
-        )
+        connectionList
+        #if os(iOS)
+        // Registered only when no outer compact stack is live: a path-based
+        // stack must not contain item-based destinations (AnyNavigationPath
+        // comparisonTypeMismatch crash). The compact layout pushes
+        // CompactRoute.connection through its own path instead.
+        .modifier(ConnectionDetailDestination(selected: $selectedConnection, enabled: connectionDetailDestinationEnabled))
+        // Monitoring is view-local on iOS; on macOS the detail-column container
+        // owns it (the drill-in hides this view but updates must keep flowing).
         .onAppear {
             model.setConnectionMonitoringEnabled(true)
         }
@@ -44,28 +43,43 @@ struct DashboardView: View {
         .onDisappear {
             model.setConnectionMonitoringEnabled(false)
         }
-        // Registered only when no outer compact stack is live: a path-based
-        // stack must not contain item-based destinations (AnyNavigationPath
-        // comparisonTypeMismatch crash). The compact layout pushes
-        // CompactRoute.connection through its own path instead.
-        .modifier(ConnectionDetailDestination(selected: $selectedConnection, enabled: connectionDetailDestinationEnabled))
+        #endif
     }
 
+    private var connectionList: some View {
+        ConnectionListView(
+            activities: connections,
+            showsConnections: showsConnections,
+            isClosingAll: model.isClosingAllConnections,
+            onCloseAll: { await model.closeAllConnections() },
+            onSelect: { activity in
+                #if os(macOS)
+                connectionDrill.activity = activity
+                #else
+                if let pushCompactRoute {
+                    pushCompactRoute(.connection(activity))
+                    return
+                }
+                selectedConnection = activity
+                #endif
+            }
+        )
+    }
+
+    #if os(iOS)
     /// False in the iOS compact tab layout, where the outer stack routes
     /// connection drill-ins through CompactRoute instead.
     private var connectionDetailDestinationEnabled: Bool {
-        #if os(iOS)
         pushCompactRoute == nil
-        #else
-        true
-        #endif
     }
+    #endif
 
     private var connections: [MihomoConnectionActivity] {
         model.sortedConnectionActivities(by: connectionSortCriterion, direction: connectionSortDirection)
     }
 }
 
+#if os(iOS)
 /// Applies the connection-detail destination unless an outer compact stack owns
 /// connection routing (then DashboardView forwards taps to that stack's path).
 private struct ConnectionDetailDestination: ViewModifier {
@@ -83,6 +97,7 @@ private struct ConnectionDetailDestination: ViewModifier {
         }
     }
 }
+#endif
 
 // Toolbar content for the connections page, rendered by the container on macOS (via
 // ChromeProvider) and in-page on iOS. Reads model/AppStorage directly so it stays
@@ -411,8 +426,8 @@ struct ConnectionDetailView: View {
             }
         }
         .detailPageTitle("connection.details")
-        // macOS: chrome bridging from nested hosting controllers collides in the
-        // shared window toolbar; the close action stays available in the list.
+        // macOS declares the drill-in chrome (back + close) in the detail-column
+        // container, so only iOS carries page-level toolbar items.
         #if !os(macOS)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {

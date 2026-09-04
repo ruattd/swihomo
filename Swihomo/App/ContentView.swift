@@ -22,6 +22,8 @@ struct ContentView: View {
     @State private var activeSection: HomeSection = .connection
     // One stable window chrome; pages register their toolbar/search content here.
     @StateObject private var detailChrome = DetailChrome()
+    // Connection drill-in: a container-level page, so the window chrome swaps too.
+    @StateObject private var connectionDrill = ConnectionDrill()
     #endif
     #if os(iOS)
     /// Outer-stack path of the compact tab layout (sections + connection
@@ -158,10 +160,15 @@ struct ContentView: View {
             // DetailChrome instead of bridging their own .toolbar/.searchable from
             // nested hosting controllers (which collided in the shared NSToolbar).
             // Only the toolbar's *items* swap on page change; the shell persists.
+            // Drilling into a connection swaps the whole chrome: the detail
+            // shows a back button and its own title; the list's menu and search
+            // field leave with the list page.
+            let drilled = connectionDrill.activity
             let entry = detailChrome.entries[activeSection]
             NavigationStack {
-                DetailPageHost(section: activeSection)
+                DetailPageHost(page: drilled.map(DetailPage.connectionDetail) ?? .section(activeSection))
                     .environmentObject(detailChrome)
+                    .environmentObject(connectionDrill)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     // Reference-probed (HEAD): the liquid glass is the detail
                     // column's own NSScrollPocket, active only when the page's
@@ -170,24 +177,54 @@ struct ContentView: View {
                     // safe area is ignored here (titlebar transparency is NOT
                     // involved — the working build has it off).
                     .ignoresSafeArea(.container, edges: .top)
-                    .navigationTitle(Text(activeSection.titleKey))
+                    .navigationTitle(drilled != nil ? Text("connection.details") : Text(activeSection.titleKey))
                     .toolbar {
-                        if let toolbar = entry?.toolbar {
-                            ToolbarItemGroup(placement: .primaryAction) {
-                                toolbar()
+                        if let activity = drilled {
+                            ToolbarItem(placement: .navigation) {
+                                Button {
+                                    connectionDrill.activity = nil
+                                } label: {
+                                    Image(systemName: "chevron.left")
+                                }
+                                .help(Text("common.back"))
                             }
-                        }
-                        // .searchable never attaches through the representable
-                        // boundary (probed: no search item in the toolbar), so the
-                        // search field is an explicit toolbar item instead.
-                        if let searchText = entry?.searchText, let prompt = entry?.searchPrompt {
                             ToolbarItem(placement: .primaryAction) {
-                                TextField(prompt, text: searchText)
-                                    .textFieldStyle(.roundedBorder)
-                                    .frame(width: 200)
+                                Button(role: .destructive) {
+                                    Task {
+                                        if await model.closeConnection(id: activity.id) {
+                                            connectionDrill.activity = nil
+                                        }
+                                    }
+                                } label: {
+                                    Label("common.close", systemImage: "xmark.circle")
+                                }
+                                .disabled(model.closingConnectionIDs.contains(activity.id))
+                            }
+                        } else {
+                            if let toolbar = entry?.toolbar {
+                                ToolbarItemGroup(placement: .primaryAction) {
+                                    toolbar()
+                                }
+                            }
+                            // .searchable never attaches through the representable
+                            // boundary (probed: no search item in the toolbar), so the
+                            // search field is an explicit toolbar item instead.
+                            if let searchText = entry?.searchText, let prompt = entry?.searchPrompt {
+                                ToolbarItem(placement: .primaryAction) {
+                                    TextField(prompt, text: searchText)
+                                        .textFieldStyle(.roundedBorder)
+                                        .frame(width: 200)
+                                }
                             }
                         }
                     }
+            }
+            // Leaving the section exits any drill-in with it.
+            .onChange(of: activeSection) { _ in connectionDrill.activity = nil }
+            // Monitoring follows the section on macOS: the drill-in keeps the
+            // list's view off-screen, but updates must keep flowing.
+            .task(id: activeSection) {
+                model.setConnectionMonitoringEnabled(activeSection == .connection)
             }
             #else
             FeatureDetailView(section: .connection)

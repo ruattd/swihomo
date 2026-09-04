@@ -42,36 +42,58 @@ struct ChromeProvider: View {
     }
 }
 
+/// macOS connection drill-in state, shared between DashboardView (sets it on
+/// selection) and the detail-column container (swaps page + chrome on it).
+/// Drilling is a container-level page, so the window title/toolbar/search
+/// switch too — an in-place swap inside the connections page cannot do that.
+final class ConnectionDrill: ObservableObject {
+    @Published var activity: MihomoConnectionActivity?
+}
+
+/// Detail-column page identity: a home section, or the connection drill-in.
+enum DetailPage: Hashable {
+    case section(HomeSection)
+    case connectionDetail(MihomoConnectionActivity)
+}
+
+/// Enter/leave direction of a drill swap; neutral is the plain page cross-fade.
+private enum SwapDirection {
+    case neutral, push, pop
+}
+
 /// Detail-column page host with a TG-style swap: the container's identity never
 /// changes, each page lives in its own NSHostingController (its own view graph),
 /// and switching pages is a plain subview swap — the window chrome and the
 /// enclosing SwiftUI graph are not touched.
 struct DetailPageHost: NSViewControllerRepresentable {
-    let section: HomeSection
+    let page: DetailPage
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var chrome: DetailChrome
+    @EnvironmentObject private var drill: ConnectionDrill
 
     func makeNSViewController(context: Context) -> DetailPageViewController {
-        DetailPageViewController(section: section, model: model, chrome: chrome)
+        DetailPageViewController(page: page, model: model, chrome: chrome, drill: drill)
     }
 
     func updateNSViewController(_ controller: DetailPageViewController, context: Context) {
-        controller.show(section)
+        controller.show(page)
     }
 }
 
 final class DetailPageViewController: NSViewController {
     private let model: AppModel
     private let chrome: DetailChrome
-    private var section: HomeSection
-    private var pages: [HomeSection: NSHostingController<AnyView>] = [:]
+    private let drill: ConnectionDrill
+    private var page: DetailPage
+    private var pages: [DetailPage: NSHostingController<AnyView>] = [:]
     private weak var currentView: NSView?
     private weak var currentPage: NSHostingController<AnyView>?
 
-    init(section: HomeSection, model: AppModel, chrome: DetailChrome) {
-        self.section = section
+    init(page: DetailPage, model: AppModel, chrome: DetailChrome, drill: ConnectionDrill) {
+        self.page = page
         self.model = model
         self.chrome = chrome
+        self.drill = drill
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -86,18 +108,30 @@ final class DetailPageViewController: NSViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        addChild(hostingController(for: section))
-        currentPage = pages[section]
-        show(section)
+        addChild(hostingController(for: page))
+        currentPage = pages[page]
+        show(page)
     }
 
-    func show(_ newSection: HomeSection) {
+    func show(_ newPage: DetailPage) {
         guard isViewLoaded else { return }
-        guard newSection != section || currentView == nil else { return }
+        guard newPage != page || currentView == nil else { return }
         let isInitial = currentView == nil
-        section = newSection
 
-        let page = hostingController(for: newSection)
+        let direction: SwapDirection
+        switch (page, newPage) {
+        case (.section, .connectionDetail):
+            direction = .push
+        // Pop only when returning to the drill's own list; jumping straight to
+        // another section is a plain page switch.
+        case (.connectionDetail, .section(let section)):
+            direction = section == .connection ? .pop : .neutral
+        default:
+            direction = .neutral
+        }
+        page = newPage
+
+        let page = hostingController(for: newPage)
         let newView = page.view
         newView.frame = view.bounds
         newView.autoresizingMask = [.width, .height]
@@ -115,30 +149,41 @@ final class DetailPageViewController: NSViewController {
             }
         }
 
+        // On pop the incoming page goes UNDER the outgoing one: the detail
+        // slides away over the list, not the other way around.
         if newView.superview !== view {
-            view.addSubview(newView)
+            if direction == .pop, let oldView {
+                view.addSubview(newView, positioned: .below, relativeTo: oldView)
+            } else {
+                view.addSubview(newView)
+            }
         }
         currentView = newView
         currentPage = page
 
-        // Fade + slight rise on the incoming page, animated on the layer (GPU
-        // compositing — no SwiftUI re-layout). The old page stays until the
-        // animation completes: the incoming page's translucency cross-fades
-        // against it naturally. Layer animation also sidesteps the bitmap-
-        // snapshot color dip that killed the earlier cross-fade attempt.
+        // All transitions run on the layer (GPU compositing — no SwiftUI
+        // re-layout) and sidestep the bitmap-snapshot color dip that killed the
+        // earlier cross-fade attempt. The old page stays until the animation
+        // completes: translucent pages cross-fade against it naturally.
         let animate = !isInitial && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let duration = direction == .neutral ? 0.22 : 0.25
+        // Neutral page switches fade + rise; drill-ins slide horizontally like a
+        // navigation push/pop, with a slight counter-slide on the leaving page.
+        let newFromX: CGFloat = direction == .push ? 48 : (direction == .pop ? -16 : 0)
+        let newFromY: CGFloat = direction == .neutral ? 10 : 0
+        let oldToX: CGFloat = direction == .push ? -16 : (direction == .pop ? 48 : 0)
         if animate, let layer = newView.layer {
             let fade = CABasicAnimation(keyPath: "opacity")
             fade.fromValue = 0
             fade.toValue = 1
 
-            let rise = CABasicAnimation(keyPath: "transform.translation.y")
-            rise.fromValue = 10
-            rise.toValue = 0
+            let slide = CABasicAnimation(keyPath: "transform.translation")
+            slide.fromValue = CGPoint(x: newFromX, y: newFromY)
+            slide.toValue = CGPoint.zero
 
             let group = CAAnimationGroup()
-            group.animations = [fade, rise]
-            group.duration = 0.22
+            group.animations = [fade, slide]
+            group.duration = duration
             group.timingFunction = CAMediaTimingFunction(name: .easeOut)
             group.isRemovedOnCompletion = true
             layer.add(group, forKey: "pageTransition")
@@ -149,15 +194,22 @@ final class DetailPageViewController: NSViewController {
             let fadeOut = CABasicAnimation(keyPath: "opacity")
             fadeOut.fromValue = 1
             fadeOut.toValue = 0
-            fadeOut.duration = 0.22
-            fadeOut.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            fadeOut.isRemovedOnCompletion = true
-            oldLayer.add(fadeOut, forKey: "pageTransition")
+
+            let slideOut = CABasicAnimation(keyPath: "transform.translation")
+            slideOut.fromValue = CGPoint.zero
+            slideOut.toValue = CGPoint(x: oldToX, y: 0)
+
+            let group = CAAnimationGroup()
+            group.animations = [fadeOut, slideOut]
+            group.duration = duration
+            group.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            group.isRemovedOnCompletion = true
+            oldLayer.add(group, forKey: "pageTransition")
         }
 
         guard oldView !== newView else { return }
         if let oldView {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
                 // Only remove if it hasn't become visible again meanwhile.
                 if oldView !== self.currentView {
                     oldView.removeFromSuperview()
@@ -168,13 +220,21 @@ final class DetailPageViewController: NSViewController {
 
     // Pages are cached after their first build: revisiting re-attaches the existing
     // view instead of rebuilding the view graph.
-    private func hostingController(for section: HomeSection) -> NSHostingController<AnyView> {
-        if let cached = pages[section] { return cached }
+    private func hostingController(for page: DetailPage) -> NSHostingController<AnyView> {
+        if let cached = pages[page] { return cached }
+        let content: AnyView
+        switch page {
+        case .section(let section):
+            content = AnyView(FeatureDetailView(section: section))
+        case .connectionDetail(let activity):
+            content = AnyView(ConnectionDetailView(activity: activity))
+        }
         let host = NSHostingController(
             rootView: AnyView(
-                FeatureDetailView(section: section)
+                content
                     .environmentObject(model)
                     .environmentObject(chrome)
+                    .environmentObject(drill)
                     // The column hosting view inherits the window's 52pt titlebar/
                     // toolbar zone as top safe area, which stops page lists from
                     // reaching under the toolbar — and no underlap means the
@@ -194,7 +254,7 @@ final class DetailPageViewController: NSViewController {
         host.sizingOptions = []
         // Layer backing enables GPU-composited transition animations.
         host.view.wantsLayer = true
-        pages[section] = host
+        pages[page] = host
         return host
     }
 }

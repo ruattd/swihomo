@@ -22,6 +22,7 @@
 
 "common.connect" = "Connect";
 "common.disconnect" = "Disconnect";
+"common.back" = "Back";
 "common.close" = "Close";
 "common.done" = "Done";
 "common.cancel" = "Cancel";

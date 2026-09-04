@@ -22,6 +22,7 @@
 
 "common.connect" = "连接";
 "common.disconnect" = "断开连接";
+"common.back" = "返回";
 "common.close" = "关闭";
 "common.done" = "完成";
 "common.cancel" = "取消";
