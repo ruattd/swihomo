@@ -61,8 +61,37 @@ enum HomeSection: String, CaseIterable, Hashable, Identifiable {
     }
 }
 
+#if os(iOS)
+/// Routes of the compact tab layout's outer stack. One typed path + one
+/// `navigationDestination(for:)` — mixing in `navigationDestination(item:)`
+/// anywhere inside a path-based stack crashes SwiftUI with
+/// AnyNavigationPath.comparisonTypeMismatch.
+enum CompactRoute: Hashable {
+    case section(HomeSection)
+    case connection(MihomoConnectionActivity)
+}
+
+/// Injected by the compact tab layout: pushes a route onto the stack that wraps
+/// the TabView, so the tab bar rides the push transition. Nil elsewhere, where
+/// plain NavigationLinks / nested stacks handle navigation.
+private struct PushCompactRouteKey: EnvironmentKey {
+    static let defaultValue: ((CompactRoute) -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    var pushCompactRoute: ((CompactRoute) -> Void)? {
+        get { self[PushCompactRouteKey.self] }
+        set { self[PushCompactRouteKey.self] = newValue }
+    }
+}
+#endif
+
 struct HomeView: View {
     @EnvironmentObject private var model: AppModel
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.pushCompactRoute) private var pushCompactRoute
+    #endif
     // Drives the toggle card's press bounce on the whole glass surface; the switch
     // sits outside the link and never triggers it.
     @State private var toggleCardContracted = false
@@ -115,13 +144,15 @@ struct HomeView: View {
         HStack(spacing: 12) {
             homeNavigation(to: .profiles, contracted: $toggleCardContracted) {
                 HStack(spacing: 12) {
+                    // Sized like HomeBannerRow so the switch card and the
+                    // connections banner align when stacked.
                     Image(systemName: model.isConnected ? "checkmark.shield.fill" : "shield.lefthalf.filled")
-                        .font(.title3.weight(.semibold))
+                        .font(.title.weight(.semibold))
                         .foregroundStyle(model.isConnected ? .green : .secondary)
-                        .frame(width: 38, height: 38)
+                        .frame(width: 44, height: 44)
                         .background(
                             (model.isConnected ? Color.green : Color.gray).opacity(0.14),
-                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            in: RoundedRectangle(cornerRadius: 13, style: .continuous)
                         )
                     VStack(alignment: .leading, spacing: 3) {
                         Text(LocalizedStringKey(model.connectionStatusLocalizationKey))
@@ -142,7 +173,7 @@ struct HomeView: View {
                 .toggleStyle(.switch)
                 .disabled(connectionToggleDisabled)
         }
-        .padding(12)
+        .padding(16)
         // Scale must wrap the glass surface, not just its content.
         .liquidGlassCard(interactive: true)
         .scaleEffect(toggleCardContracted ? 0.96 : 1)
@@ -170,14 +201,30 @@ struct HomeView: View {
             || model.tunnelStatus == .reasserting
     }
 
+    /// iPhone compact layout (iOS 18+) uses bottom tabs: proxies becomes a tab,
+    /// connections a banner row, and preferences/about leave the home grid
+    /// entirely. Older iOS keeps the traditional full home even when narrow.
+    private var compactHome: Bool {
+        #if os(iOS)
+        if #available(iOS 18.0, *) {
+            return horizontalSizeClass == .compact
+        }
+        return false
+        #else
+        false
+        #endif
+    }
+
     // Profiles has no grid card of its own (the top toggle card leads there);
     // preferences/about render as wide banners below the grid instead.
     private var gridSections: [HomeSection] {
-        [.proxies, .connection, .overrides, .externalResources, .logs]
+        if compactHome { return [.overrides, .externalResources, .logs] }
+        return [.proxies, .connection, .overrides, .externalResources, .logs]
     }
 
     private var bannerSections: [HomeSection] {
-        [.preference, .about]
+        if compactHome { return [] }
+        return [.preference, .about]
     }
 
     @ViewBuilder
@@ -199,6 +246,15 @@ struct HomeView: View {
 
     private var navigationGridContent: some View {
         VStack(spacing: 12) {
+            if compactHome {
+                homeNavigation(to: .connection) {
+                    HomeBannerRow(
+                        section: .connection,
+                        subtitle: subtitle(for: .connection),
+                        subtitleKey: subtitleKey(for: .connection)
+                    )
+                }
+            }
             LazyVGrid(
                 columns: [
                     GridItem(.flexible(), spacing: 12),
@@ -233,8 +289,8 @@ struct HomeView: View {
         }
     }
 
-    // iOS pushes destinations onto the sidebar column's stack; macOS drives the
-    // detail column's selection instead, so this grid survives page switches.
+    // iOS pushes destinations onto the enclosing stack; macOS drives the detail
+    // column's selection instead, so this grid survives page switches.
     @ViewBuilder
     private func homeNavigation<Label: View>(
         to section: HomeSection,
@@ -251,10 +307,22 @@ struct HomeView: View {
         }
         .buttonStyle(NavigationCardButtonStyle(contracted: contracted))
         #else
-        NavigationLink(value: section) {
-            label()
+        if let pushCompactRoute {
+            // Compact tab layout: push onto the outer stack covering the TabView.
+            Button {
+                pushCompactRoute(.section(section))
+            } label: {
+                label()
+            }
+            .buttonStyle(NavigationCardButtonStyle(contracted: contracted))
+        } else {
+            NavigationLink {
+                FeatureDetailView(section: section)
+            } label: {
+                label()
+            }
+            .buttonStyle(NavigationCardButtonStyle(contracted: contracted))
         }
-        .buttonStyle(NavigationCardButtonStyle(contracted: contracted))
         #endif
     }
 
@@ -402,13 +470,13 @@ private struct HomeBannerRow: View, Equatable {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: section.icon)
-                .font(.title3.weight(.medium))
+                .font(.title.weight(.medium))
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(section.tint)
-                .frame(width: 28, height: 28)
+                .frame(width: 44, height: 44)
             VStack(alignment: .leading, spacing: 2) {
                 Text(section.titleKey)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.headline)
                 if let subtitleKey {
                     Text(LocalizedStringKey(subtitleKey))
                         .font(.caption)
@@ -426,7 +494,7 @@ private struct HomeBannerRow: View, Equatable {
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.tertiary)
         }
-        .padding(12)
+        .padding(16)
         .contentShape(RoundedRectangle(cornerRadius: CGFloat(SurfaceMetrics.panelCornerRadius), style: .continuous))
         .liquidGlassCard(interactive: true)
         .modifier(HomeFeatureCardHelp(text: subtitle, key: subtitleKey))
@@ -455,15 +523,35 @@ private struct HomeFeatureCardHelp: ViewModifier {
 
 struct FeatureDetailView: View {
     let section: HomeSection
+    #if os(iOS)
+    @Environment(\.pushCompactRoute) private var pushCompactRoute
+    #endif
 
     var body: some View {
         Group {
             switch section {
             case .connection:
+                #if os(iOS)
+                if pushCompactRoute != nil {
+                    // Compact tab layout: the outer stack is live here, and a
+                    // nested NavigationStack inside pushed content never becomes
+                    // a real stack — drill-ins replace the page outright (no push
+                    // animation, back pops straight past this page). Register the
+                    // connection detail on the outer stack instead.
+                    DashboardView()
+                        .detailPageTitle("navigation.connections")
+                } else {
+                    NavigationStack {
+                        DashboardView()
+                            .detailPageTitle("navigation.connections")
+                    }
+                }
+                #else
                 NavigationStack {
                     DashboardView()
                         .detailPageTitle("navigation.connections")
                 }
+                #endif
             case .profiles:
                 ProfilesView()
             case .proxies:

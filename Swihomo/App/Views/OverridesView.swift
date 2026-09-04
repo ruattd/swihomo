@@ -125,7 +125,7 @@ struct OverridesView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        PageNavigationStack {
             Form {
                 basicSection
                 controllerSection

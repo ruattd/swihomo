@@ -3,6 +3,9 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
     @AppStorage("appTheme") private var selectedTheme = AppTheme.system.rawValue
     @AppStorage("showsMenuBar") private var showsMenuBar = true
     #if os(macOS)
@@ -20,8 +23,123 @@ struct ContentView: View {
     // One stable window chrome; pages register their toolbar/search content here.
     @StateObject private var detailChrome = DetailChrome()
     #endif
+    #if os(iOS)
+    /// Outer-stack path of the compact tab layout (sections + connection
+    /// drill-in). One typed path, one `for:` destination, no item-based
+    /// destinations anywhere inside — mixing them crashes SwiftUI with
+    /// AnyNavigationPath.comparisonTypeMismatch.
+    @State private var compactPath: [CompactRoute] = []
+    /// Selected tab in the compact layout; the outer stack reads its title
+    /// (TabView is opaque to it, so per-page titles can't bubble out).
+    @State private var compactTab = CompactTab.home
+    #endif
 
     var body: some View {
+        rootContent
+            .preferredColorScheme(preferredColorScheme)
+            #if os(macOS)
+            .background(WindowToolbarBaselineHider())
+            #endif
+            .overlay(alignment: .bottom) {
+                if let error = model.errorMessage {
+                    ErrorBanner(message: error, dismiss: { model.dismissError() })
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 8)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(reduceMotion ? nil : .snappy, value: model.errorMessage)
+            #if os(macOS)
+            .onAppear {
+                DockIconVisibility.update(showsMenuBar: showsMenuBar, hidesDockIcon: hidesDockIcon)
+                DockIconVisibility.activateWindowIfNeeded(showsMenuBar: showsMenuBar, hidesDockIcon: hidesDockIcon)
+            }
+            .onChange(of: showsMenuBar) { _, _ in
+                DockIconVisibility.update(showsMenuBar: showsMenuBar, hidesDockIcon: hidesDockIcon)
+            }
+            .onChange(of: hidesDockIcon) { _, _ in
+                DockIconVisibility.update(showsMenuBar: showsMenuBar, hidesDockIcon: hidesDockIcon)
+            }
+            #endif
+    }
+
+    @ViewBuilder
+    private var rootContent: some View {
+        #if os(macOS)
+        splitContent
+        #else
+        // Bottom tabs are compact-width only and iOS 18+; older iOS keeps the
+        // traditional split layout even on narrow screens.
+        if horizontalSizeClass == .compact, #available(iOS 18.0, *) {
+            compactTabs
+        } else {
+            splitContent
+        }
+        #endif
+    }
+
+    #if os(iOS)
+    /// Compact-width layout: bottom tabs instead of the sidebar. Home drops the
+    /// proxies card (it becomes a tab) and preferences/about (tab 3 + its icon).
+    private enum CompactTab: Hashable {
+        case home, proxies, preferences
+
+        var titleKey: LocalizedStringKey {
+            switch self {
+            // Matches HomeView's iOS title: the app name, not "Home".
+            case .home: "Swihomo"
+            case .proxies: HomeSection.proxies.titleKey
+            case .preferences: HomeSection.preference.titleKey
+            }
+        }
+    }
+
+    /// The stack wraps the tabs, so pushes cover the whole tab interface: the
+    /// tab bar rides the standard push transition instead of snapping hidden.
+    @available(iOS 18.0, *)
+    private var compactTabs: some View {
+        NavigationStack(path: $compactPath) {
+            TabView(selection: $compactTab) {
+                Tab("navigation.home", systemImage: "house", value: .home) {
+                    HomeView()
+                }
+                Tab(HomeSection.proxies.titleKey, systemImage: HomeSection.proxies.icon, value: .proxies) {
+                    ProxiesView()
+                }
+                Tab(HomeSection.preference.titleKey, systemImage: HomeSection.preference.icon, value: .preferences) {
+                    PreferencesView()
+                }
+            }
+            .navigationTitle(compactTab.titleKey)
+            // The about entry lives on the outer stack's bar: toolbar items on
+            // TabView content don't propagate through the tab boundary either.
+            .toolbar {
+                if compactTab == .preferences {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            compactPath.append(.section(.about))
+                        } label: {
+                            Image(systemName: HomeSection.about.icon)
+                        }
+                    }
+                }
+            }
+            .navigationDestination(for: CompactRoute.self) { route in
+                switch route {
+                case .section(let section):
+                    FeatureDetailView(section: section)
+                case .connection(let activity):
+                    ConnectionDetailView(activity: activity)
+                }
+            }
+        }
+        // Attached ABOVE the stack: custom environment values set on the TabView
+        // inside never reach navigationDestination content (probed).
+        .environment(\.pushCompactRoute) { compactPath.append($0) }
+    }
+    #endif
+
+    private var splitContent: some View {
         NavigationSplitView {
             #if os(macOS)
             HomeView(activeSection: $activeSection)
@@ -30,9 +148,6 @@ struct ContentView: View {
             #else
             HomeView()
                 .navigationSplitViewColumnWidth(min: 310, ideal: 310, max: 516)
-                .navigationDestination(for: HomeSection.self) { section in
-                    FeatureDetailView(section: section)
-                }
             #endif
         } detail: {
             #if os(macOS)
@@ -78,33 +193,5 @@ struct ContentView: View {
             #endif
         }
         .navigationSplitViewStyle(.balanced)
-        .preferredColorScheme(preferredColorScheme)
-        #if os(macOS)
-        .background(WindowToolbarBaselineHider())
-        #endif
-        .overlay(alignment: .bottom) {
-            if let error = model.errorMessage {
-                ErrorBanner(message: error, dismiss: { model.dismissError() })
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 8)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
-        .animation(reduceMotion ? nil : .snappy, value: model.errorMessage)
-        #if os(macOS)
-        .onAppear {
-            DockIconVisibility.update(showsMenuBar: showsMenuBar, hidesDockIcon: hidesDockIcon)
-            DockIconVisibility.activateWindowIfNeeded(
-                showsMenuBar: showsMenuBar,
-                hidesDockIcon: hidesDockIcon
-            )
-        }
-        .onChange(of: showsMenuBar) { _, _ in
-            DockIconVisibility.update(showsMenuBar: showsMenuBar, hidesDockIcon: hidesDockIcon)
-        }
-        .onChange(of: hidesDockIcon) { _, _ in
-            DockIconVisibility.update(showsMenuBar: showsMenuBar, hidesDockIcon: hidesDockIcon)
-        }
-        #endif
     }
 }

@@ -10,7 +10,7 @@ struct ProxiesView: View {
     @AppStorage("proxyNodeSortDirection") private var nodeSortDirection = ProxySortDirection.ascending
 
     var body: some View {
-        NavigationStack {
+        PageNavigationStack {
             Group {
                 if model.tunnelStatus == .connected {
                     // ScrollView, not List: expansion animates row height, and List rows

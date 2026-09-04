@@ -9,7 +9,7 @@ struct ExternalResourcesView: View {
     @State private var showingImporter = false
 
     var body: some View {
-        NavigationStack {
+        PageNavigationStack {
             Form {
                 Section {
                     Text("resources.description")

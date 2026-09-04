@@ -7,6 +7,9 @@ import AppKit
 // ConnectionListView so unrelated AppModel publishes (log stream, traffic) never touch it.
 struct DashboardView: View {
     @EnvironmentObject private var model: AppModel
+    #if os(iOS)
+    @Environment(\.pushCompactRoute) private var pushCompactRoute
+    #endif
     @AppStorage("connectionSortCriterion") private var connectionSortCriterion = ConnectionSortCriterion.process
     @AppStorage("connectionSortDirection") private var connectionSortDirection = ProxySortDirection.ascending
     @State private var selectedConnection: MihomoConnectionActivity?
@@ -21,7 +24,15 @@ struct DashboardView: View {
             showsConnections: showsConnections,
             isClosingAll: model.isClosingAllConnections,
             onCloseAll: { await model.closeAllConnections() },
-            onSelect: { selectedConnection = $0 }
+            onSelect: { activity in
+                #if os(iOS)
+                if let pushCompactRoute {
+                    pushCompactRoute(.connection(activity))
+                    return
+                }
+                #endif
+                selectedConnection = activity
+            }
         )
         .onAppear {
             model.setConnectionMonitoringEnabled(true)
@@ -33,13 +44,43 @@ struct DashboardView: View {
         .onDisappear {
             model.setConnectionMonitoringEnabled(false)
         }
-        .navigationDestination(item: $selectedConnection) { activity in
-            ConnectionDetailView(activity: activity, model: model)
-        }
+        // Registered only when no outer compact stack is live: a path-based
+        // stack must not contain item-based destinations (AnyNavigationPath
+        // comparisonTypeMismatch crash). The compact layout pushes
+        // CompactRoute.connection through its own path instead.
+        .modifier(ConnectionDetailDestination(selected: $selectedConnection, enabled: connectionDetailDestinationEnabled))
+    }
+
+    /// False in the iOS compact tab layout, where the outer stack routes
+    /// connection drill-ins through CompactRoute instead.
+    private var connectionDetailDestinationEnabled: Bool {
+        #if os(iOS)
+        pushCompactRoute == nil
+        #else
+        true
+        #endif
     }
 
     private var connections: [MihomoConnectionActivity] {
         model.sortedConnectionActivities(by: connectionSortCriterion, direction: connectionSortDirection)
+    }
+}
+
+/// Applies the connection-detail destination unless an outer compact stack owns
+/// connection routing (then DashboardView forwards taps to that stack's path).
+private struct ConnectionDetailDestination: ViewModifier {
+    @Binding var selected: MihomoConnectionActivity?
+    let enabled: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if enabled {
+            content.navigationDestination(item: $selected) { activity in
+                ConnectionDetailView(activity: activity)
+            }
+        } else {
+            content
+        }
     }
 }
 
@@ -300,10 +341,10 @@ private struct ConnectionSpeeds: View {
     }
 }
 
-private struct ConnectionDetailView: View {
+struct ConnectionDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let activity: MihomoConnectionActivity
-    @ObservedObject var model: AppModel
+    @EnvironmentObject private var model: AppModel
 
     private var currentActivity: MihomoConnectionActivity {
         model.connectionActivities.first { $0.id == activity.id } ?? activity

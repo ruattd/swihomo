@@ -3,6 +3,34 @@ import SwiftUI
 import AppKit
 #endif
 
+/// Page-root navigation container. Everywhere except the iOS compact tab layout
+/// this is a plain NavigationStack. In the compact layout the outer stack (which
+/// wraps the TabView) already provides navigation — a nested NavigationStack as
+/// pushed content gets silently popped by SwiftUI, and the desynced path makes
+/// the NEXT push crash with AnyNavigationPath.comparisonTypeMismatch.
+struct PageNavigationStack<Content: View>: View {
+    #if os(iOS)
+    @Environment(\.pushCompactRoute) private var pushCompactRoute
+    #endif
+    @ViewBuilder private let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        #if os(iOS)
+        if pushCompactRoute != nil {
+            content
+        } else {
+            NavigationStack { content }
+        }
+        #else
+        NavigationStack { content }
+        #endif
+    }
+}
+
 extension View {
     /// Page navigation title — iOS only. On macOS the detail container owns the
     /// window title; titles declared inside nested hosting controllers bridge into

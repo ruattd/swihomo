@@ -13,7 +13,7 @@ struct ProfilesView: View {
 #endif
 
     var body: some View {
-        NavigationStack {
+        PageNavigationStack {
             Form {
                 ForEach(model.snapshot.profiles) { profile in
                     // One profile per section: the whole card is the section's single row.

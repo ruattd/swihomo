@@ -80,7 +80,7 @@ struct LogsView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        PageNavigationStack {
             List {
                 ForEach(entries) { entry in
                     LogEntryRow(entry: entry)
