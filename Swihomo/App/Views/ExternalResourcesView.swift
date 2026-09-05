@@ -215,7 +215,12 @@ private struct ExternalResourceCard: View {
                             ProgressView()
                                 .controlSize(.small)
                         } else {
-                            Label("common.update", systemImage: "arrow.down.circle")
+                            // Explicit HStack: Label's icon spacing is too wide here, and on iOS
+                            // Label's glyph drops out inside borderedProminent buttons.
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.down.circle")
+                                Text("common.update")
+                            }
                         }
                     }
                     // Perf: dozens of rows × glass buttons stutter while scrolling
