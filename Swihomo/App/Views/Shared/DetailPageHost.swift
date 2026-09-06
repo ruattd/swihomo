@@ -169,9 +169,9 @@ final class DetailPageViewController: NSViewController {
         let duration = direction == .neutral ? 0.22 : 0.25
         // Neutral page switches fade + rise; drill-ins slide horizontally like a
         // navigation push/pop, with a slight counter-slide on the leaving page.
-        let newFromX: CGFloat = direction == .push ? 48 : (direction == .pop ? -16 : 0)
+        let newFromX: CGFloat = direction == .push ? 24 : (direction == .pop ? -8 : 0)
         let newFromY: CGFloat = direction == .neutral ? 10 : 0
-        let oldToX: CGFloat = direction == .push ? -16 : (direction == .pop ? 48 : 0)
+        let oldToX: CGFloat = direction == .push ? -8 : (direction == .pop ? 24 : 0)
         if animate, let layer = newView.layer {
             let fade = CABasicAnimation(keyPath: "opacity")
             fade.fromValue = 0
