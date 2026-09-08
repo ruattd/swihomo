@@ -84,13 +84,25 @@ extension EnvironmentValues {
         set { self[PushCompactRouteKey.self] = newValue }
     }
 }
+/// Set by the compact tab layout at the root. Views must NOT infer the layout
+/// from their own horizontalSizeClass: a split view's sidebar column reports
+/// compact even on wide screens (iPad).
+private struct CompactTabLayoutKey: EnvironmentKey {
+    static let defaultValue = false
+}
+extension EnvironmentValues {
+    var compactTabLayout: Bool {
+        get { self[CompactTabLayoutKey.self] }
+        set { self[CompactTabLayoutKey.self] = newValue }
+    }
+}
 #endif
 
 struct HomeView: View {
     @EnvironmentObject private var model: AppModel
     #if os(iOS)
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.pushCompactRoute) private var pushCompactRoute
+    @Environment(\.compactTabLayout) private var compactTabLayout
     #endif
     // Drives the toggle card's press bounce on the whole glass surface; the switch
     // sits outside the link and never triggers it.
@@ -206,10 +218,9 @@ struct HomeView: View {
     /// entirely. Older iOS keeps the traditional full home even when narrow.
     private var compactHome: Bool {
         #if os(iOS)
-        if #available(iOS 18.0, *) {
-            return horizontalSizeClass == .compact
-        }
-        return false
+        // The root layout decides: this view's own size class is compact inside
+        // a split view's sidebar even on wide screens.
+        return compactTabLayout
         #else
         false
         #endif

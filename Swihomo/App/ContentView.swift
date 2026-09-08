@@ -139,6 +139,7 @@ struct ContentView: View {
         // Attached ABOVE the stack: custom environment values set on the TabView
         // inside never reach navigationDestination content (probed).
         .environment(\.pushCompactRoute) { compactPath.append($0) }
+        .environment(\.compactTabLayout, true)
     }
     #endif
 
