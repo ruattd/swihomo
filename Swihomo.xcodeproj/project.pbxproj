@@ -453,7 +453,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "if [[ \"${SWIHOMO_SKIP_MIHOMO_BUILD:-}\" == \"1\" || \"${SWIHOMO_SKIP_MIHOMO_BUILD:-}\" == \"true\" ]]; then\n\techo \"Skipping mihomo build (SWIHOMO_SKIP_MIHOMO_BUILD is set).\"\n\texit 0\nfi\nbash \"$SRCROOT/scripts/build-mihomo.sh\"\n";
+			shellScript = "if [[ \"${SWIHOMO_SKIP_MIHOMO_BUILD:-}\" == \"1\" || \"${SWIHOMO_SKIP_MIHOMO_BUILD:-}\" == \"true\" ]]; then\n\techo \"Skipping mihomo build (SWIHOMO_SKIP_MIHOMO_BUILD is set).\"\n\texit 0\nfi\n\n# Input stamp: skip when nothing that affects the core output changed. Go's own\n# cache still leaves a full c-archive link per target, which dominates wall time.\nCORE=\"$SRCROOT/Vendor/mihomo\"\nBUILD=\"$CORE/.build-mihomo\"\nSTAMP=\"$BUILD/.input-stamp\"\nstamp() {\n\t{\n\t\tgit -C \"$CORE\" rev-parse HEAD 2>/dev/null || echo nogit\n\t\tgit -C \"$CORE\" status --porcelain 2>/dev/null\n\t\tgit -C \"$CORE\" diff 2>/dev/null | shasum -a 256\n\t\tgit -C \"$CORE\" diff --cached 2>/dev/null | shasum -a 256\n\t\tgo version\n\t\tshasum -a 256 \"$SRCROOT/scripts/build-mihomo.sh\"\n\t} | shasum -a 256 | awk '{print $1}'\n}\nif [[ \"${SWIHOMO_FORCE_MIHOMO_BUILD:-0}\" != \"1\" && -f \"$STAMP\" && -d \"$SRCROOT/Vendor/MihomoCore.xcframework\" && -f \"$BUILD/ios-arm64/libswihomo_core.a\" && -f \"$BUILD/ios-simulator-arm64/libswihomo_core.a\" && -f \"$BUILD/macos-arm64/libswihomo_core.a\" && -f \"$BUILD/headers/swihomo_core.h\" && \"$(stamp)\" == \"$(cat \"$STAMP\")\" ]]; then\n\techo \"mihomo core unchanged; skipping (SWIHOMO_FORCE_MIHOMO_BUILD=1 to force).\"\n\texit 0\nfi\nbash \"$SRCROOT/scripts/build-mihomo.sh\"\nmkdir -p \"$BUILD\"\nstamp > \"$STAMP\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
