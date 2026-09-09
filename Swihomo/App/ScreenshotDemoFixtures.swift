@@ -6,6 +6,14 @@ enum ScreenshotDemoMode {
     static var isEnabled: Bool {
         ProcessInfo.processInfo.arguments.contains(launchArgument)
     }
+
+    /// Demo runs persist nothing: the defaults domain is wiped at launch and
+    /// again when the app leaves the foreground, so demo sessions start from
+    /// factory state and leave nothing behind.
+    static func erasePersistedDefaults() {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return }
+        UserDefaults.standard.removePersistentDomain(forName: bundleID)
+    }
 }
 
 struct ScreenshotDemoState {
@@ -24,6 +32,27 @@ struct ScreenshotDemoState {
 }
 
 enum ScreenshotDemoFixtures {
+    /// One random fake log line for the demo stream, across all levels.
+    static func randomLogLine() -> (level: LogLevel, module: String, message: String) {
+        let hosts = ["example.com", "cdn.statically.io", "api.apple.com", "fonts.gstatic.com", "telemetry.contoso.net"]
+        let host = hosts.randomElement()!
+        let pool: [(LogLevel, String, String)] = [
+            (.debug, "DNS", "Resolved \(host): 93.184.216.34 (cache hit)."),
+            (.debug, "Matcher", "Rule matched: DOMAIN-SUFFIX,\(host) → DIRECT."),
+            (.debug, "Inbound", "HTTP CONNECT \(host):443 from 127.0.0.1:\(Int.random(in: 49152...65535))."),
+            (.info, "Connection", "Established TCP session to \(host):443 via Sakura-01."),
+            (.info, "Tunnel", "Traffic snapshot: ↑ \(Int.random(in: 12...900)) KB/s ↓ \(Int.random(in: 40...2400)) KB/s."),
+            (.info, "Updater", "GeoIP database is up to date."),
+            (.warning, "DNS", "Query for \(host) timed out; retried with fallback server."),
+            (.warning, "Connection", "Handshake to \(host) took 2.4s, marked as degraded."),
+            (.warning, "Inbound", "Mixed port 7890 accepted a connection with no matching rule; used MATCH → Sakura-01."),
+            (.error, "Connection", "Dial to \(host):443 failed: connection reset by peer."),
+            (.error, "Updater", "Subscription refresh failed: HTTP 503 from provider.")
+        ]
+        let pick = pool.randomElement()!
+        return (level: pick.0, module: pick.1, message: pick.2)
+    }
+
     static func make() -> ScreenshotDemoState {
         let activeProfileID = UUID(uuidString: "A0000000-0000-4000-8000-000000000001")!
         let backupProfileID = UUID(uuidString: "A0000000-0000-4000-8000-000000000002")!

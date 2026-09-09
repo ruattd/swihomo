@@ -8,6 +8,12 @@ final class SwihomoAppDelegate: NSObject, NSApplicationDelegate {
         false
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        if ScreenshotDemoMode.isEnabled {
+            ScreenshotDemoMode.erasePersistedDefaults()
+        }
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag {
             sender.windows.first(where: \.canBecomeKey)?.makeKeyAndOrderFront(nil)
@@ -28,6 +34,15 @@ struct SwihomoApp: App {
     @StateObject private var model = AppModel()
     @AppStorage("showsMenuBar") private var showsMenuBar = true
     @AppStorage("appLanguage") private var selectedLanguage = AppLanguage.system.rawValue
+    @Environment(\.scenePhase) private var scenePhase
+
+    init() {
+        // Demo runs start from factory state; session changes are wiped again
+        // on background/terminate so nothing persists.
+        if ScreenshotDemoMode.isEnabled {
+            ScreenshotDemoMode.erasePersistedDefaults()
+        }
+    }
     #if os(macOS)
     @NSApplicationDelegateAdaptor(SwihomoAppDelegate.self) private var appDelegate
     #endif
@@ -42,6 +57,11 @@ struct SwihomoApp: App {
                 .task {
                     await Task.yield()
                     await model.load()
+                }
+                .onChange(of: scenePhase) { phase in
+                    if phase == .background, ScreenshotDemoMode.isEnabled {
+                        ScreenshotDemoMode.erasePersistedDefaults()
+                    }
                 }
         }
         .defaultSize(width: 956, height: 680)
@@ -61,6 +81,11 @@ struct SwihomoApp: App {
                 .task {
                     await Task.yield()
                     await model.load()
+                }
+                .onChange(of: scenePhase) { phase in
+                    if phase == .background, ScreenshotDemoMode.isEnabled {
+                        ScreenshotDemoMode.erasePersistedDefaults()
+                    }
                 }
         }
         #endif

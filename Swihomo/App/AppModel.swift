@@ -33,6 +33,8 @@ final class AppModel: ObservableObject {
     private var demoProfileContents: [UUID: String] = [:]
     private var demoResourceContents: [String: Data] = [:]
     private var coreLogPollingTask: Task<Void, Never>?
+    /// Demo-mode fake tunnel: drips random logs while "connected".
+    private var demoLogTask: Task<Void, Never>?
     private var connectionPollingTask: Task<Void, Never>?
     private var trafficStreamTask: Task<Void, Never>?
     // ContentView opens the Connection detail by default until the user navigates away.
@@ -55,7 +57,6 @@ final class AppModel: ObservableObject {
         if demoMode {
             let demo = ScreenshotDemoFixtures.make()
             snapshot = demo.snapshot
-            tunnelStatus = .connected
             proxyGroups = demo.proxyGroups
             delays = demo.delays
             logEntries = demo.logEntries
@@ -68,6 +69,8 @@ final class AppModel: ObservableObject {
             demoProfileContents = demo.profileContents
             demoResourceContents = demo.resourceContents
             recordOriginalProxyOrder(demo.proxyGroups)
+            // Starts connected, with the fake log stream running.
+            setDemoConnected(true)
         }
 
         tunnel.onStartFailed = { [weak self] error in
@@ -335,6 +338,7 @@ final class AppModel: ObservableObject {
         if screenshotDemoMode {
             guard snapshot.profiles.contains(where: { $0.id == profile.id }) else { return }
             snapshot.activeProfileID = profile.id
+            setDemoConnected(true)
             return
         }
         if tunnelStatus != .disconnected && tunnelStatus != .invalid {
@@ -371,8 +375,10 @@ final class AppModel: ObservableObject {
     }
 
     func disconnect() {
-        if screenshotDemoMode { return }
-        reconnectProfile = nil
+        if screenshotDemoMode {
+            setDemoConnected(false)
+            return
+        }
         record(.info, module: "Tunnel", "Requested disconnect.")
         tunnel.disconnect()
     }
@@ -1120,6 +1126,40 @@ final class AppModel: ObservableObject {
         guard appLogLevel.includes(level) else { return }
         guard let logStore else { return }
         logEntries = logStore.append(source: .app, module: module, level: level, message: message)
+    }
+
+    // MARK: - Screenshot demo tunnel
+
+    /// Demo-mode fake tunnel: the toggle flips the status directly and a
+    /// generator drips random logs while "connected".
+    private func setDemoConnected(_ connected: Bool) {
+        tunnelStatus = connected ? .connected : .disconnected
+        demoLogTask?.cancel()
+        demoLogTask = nil
+        recordDemo(.info, module: "Tunnel", connected ? "Status changed to connected." : "Status changed to disconnected.")
+        if connected {
+            demoLogTask = Task { [weak self] in
+                await self?.runDemoLogGenerator()
+            }
+        }
+    }
+
+    private func runDemoLogGenerator() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(Int.random(in: 300...2200)))
+            guard !Task.isCancelled else { return }
+            let line = ScreenshotDemoFixtures.randomLogLine()
+            recordDemo(line.level, module: line.module, line.message)
+        }
+    }
+
+    /// Demo-mode record: no persistent store and no level gate — the stream
+    /// should show every level — just an in-memory cap.
+    private func recordDemo(_ level: LogLevel, module: String, _ message: String) {
+        logEntries.append(LogEntry(source: .app, module: module, level: level, message: message))
+        if logEntries.count > 500 {
+            logEntries.removeFirst(logEntries.count - 500)
+        }
     }
 
     private func detailedError(_ error: Error, message: String) -> String {

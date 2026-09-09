@@ -52,9 +52,8 @@ Vendor/mihomo/.build-mihomo/
 .idea/
 .vscode/
 *.log
+.omp/
 
 # Python bytecode caches
 __pycache__/
 *.py[cod]
-
-.omp/deepwork/
