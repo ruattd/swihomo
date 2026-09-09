@@ -68,8 +68,6 @@ struct LogsView: View {
     @State private var filter = LogFilter.all
     @State private var levelFilter = LogLevelFilter.all
     @State private var searchText = ""
-    // TEMP diagnostic — remove after the scroll-keeper fix is verified.
-    @State private var keeperDebug = "keeper: pending"
     @State private var showingClearLogsConfirmation = false
 
     private var entries: [LogEntry] {
@@ -99,21 +97,17 @@ struct LogsView: View {
                 }
             }
             .listStyle(.plain)
-            // TEMP diagnostic — remove after the scroll-keeper fix is verified.
-            .overlay(alignment: .bottom) {
-                Text(keeperDebug)
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
-                    .padding(4)
-                    .background(.thinMaterial)
-            }
+            // Prepending rows must not move visible content: SwiftUI's implicit
+            // insert animation slides existing rows down in content space, and
+            // no offset compensation can counter a frame animation.
+            .transaction { $0.animation = nil }
             // Keeps the position pixel-exactly when entries prepend: observes
             // the backing scroll view itself (offset + content size) and
             // compensates growth in the same frame — no SwiftUI-side anchoring,
             // whose update timing raced three earlier attempts. Overlay, not
             // background: List drops background representables entirely.
             .overlay(alignment: .top) {
-                LogScrollPositionKeeper(debug: $keeperDebug)
+                LogScrollPositionKeeper()
                     .frame(width: 0, height: 0)
             }
             .overlay {
@@ -284,37 +278,34 @@ private struct LogEntryRow: View {
 }
 
 private struct LogScrollPositionKeeper: View {
-    @Binding var debug: String
-
     var body: some View {
         #if os(iOS)
-        UIKitKeeper(debug: $debug)
+        UIKitKeeper()
         #else
-        AppKitKeeper(debug: $debug)
+        AppKitKeeper()
         #endif
     }
 
     #if os(iOS)
     private struct UIKitKeeper: UIViewRepresentable {
-        @Binding var debug: String
-
         func makeUIView(context: Context) -> UIView {
-            KeeperView(report: { text in
-                DispatchQueue.main.async { debug = text }
-            })
+            KeeperView()
         }
         func updateUIView(_ uiView: UIView, context: Context) {}
 
 
         private final class KeeperView: UIView {
-            private let report: (String) -> Void
             private var offsetObservation: NSKeyValueObservation?
             private var sizeObservation: NSKeyValueObservation?
             private var lastContentHeight: CGFloat = 0
             private var isAtTop = true
+            /// Where the visible content must rest while rows prepend. The
+            /// collection view reconciles estimated cell heights on its own
+            /// schedule and moves the offset whenever it likes, so the target
+            /// is re-asserted on every offset change until the user drags.
+            private var pendingTargetY: CGFloat?
 
-            init(report: @escaping (String) -> Void) {
-                self.report = report
+            override init(frame: CGRect) {
                 super.init(frame: .zero)
             }
 
@@ -325,15 +316,21 @@ private struct LogScrollPositionKeeper: View {
 
             override func didMoveToWindow() {
                 super.didMoveToWindow()
-                guard sizeObservation == nil else { return }
-                guard let scrollView = resolveScrollView() else {
-                    report("keeper: sv=NIL")
-                    return
-                }
-                report("keeper: sv=OK \(type(of: scrollView))")
+                guard sizeObservation == nil, let scrollView = resolveScrollView() else { return }
+                lastContentHeight = scrollView.contentSize.height
                 lastContentHeight = scrollView.contentSize.height
                 offsetObservation = scrollView.observe(\.contentOffset, options: [.new]) { [weak self] view, _ in
-                    self?.isAtTop = view.contentOffset.y <= -view.adjustedContentInset.top + 1
+                    guard let self else { return }
+                    self.isAtTop = view.contentOffset.y <= -view.adjustedContentInset.top + 1
+                    if view.isTracking {
+                        // The user owns the offset while dragging.
+                        self.pendingTargetY = nil
+                    } else if let target = self.pendingTargetY, !view.isDecelerating,
+                              abs(view.contentOffset.y - target) > 0.5 {
+                        // Setting the offset re-fires this observer; the guard
+                        // then passes and the recursion ends.
+                        view.setContentOffset(CGPoint(x: 0, y: target), animated: false)
+                    }
                 }
                 sizeObservation = scrollView.observe(\.contentSize, options: [.new]) { [weak self, weak scrollView] view, _ in
                     guard let self, let scrollView else { return }
@@ -341,19 +338,16 @@ private struct LogScrollPositionKeeper: View {
                     let growth = newHeight - self.lastContentHeight
                     self.lastContentHeight = newHeight
                     guard growth > 0 else { return }
-                    report("g=\(Int(growth)) top=\(self.isAtTop ? 1 : 0) y=\(Int(scrollView.contentOffset.y)) h=\(Int(newHeight))")
-                    let target = CGPoint(
-                        x: 0,
-                        y: self.isAtTop
-                            ? -scrollView.adjustedContentInset.top
-                            : scrollView.contentOffset.y + growth
-                    )
-                    scrollView.setContentOffset(target, animated: false)
-                    // The collection view may re-adjust during its own layout
-                    // pass; re-apply at the end of the run loop if so.
-                    DispatchQueue.main.async { [weak scrollView] in
-                        guard let scrollView, abs(scrollView.contentOffset.y - target.y) > 0.5 else { return }
-                        scrollView.setContentOffset(target, animated: false)
+                    if self.isAtTop {
+                        self.pendingTargetY = nil
+                        scrollView.setContentOffset(CGPoint(x: 0, y: -scrollView.adjustedContentInset.top), animated: false)
+                    } else {
+                        // Accumulate on the pending target, not the transient
+                        // offset — the collection view may not have settled to
+                        // the previous target yet.
+                        let target = (self.pendingTargetY ?? scrollView.contentOffset.y) + growth
+                        self.pendingTargetY = target
+                        scrollView.setContentOffset(CGPoint(x: 0, y: target), animated: false)
                     }
                 }
             }
@@ -377,25 +371,19 @@ private struct LogScrollPositionKeeper: View {
     }
     #else
     private struct AppKitKeeper: NSViewRepresentable {
-        @Binding var debug: String
-
         func makeNSView(context: Context) -> NSView {
-            KeeperView(report: { text in
-                DispatchQueue.main.async { debug = text }
-            })
+            KeeperView()
         }
 
         func updateNSView(_ nsView: NSView, context: Context) {}
 
         private final class KeeperView: NSView {
-            private let report: (String) -> Void
             private var offsetObserver: NSObjectProtocol?
             private var frameObserver: NSObjectProtocol?
             private var lastContentHeight: CGFloat = 0
             private var isAtTop = true
 
-            init(report: @escaping (String) -> Void) {
-                self.report = report
+            override init(frame frameRect: NSRect) {
                 super.init(frame: .zero)
             }
 
@@ -412,12 +400,9 @@ private struct LogScrollPositionKeeper: View {
 
             override func viewDidMoveToWindow() {
                 super.viewDidMoveToWindow()
-                guard frameObserver == nil else { return }
-                guard let scrollView = resolveScrollView(), let document = scrollView.documentView else {
-                    report("keeper: sv=NIL")
-                    return
-                }
-                report("keeper: sv=OK")
+                guard frameObserver == nil,
+                      let scrollView = resolveScrollView(),
+                      let document = scrollView.documentView else { return }
                 lastContentHeight = document.frame.height
                 document.postsFrameChangedNotifications = true
                 let clip = scrollView.contentView
@@ -436,7 +421,6 @@ private struct LogScrollPositionKeeper: View {
                     let growth = newHeight - self.lastContentHeight
                     self.lastContentHeight = newHeight
                     guard growth > 0 else { return }
-                    report("g=\(Int(growth)) top=\(self.isAtTop ? 1 : 0)")
                     let clip = scrollView.contentView
                     let targetY = self.isAtTop
                         ? -scrollView.contentInsets.top
