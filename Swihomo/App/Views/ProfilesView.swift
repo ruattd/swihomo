@@ -159,7 +159,7 @@ private struct ProfilesToolbarContent: View {
 private struct ProfileCard: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.locale) private var locale
-    @AppStorage("subscriptionInfoDisplay") private var subscriptionInfoDisplay = SubscriptionInfoDisplay.used.rawValue
+    @AppStorage("subscriptionInfoDisplay", store: AppDefaults.store) private var subscriptionInfoDisplay = SubscriptionInfoDisplay.used.rawValue
     let profile: Profile
     @State private var showingRemoteEditor = false
     @State private var showingContentEditor = false

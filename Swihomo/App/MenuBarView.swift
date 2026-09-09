@@ -28,7 +28,7 @@ enum MenuBarDisplay: String, CaseIterable, Identifiable {
 
 struct MenuBarLabelView: View {
     @ObservedObject var model: AppModel
-    @AppStorage("menuBarDisplay") private var menuBarDisplay = MenuBarDisplay.iconAndSpeed.rawValue
+    @AppStorage("menuBarDisplay", store: AppDefaults.store) private var menuBarDisplay = MenuBarDisplay.iconAndSpeed.rawValue
 
     private var display: MenuBarDisplay {
         MenuBarDisplay(rawValue: menuBarDisplay) ?? .iconAndSpeed
@@ -156,7 +156,7 @@ struct MenuBarLabelView: View {
 struct MenuBarContentView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.openWindow) private var openWindow
-    @AppStorage("menuBarDisplay") private var menuBarDisplay = MenuBarDisplay.iconAndSpeed.rawValue
+    @AppStorage("menuBarDisplay", store: AppDefaults.store) private var menuBarDisplay = MenuBarDisplay.iconAndSpeed.rawValue
 
     private var trafficSummary: String {
         let display = MenuBarDisplay(rawValue: menuBarDisplay) ?? .iconAndSpeed

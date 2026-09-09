@@ -88,19 +88,19 @@ final class TunnelController {
     }
 
     private var automaticallyReclaimsMemory: Bool {
-        UserDefaults.standard.object(forKey: "automaticallyReclaimsMemory") as? Bool ?? false
+        AppDefaults.store.object(forKey: "automaticallyReclaimsMemory") as? Bool ?? false
     }
 
     private var bypassesPrivateNetworks: Bool {
-        UserDefaults.standard.object(forKey: "packetTunnelBypassesPrivateNetworks") as? Bool ?? false
+        AppDefaults.store.object(forKey: "packetTunnelBypassesPrivateNetworks") as? Bool ?? false
     }
 
     private var bypassesAPNs: Bool {
-        UserDefaults.standard.object(forKey: "packetTunnelBypassAPNs") as? Bool ?? false
+        AppDefaults.store.object(forKey: "packetTunnelBypassAPNs") as? Bool ?? false
     }
 
     private var bypassedCIDRs: [String] {
-        let rawValue = UserDefaults.standard.string(forKey: "packetTunnelBypassCIDRs") ?? ""
+        let rawValue = AppDefaults.store.string(forKey: "packetTunnelBypassCIDRs") ?? ""
         return rawValue
             .split(whereSeparator: { $0.isNewline || $0 == "," })
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -108,12 +108,12 @@ final class TunnelController {
     }
 
     private var mtu: Int {
-        let value = UserDefaults.standard.object(forKey: "packetTunnelMTU") as? Int ?? PacketTunnelMTULimits.defaultValue
+        let value = AppDefaults.store.object(forKey: "packetTunnelMTU") as? Int ?? PacketTunnelMTULimits.defaultValue
         return min(max(value, PacketTunnelMTULimits.minimum), PacketTunnelMTULimits.maximum)
     }
 
     private var customDNSServers: [String] {
-        let rawValue = UserDefaults.standard.string(forKey: "packetTunnelCustomDNSServers") ?? ""
+        let rawValue = AppDefaults.store.string(forKey: "packetTunnelCustomDNSServers") ?? ""
         return rawValue
             .split(whereSeparator: { $0.isNewline || $0 == "," })
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -121,15 +121,15 @@ final class TunnelController {
     }
 
     private var ipv6Enabled: Bool {
-        UserDefaults.standard.object(forKey: "packetTunnelIPv6Enabled") as? Bool ?? true
+        AppDefaults.store.object(forKey: "packetTunnelIPv6Enabled") as? Bool ?? true
     }
 
     private var packetTunnelExcludeCellularServices: Bool {
-        UserDefaults.standard.object(forKey: "packetTunnelExcludeCellularServices") as? Bool ?? true
+        AppDefaults.store.object(forKey: "packetTunnelExcludeCellularServices") as? Bool ?? true
     }
 
     private var packetTunnelIncludeAllNetworks: Bool {
-        UserDefaults.standard.object(forKey: "packetTunnelIncludeAllNetworks") as? Bool ?? false
+        AppDefaults.store.object(forKey: "packetTunnelIncludeAllNetworks") as? Bool ?? false
     }
 
     func disconnect() {

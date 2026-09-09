@@ -358,7 +358,7 @@ final class AppModel: ObservableObject {
                 globalOverrides: runtime.profile.customOverridesEnabled ? runtime.overrides.customYAML : "",
                 profileOverrides: runtime.profile.customOverrideYAML,
                 standardOverrides: MihomoConfigurationBuilder.standardOverridesYAML(runtime.overrides),
-                replacingGeoDatabasesWithRulesets: UserDefaults.standard.bool(forKey: "replaceGeoDatabasesWithRulesets")
+                replacingGeoDatabasesWithRulesets: AppDefaults.store.bool(forKey: "replaceGeoDatabasesWithRulesets")
             )
             for warning in rulesetWarnings {
                 record(.warning, module: "Configuration", warning)
@@ -518,13 +518,13 @@ final class AppModel: ObservableObject {
         guard testingProxyGroupIDs.insert(group.id).inserted else { return }
         defer { testingProxyGroupIDs.remove(group.id) }
 
-        if UserDefaults.standard.bool(forKey: "realtimeDelayTest") {
+        if AppDefaults.store.bool(forKey: "realtimeDelayTest") {
             // Per-node requests instead of the group endpoint: the group endpoint omits failures
             // without a reason, while single-node calls distinguish timeout (504) from test
             // errors (503) — and each card updates as soon as its own result lands.
             // In-flight tests are capped: every test allocates connection/test buffers in
             // mihomo, so large groups run in a sliding window instead of unbounded fan-out.
-            let configuredLimit = UserDefaults.standard.integer(forKey: "delayTestMaxConcurrency")
+            let configuredLimit = AppDefaults.store.integer(forKey: "delayTestMaxConcurrency")
             let maxConcurrentTests = max(1, configuredLimit == 0 ? 4 : configuredLimit)
             var pending = group.candidates.makeIterator()
             await withTaskGroup(of: Void.self) { taskGroup in
@@ -707,8 +707,8 @@ final class AppModel: ObservableObject {
     private static let pendingCoreLogClearDefaultsKey = "logs.pendingCoreLogClear"
 
     private var hasPendingCoreLogClear: Bool {
-        get { UserDefaults.standard.bool(forKey: Self.pendingCoreLogClearDefaultsKey) }
-        set { UserDefaults.standard.set(newValue, forKey: Self.pendingCoreLogClearDefaultsKey) }
+        get { AppDefaults.store.bool(forKey: Self.pendingCoreLogClearDefaultsKey) }
+        set { AppDefaults.store.set(newValue, forKey: Self.pendingCoreLogClearDefaultsKey) }
     }
 
     private func flushPendingCoreLogClear() async {
@@ -963,7 +963,7 @@ final class AppModel: ObservableObject {
                     resource.format = details.format
                 }
                 if resource.kind == .geoData,
-                   let lastUpdated = UserDefaults.standard.object(forKey: Self.geoDataLastUpdatedKey(resource.id)) as? Date,
+                   let lastUpdated = AppDefaults.store.object(forKey: Self.geoDataLastUpdatedKey(resource.id)) as? Date,
                    lastUpdated > (resource.updatedAt ?? .distantPast) {
                     resource.updatedAt = lastUpdated
                 }
@@ -1056,7 +1056,7 @@ final class AppModel: ObservableObject {
 
     private func recordGeoDataUpdate(at date: Date) {
         for resource in externalResources where resource.kind == .geoData {
-            UserDefaults.standard.set(date, forKey: Self.geoDataLastUpdatedKey(resource.id))
+            AppDefaults.store.set(date, forKey: Self.geoDataLastUpdatedKey(resource.id))
         }
     }
 
@@ -1122,7 +1122,7 @@ final class AppModel: ObservableObject {
     }
 
     private func record(_ level: LogLevel, module: String, _ message: String) {
-        let appLogLevel = LogLevel(rawValue: UserDefaults.standard.string(forKey: Self.appLogLevelKey) ?? "") ?? .info
+        let appLogLevel = LogLevel(rawValue: AppDefaults.store.string(forKey: Self.appLogLevelKey) ?? "") ?? .info
         guard appLogLevel.includes(level) else { return }
         guard let logStore else { return }
         logEntries = logStore.append(source: .app, module: module, level: level, message: message)

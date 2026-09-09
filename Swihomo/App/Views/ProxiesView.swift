@@ -4,10 +4,10 @@ struct ProxiesView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var expandedGroupNames: Set<String> = []
-    @AppStorage("proxyGroupSortCriterion") private var groupSortCriterion = ProxyGroupSortCriterion.original
-    @AppStorage("proxyGroupSortDirection") private var groupSortDirection = ProxySortDirection.ascending
-    @AppStorage("proxyNodeSortCriterion") private var nodeSortCriterion = ProxyNodeSortCriterion.original
-    @AppStorage("proxyNodeSortDirection") private var nodeSortDirection = ProxySortDirection.ascending
+    @AppStorage("proxyGroupSortCriterion", store: AppDefaults.store) private var groupSortCriterion = ProxyGroupSortCriterion.original
+    @AppStorage("proxyGroupSortDirection", store: AppDefaults.store) private var groupSortDirection = ProxySortDirection.ascending
+    @AppStorage("proxyNodeSortCriterion", store: AppDefaults.store) private var nodeSortCriterion = ProxyNodeSortCriterion.original
+    @AppStorage("proxyNodeSortDirection", store: AppDefaults.store) private var nodeSortDirection = ProxySortDirection.ascending
 
     var body: some View {
         PageNavigationStack {
@@ -92,7 +92,7 @@ struct ProxiesView: View {
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
             if expandedGroupNames.contains(group.id) {
                 expandedGroupNames.remove(group.id)
-            } else if UserDefaults.standard.bool(forKey: "autoCollapseProxyGroups") {
+            } else if AppDefaults.store.bool(forKey: "autoCollapseProxyGroups") {
                 expandedGroupNames = [group.id]
             } else {
                 expandedGroupNames.insert(group.id)
@@ -102,7 +102,7 @@ struct ProxiesView: View {
 
     private func test(_ group: MihomoProxyGroup) {
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
-            if UserDefaults.standard.bool(forKey: "autoCollapseProxyGroups") {
+            if AppDefaults.store.bool(forKey: "autoCollapseProxyGroups") {
                 expandedGroupNames = [group.id]
             } else {
                 _ = expandedGroupNames.insert(group.id)
@@ -125,10 +125,10 @@ struct ProxiesView: View {
 // ChromeProvider) and in-page on iOS. Declares its own AppStorage so it stays
 // reactive in whichever view graph renders it.
 private struct ProxiesToolbarContent: View {
-    @AppStorage("proxyGroupSortCriterion") private var groupSortCriterion = ProxyGroupSortCriterion.original
-    @AppStorage("proxyGroupSortDirection") private var groupSortDirection = ProxySortDirection.ascending
-    @AppStorage("proxyNodeSortCriterion") private var nodeSortCriterion = ProxyNodeSortCriterion.original
-    @AppStorage("proxyNodeSortDirection") private var nodeSortDirection = ProxySortDirection.ascending
+    @AppStorage("proxyGroupSortCriterion", store: AppDefaults.store) private var groupSortCriterion = ProxyGroupSortCriterion.original
+    @AppStorage("proxyGroupSortDirection", store: AppDefaults.store) private var groupSortDirection = ProxySortDirection.ascending
+    @AppStorage("proxyNodeSortCriterion", store: AppDefaults.store) private var nodeSortCriterion = ProxyNodeSortCriterion.original
+    @AppStorage("proxyNodeSortDirection", store: AppDefaults.store) private var nodeSortDirection = ProxySortDirection.ascending
 
     var body: some View {
         Menu {

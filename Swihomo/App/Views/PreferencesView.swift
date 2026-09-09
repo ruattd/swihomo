@@ -3,30 +3,30 @@ import SwiftUI
 
 struct PreferencesView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @AppStorage("appTheme") private var selectedTheme = AppTheme.system.rawValue
+    @AppStorage("appTheme", store: AppDefaults.store) private var selectedTheme = AppTheme.system.rawValue
     @State private var systemThemeResetID = UUID()
-    @AppStorage("automaticallyReclaimsMemory") private var automaticallyReclaimsMemory = false
-    @AppStorage("replaceGeoDatabasesWithRulesets") private var replaceGeoDatabasesWithRulesets = false
-    @AppStorage("realtimeDelayTest") private var realtimeDelayTest = false
-    @AppStorage("delayTestMaxConcurrency") private var delayTestMaxConcurrency = 4
-    @AppStorage("autoCollapseProxyGroups") private var autoCollapseProxyGroups = false
-    @AppStorage("subscriptionInfoDisplay") private var subscriptionInfoDisplay = SubscriptionInfoDisplay.used.rawValue
-    @AppStorage("showsMenuBar") private var showsMenuBar = true
-    @AppStorage("menuBarDisplay") private var menuBarDisplay = "iconAndSpeed"
-    @AppStorage("appLogLevel") private var appLogLevel = LogLevel.info.rawValue
-    @AppStorage("appLanguage") private var selectedLanguage = AppLanguage.system.rawValue
-    @AppStorage("packetTunnelBypassesPrivateNetworks") private var packetTunnelBypassesPrivateNetworks = false
-    @AppStorage("packetTunnelBypassAPNs") private var packetTunnelBypassAPNs = false
-    @AppStorage("packetTunnelExcludeCellularServices") private var packetTunnelExcludeCellularServices = true
-    @AppStorage("packetTunnelIncludeAllNetworks") private var packetTunnelIncludeAllNetworks = false
-    @AppStorage("packetTunnelBypassCIDRs") private var packetTunnelBypassCIDRs = ""
-    @AppStorage("packetTunnelMTU") private var packetTunnelMTU = PacketTunnelMTULimits.defaultValue
-    @AppStorage("packetTunnelCustomDNSServers") private var packetTunnelCustomDNSServers = ""
-    @AppStorage("packetTunnelIPv6Enabled") private var packetTunnelIPv6Enabled = true
+    @AppStorage("automaticallyReclaimsMemory", store: AppDefaults.store) private var automaticallyReclaimsMemory = false
+    @AppStorage("replaceGeoDatabasesWithRulesets", store: AppDefaults.store) private var replaceGeoDatabasesWithRulesets = false
+    @AppStorage("realtimeDelayTest", store: AppDefaults.store) private var realtimeDelayTest = false
+    @AppStorage("delayTestMaxConcurrency", store: AppDefaults.store) private var delayTestMaxConcurrency = 4
+    @AppStorage("autoCollapseProxyGroups", store: AppDefaults.store) private var autoCollapseProxyGroups = false
+    @AppStorage("subscriptionInfoDisplay", store: AppDefaults.store) private var subscriptionInfoDisplay = SubscriptionInfoDisplay.used.rawValue
+    @AppStorage("showsMenuBar", store: AppDefaults.store) private var showsMenuBar = true
+    @AppStorage("menuBarDisplay", store: AppDefaults.store) private var menuBarDisplay = "iconAndSpeed"
+    @AppStorage("appLogLevel", store: AppDefaults.store) private var appLogLevel = LogLevel.info.rawValue
+    @AppStorage("appLanguage", store: AppDefaults.store) private var selectedLanguage = AppLanguage.system.rawValue
+    @AppStorage("packetTunnelBypassesPrivateNetworks", store: AppDefaults.store) private var packetTunnelBypassesPrivateNetworks = false
+    @AppStorage("packetTunnelBypassAPNs", store: AppDefaults.store) private var packetTunnelBypassAPNs = false
+    @AppStorage("packetTunnelExcludeCellularServices", store: AppDefaults.store) private var packetTunnelExcludeCellularServices = true
+    @AppStorage("packetTunnelIncludeAllNetworks", store: AppDefaults.store) private var packetTunnelIncludeAllNetworks = false
+    @AppStorage("packetTunnelBypassCIDRs", store: AppDefaults.store) private var packetTunnelBypassCIDRs = ""
+    @AppStorage("packetTunnelMTU", store: AppDefaults.store) private var packetTunnelMTU = PacketTunnelMTULimits.defaultValue
+    @AppStorage("packetTunnelCustomDNSServers", store: AppDefaults.store) private var packetTunnelCustomDNSServers = ""
+    @AppStorage("packetTunnelIPv6Enabled", store: AppDefaults.store) private var packetTunnelIPv6Enabled = true
     @State private var editingPacketTunnelField: PacketTunnelTextField?
     @State private var packetTunnelMTUInput: String?
     #if os(macOS)
-    @AppStorage("hidesDockIcon") private var hidesDockIcon = false
+    @AppStorage("hidesDockIcon", store: AppDefaults.store) private var hidesDockIcon = false
     #endif
 
     var body: some View {
@@ -399,7 +399,7 @@ struct PreferencesView: View {
         }
 
         // Preserve the current system appearance while SwiftUI releases the explicit override.
-        selectedTheme = UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark"
+        selectedTheme = AppDefaults.store.string(forKey: "AppleInterfaceStyle") == "Dark"
             ? AppTheme.dark.rawValue
             : AppTheme.light.rawValue
         DispatchQueue.main.async {

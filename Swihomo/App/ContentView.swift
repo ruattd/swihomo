@@ -6,10 +6,10 @@ struct ContentView: View {
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
-    @AppStorage("appTheme") private var selectedTheme = AppTheme.system.rawValue
-    @AppStorage("showsMenuBar") private var showsMenuBar = true
+    @AppStorage("appTheme", store: AppDefaults.store) private var selectedTheme = AppTheme.system.rawValue
+    @AppStorage("showsMenuBar", store: AppDefaults.store) private var showsMenuBar = true
     #if os(macOS)
-    @AppStorage("hidesDockIcon") private var hidesDockIcon = false
+    @AppStorage("hidesDockIcon", store: AppDefaults.store) private var hidesDockIcon = false
     #endif
 
     private var preferredColorScheme: ColorScheme? {

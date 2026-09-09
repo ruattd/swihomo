@@ -7,13 +7,23 @@ enum ScreenshotDemoMode {
         ProcessInfo.processInfo.arguments.contains(launchArgument)
     }
 
-    /// Demo runs persist nothing: the defaults domain is wiped at launch and
-    /// again when the app leaves the foreground, so demo sessions start from
-    /// factory state and leave nothing behind.
-    static func erasePersistedDefaults() {
-        guard let bundleID = Bundle.main.bundleIdentifier else { return }
-        UserDefaults.standard.removePersistentDomain(forName: bundleID)
-    }
+    /// Dedicated defaults suite for demo runs, so demo sessions never touch
+    /// the real instance's domain (both share the bundle identifier).
+    static let defaultsSuiteName = (Bundle.main.bundleIdentifier ?? "com.swihomo.client") + ".screenshot-demo"
+}
+
+/// Single chokepoint for every defaults access in the app. Normally the
+/// standard store; under `--screenshot-demo` an isolated suite that is wiped
+/// at creation, so demo runs start from factory state and leave the real
+/// instance's settings untouched.
+enum AppDefaults {
+    static let store: UserDefaults = {
+        guard ScreenshotDemoMode.isEnabled,
+              let demo = UserDefaults(suiteName: ScreenshotDemoMode.defaultsSuiteName)
+        else { return .standard }
+        demo.removePersistentDomain(forName: ScreenshotDemoMode.defaultsSuiteName)
+        return demo
+    }()
 }
 
 struct ScreenshotDemoState {

@@ -100,7 +100,7 @@ private extension ExternalResourcesView {
 
 private struct ExternalResourceCard: View {
     @EnvironmentObject private var model: AppModel
-    @AppStorage("subscriptionInfoDisplay") private var subscriptionInfoDisplay = SubscriptionInfoDisplay.used.rawValue
+    @AppStorage("subscriptionInfoDisplay", store: AppDefaults.store) private var subscriptionInfoDisplay = SubscriptionInfoDisplay.used.rawValue
     let resource: ExternalResource
     let edit: () -> Void
     let replace: () -> Void
