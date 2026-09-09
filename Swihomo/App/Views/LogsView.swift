@@ -64,6 +64,9 @@ struct LogsView: View {
     @State private var levelFilter = LogLevelFilter.all
     @State private var searchText = ""
     @State private var showingClearLogsConfirmation = false
+    /// Topmost visible row; new entries prepend, so following the stream means
+    /// re-pinning to the new first entry — but only while the user is at the top.
+    @State private var topVisibleEntryID: LogEntry.ID?
 
     private var entries: [LogEntry] {
         model.logEntries
@@ -92,7 +95,11 @@ struct LogsView: View {
                 }
             }
             .listStyle(.plain)
-            .uniformTopScrollEdge()
+            .scrollPosition(id: $topVisibleEntryID, anchor: .top)
+            .onChange(of: entries.first?.id) { oldID, newID in
+                guard oldID != newID, topVisibleEntryID == nil || topVisibleEntryID == oldID else { return }
+                topVisibleEntryID = newID
+            }
             .overlay {
                 if entries.isEmpty {
                     ContentUnavailableView(
