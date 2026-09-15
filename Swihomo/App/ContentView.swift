@@ -221,7 +221,7 @@ struct ContentView: View {
                     }
             }
             // Leaving the section exits any drill-in with it.
-            .onChange(of: activeSection) { _ in connectionDrill.activity = nil }
+            .onChange(of: activeSection) { connectionDrill.activity = nil }
             // Monitoring follows the section on macOS: the drill-in keeps the
             // list's view off-screen, but updates must keep flowing.
             .task(id: activeSection) {
