@@ -5,7 +5,20 @@ func byteCount(_ value: Int64) -> String {
 }
 
 func byteRate(_ value: Int64) -> String {
-    "\(byteCount(value))/s"
+    // Three significant digits below 999 of the chosen unit, rounded integer
+    // at or above. Binary (1024-based) units, KB at minimum so idle links
+    // still read "0.00 KB/s" instead of switching to a B unit.
+    let units = ["KB", "MB", "GB"]
+    var rate = Double(max(value, 0)) / 1024
+    var unitIndex = 0
+    while rate >= 1024, unitIndex < units.count - 1 {
+        rate /= 1024
+        unitIndex += 1
+    }
+    // Thresholds sit half a last-digit step below the boundary so rounding
+    // (e.g. 9.996 -> "10.0", 99.96 -> "100") never emits four significant digits.
+    let decimals = rate < 9.995 ? 2 : rate < 99.95 ? 1 : 0
+    return "\(String(format: "%.\(decimals)f", rate)) \(units[unitIndex])/s"
 }
 
 /// Fully describes an error for logs: type, domain, code, every userInfo entry,
