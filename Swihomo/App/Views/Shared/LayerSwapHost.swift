@@ -61,7 +61,7 @@ final class LayerSwapViewController<Selection: Hashable, Content: View>: NSViewC
     var environment: EnvironmentValues?
 
     private let content: (Selection) -> Content
-    private var selection: Selection
+    private(set) var selection: Selection
     private var pages: [Selection: NSHostingController<AnyView>] = [:]
     private weak var currentView: NSView?
     private weak var currentPage: NSHostingController<AnyView>?
