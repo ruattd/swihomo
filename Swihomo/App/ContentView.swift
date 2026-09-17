@@ -20,6 +20,12 @@ struct ContentView: View {
     // macOS navigates by swapping the detail column; pushing destinations inside
     // the sidebar column tears down the whole home grid on every page switch.
     @State private var activeSection: HomeSection = .connection
+    // Tools is the exception: it drills into the sidebar column on purpose, so
+    // its sub-pages live in the left column instead of the detail page host.
+    // A NavigationStack inside the sidebar column renders broken inline chrome
+    // (back chevron under the titlebar, title squeezed in between), so the
+    // drill-in is a manual swap with directional transitions instead.
+    @State private var toolsPresented = false
     // One stable window chrome; pages register their toolbar/search content here.
     @StateObject private var detailChrome = DetailChrome()
     // Connection drill-in: a container-level page, so the window chrome swaps too.
@@ -146,9 +152,20 @@ struct ContentView: View {
     private var splitContent: some View {
         NavigationSplitView {
             #if os(macOS)
-            HomeView(activeSection: $activeSection)
-                .navigationSplitViewColumnWidth(min: 310, ideal: 310, max: 516)
-                .frame(minWidth: 310)
+            // The tools drill-in swaps the column's content inside a layer
+            // host: the swap animates GPU-side (no SwiftUI re-layout, no
+            // rasterization of the glass grid). Section switches drive the
+            // detail column and must not touch this — the grid would be torn
+            // down on every switch.
+            LayerSwapHost(selection: toolsPresented, direction: toolsPresented ? .push : .pop) { presented in
+                if presented {
+                    ToolsView(onClose: { toolsPresented = false })
+                } else {
+                    HomeView(activeSection: $activeSection, openTools: { toolsPresented = true })
+                }
+            }
+            .navigationSplitViewColumnWidth(min: 310, ideal: 310, max: 516)
+            .frame(minWidth: 310)
             #else
             HomeView()
                 .navigationSplitViewColumnWidth(min: 310, ideal: 310, max: 516)

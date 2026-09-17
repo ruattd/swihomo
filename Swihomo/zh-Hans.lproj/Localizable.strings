@@ -65,6 +65,7 @@
 "navigation.overrides" = "覆盖设置";
 "navigation.resources" = "资源";
 "navigation.logs" = "日志";
+"navigation.tools" = "工具";
 "navigation.preferences" = "偏好";
 "navigation.about" = "关于";
 
@@ -84,8 +85,14 @@
 "home.resources.connectedSubtitle" = "编辑 mihomo 管理的提供程序文件";
 "home.resources.disconnectedSubtitle" = "连接配置文件以查看提供程序文件";
 "home.logsSubtitle" = "应用活动和 mihomo 核心事件";
+"home.toolsSubtitle" = "实用工具和网络诊断";
 "home.preferencesSubtitle" = "为此设备配置 Swihomo";
 "home.aboutSubtitle" = "应用详情和开源许可证";
+
+"tools.speedTest" = "测速";
+"tools.ping" = "Ping";
+"tools.dnsLookup" = "DNS 查询";
+"tools.placeholder" = "敬请期待";
 
 "preferences.language.systemDefault" = "系统默认";
 "preferences.appearance.title" = "外观";

@@ -7,6 +7,7 @@ enum HomeSection: String, CaseIterable, Hashable, Identifiable {
     case overrides
     case externalResources
     case logs
+    case tools
     case preference
     case about
 
@@ -29,6 +30,7 @@ enum HomeSection: String, CaseIterable, Hashable, Identifiable {
         case .overrides: "navigation.overrides"
         case .externalResources: "navigation.resources"
         case .logs: "navigation.logs"
+        case .tools: "navigation.tools"
         case .preference: "navigation.preferences"
         case .about: "navigation.about"
         }
@@ -42,8 +44,18 @@ enum HomeSection: String, CaseIterable, Hashable, Identifiable {
         case .overrides: "slider.horizontal.3"
         case .externalResources: "externaldrive.connected.to.line.below"
         case .logs: "doc.text.magnifyingglass"
+        case .tools: "wrench.and.screwdriver"
         case .preference: "gearshape"
         case .about: "info.circle"
+        }
+    }
+
+    /// Grid card icon point size. wrench.and.screwdriver renders visually
+    /// larger than the other symbols at the same nominal size, so it gets less.
+    var iconSize: Double {
+        switch self {
+        case .tools: 24
+        default: 30
         }
     }
 
@@ -55,6 +67,7 @@ enum HomeSection: String, CaseIterable, Hashable, Identifiable {
         case .overrides: .pink
         case .externalResources: .purple
         case .logs: .teal
+        case .tools: .mint
         case .preference: .gray
         case .about: .blue
         }
@@ -104,16 +117,17 @@ struct HomeView: View {
     @Environment(\.pushCompactRoute) private var pushCompactRoute
     @Environment(\.compactTabLayout) private var compactTabLayout
     #endif
-    // Drives the toggle card's press bounce on the whole glass surface; the switch
-    // sits outside the link and never triggers it.
-    @State private var toggleCardContracted = false
     #if os(macOS)
     // macOS navigates by driving the detail column's selection: pushing links
     // inside the sidebar column would tear down this whole grid on every switch.
     @Binding var activeSection: HomeSection
+    // Tools is the exception: it drills into the sidebar column itself (the
+    // grid is replaced by the tools list), leaving the detail column alone.
+    let openTools: () -> Void
 
-    init(activeSection: Binding<HomeSection>) {
+    init(activeSection: Binding<HomeSection>, openTools: @escaping () -> Void) {
         _activeSection = activeSection
+        self.openTools = openTools
     }
     #endif
 
@@ -150,45 +164,47 @@ struct HomeView: View {
         #endif
     }
 
-    // The card is the profiles-page entry, but the switch sits OUTSIDE the link —
-    // toggling it must not trigger the card's press animation.
+    // The card is the profiles-page entry. The glass surface lives INSIDE the
+    // button label so the native interactive-glass press animation plays; the
+    // switch floats above the button's trailing edge, so toggling it never
+    // triggers navigation.
     private var connectionToggle: some View {
-        HStack(spacing: 12) {
-            homeNavigation(to: .profiles, contracted: $toggleCardContracted) {
-                HStack(spacing: 12) {
-                    // Sized like HomeBannerRow so the switch card and the
-                    // connections banner align when stacked.
-                    Image(systemName: model.isConnected ? "checkmark.shield.fill" : "shield.lefthalf.filled")
-                        .font(.title.weight(.semibold))
-                        .foregroundStyle(model.isConnected ? .green : .secondary)
-                        .frame(width: 44, height: 44)
-                        .background(
-                            (model.isConnected ? Color.green : Color.gray).opacity(0.14),
-                            in: RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        )
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(LocalizedStringKey(model.connectionStatusLocalizationKey))
-                            .font(.headline)
-                        Text(model.snapshot.activeProfile?.name ?? String(localized: "home.chooseProfile"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    Spacer()
+        homeNavigation(to: .profiles) {
+            HStack(spacing: 12) {
+                // Sized like HomeBannerRow so the switch card and the
+                // connections banner align when stacked.
+                Image(systemName: model.isConnected ? "checkmark.shield.fill" : "shield.lefthalf.filled")
+                    .font(.title.weight(.semibold))
+                    .foregroundStyle(model.isConnected ? .green : .secondary)
+                    .frame(width: 44, height: 44)
+                    .background(
+                        (model.isConnected ? Color.green : Color.gray).opacity(0.14),
+                        in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    )
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(LocalizedStringKey(model.connectionStatusLocalizationKey))
+                        .font(.headline)
+                    Text(model.snapshot.activeProfile?.name ?? String(localized: "home.chooseProfile"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-                .contentShape(Rectangle())
+                Spacer()
             }
-
+            .padding(16)
+            // Reserve the trailing lane for the overlaid switch.
+            .padding(.trailing, 52)
+            .contentShape(Rectangle())
+            .liquidGlassCard(interactive: true)
+        }
+        .overlay(alignment: .trailing) {
             Toggle("common.connect", isOn: connectionBinding)
                 .labelsHidden()
                 // macOS renders a bare Toggle as a checkbox; this control is a switch.
                 .toggleStyle(.switch)
                 .disabled(connectionToggleDisabled)
+                .padding(.trailing, 16)
         }
-        .padding(16)
-        // Scale must wrap the glass surface, not just its content.
-        .liquidGlassCard(interactive: true)
-        .scaleEffect(toggleCardContracted ? 0.96 : 1)
     }
 
     private var connectionBinding: Binding<Bool> {
@@ -226,11 +242,9 @@ struct HomeView: View {
         #endif
     }
 
-    // Profiles has no grid card of its own (the top toggle card leads there);
-    // preferences/about render as wide banners below the grid instead.
     private var gridSections: [HomeSection] {
-        if compactHome { return [.overrides, .externalResources, .logs] }
-        return [.proxies, .connection, .overrides, .externalResources, .logs]
+        if compactHome { return [.overrides, .externalResources, .logs, .tools] }
+        return [.proxies, .connection, .overrides, .externalResources, .logs, .tools]
     }
 
     private var bannerSections: [HomeSection] {
@@ -301,22 +315,26 @@ struct HomeView: View {
     }
 
     // iOS pushes destinations onto the enclosing stack; macOS drives the detail
-    // column's selection instead, so this grid survives page switches.
+    // column's selection instead, so this grid survives page switches. Tools is
+    // the exception on macOS: it pushes inside the sidebar column itself.
     @ViewBuilder
     private func homeNavigation<Label: View>(
         to section: HomeSection,
-        contracted: Binding<Bool>? = nil,
         @ViewBuilder label: () -> Label
     ) -> some View {
         #if os(macOS)
         Button {
             // The fade lives inside DetailPageHost (layer-driven); no SwiftUI
             // transaction needed here.
-            activeSection = section
+            if section == .tools {
+                openTools()
+            } else {
+                activeSection = section
+            }
         } label: {
             label()
         }
-        .buttonStyle(NavigationCardButtonStyle(contracted: contracted))
+        .buttonStyle(.plain)
         #else
         if let pushCompactRoute {
             // Compact tab layout: push onto the outer stack covering the TabView.
@@ -325,14 +343,14 @@ struct HomeView: View {
             } label: {
                 label()
             }
-            .buttonStyle(NavigationCardButtonStyle(contracted: contracted))
+            .buttonStyle(.plain)
         } else {
             NavigationLink {
                 FeatureDetailView(section: section)
             } label: {
                 label()
             }
-            .buttonStyle(NavigationCardButtonStyle(contracted: contracted))
+            .buttonStyle(.plain)
         }
         #endif
     }
@@ -351,6 +369,8 @@ struct HomeView: View {
             "\(model.externalResources.count) files"
         case .logs:
             "\(model.logEntries.count) entries"
+        case .tools:
+            "\(Tool.placeholderTools.count) tools"
         case .preference:
             "App settings"
         case .about:
@@ -385,6 +405,8 @@ struct HomeView: View {
             model.isConnected ? "Edit provider files managed by mihomo" : "Connect a profile to inspect provider files"
         case .logs:
             "App activity and mihomo core events"
+        case .tools:
+            "Utilities and network diagnostics"
         case .preference:
             "Configure Swihomo for this device"
         case .about:
@@ -406,6 +428,8 @@ struct HomeView: View {
             model.isConnected ? "home.resources.connectedSubtitle" : "home.resources.disconnectedSubtitle"
         case .logs:
             "home.logsSubtitle"
+        case .tools:
+            "home.toolsSubtitle"
         case .preference:
             "home.preferencesSubtitle"
         case .about:
@@ -434,7 +458,7 @@ private struct HomeFeatureCard: View, Equatable {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Image(systemName: section.icon)
-                .font(.system(size: 30, weight: .medium))
+                .font(.system(size: section.iconSize, weight: .medium))
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(section.tint)
                 .frame(width: 32, height: 32)
@@ -578,6 +602,8 @@ struct FeatureDetailView: View {
                 ExternalResourcesView()
             case .logs:
                 LogsView()
+            case .tools:
+                ToolsView()
             case .preference:
                 PreferencesView()
             case .about:

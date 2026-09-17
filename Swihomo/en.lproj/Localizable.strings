@@ -65,6 +65,7 @@
 "navigation.overrides" = "Overrides";
 "navigation.resources" = "Resources";
 "navigation.logs" = "Logs";
+"navigation.tools" = "Tools";
 "navigation.preferences" = "Preferences";
 "navigation.about" = "About";
 
@@ -84,8 +85,14 @@
 "home.resources.connectedSubtitle" = "Edit provider files managed by mihomo";
 "home.resources.disconnectedSubtitle" = "Connect a profile to inspect provider files";
 "home.logsSubtitle" = "App activity and mihomo core events";
+"home.toolsSubtitle" = "Utilities and network diagnostics";
 "home.preferencesSubtitle" = "Configure Swihomo for this device";
 "home.aboutSubtitle" = "App details and open-source licenses";
+
+"tools.speedTest" = "Speed Test";
+"tools.ping" = "Ping";
+"tools.dnsLookup" = "DNS Lookup";
+"tools.placeholder" = "Coming soon";
 
 "preferences.language.systemDefault" = "System Default";
 "preferences.appearance.title" = "Appearance";
