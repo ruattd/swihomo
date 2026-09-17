@@ -7,7 +7,12 @@ int SwihomoCoreStart(
     const char *homeDirectory,
     int useMipstack
 );
-int SwihomoCoreInputPacket(uint8_t *packet, size_t length, int family);
+int SwihomoCoreInputPackets(
+    const uint8_t *buffer,
+    const size_t *lengths,
+    const int *families,
+    size_t count
+);
 // Positive return values are HTTP status codes; values below 100 are bridge error codes.
 int SwihomoCoreAPIRequest(
     const char *method,

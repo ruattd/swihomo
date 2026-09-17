@@ -294,10 +294,10 @@ private final class PacketFlowBridge: @unchecked Sendable {
         }
     }
 
-    func write(_ data: Data, family: Int32) {
+    func write(_ packets: [Data], families: [NSNumber]) {
         queue.async { [weak self] in
             guard let self, !self.isStopped else { return }
-            self.packetFlow.writePackets([data], withProtocols: [NSNumber(value: family)])
+            self.packetFlow.writePackets(packets, withProtocols: families)
         }
     }
 
@@ -306,13 +306,37 @@ private final class PacketFlowBridge: @unchecked Sendable {
             guard let self else { return }
             self.queue.async {
                 guard !self.isStopped else { return }
-                for (packet, family) in zip(packets, protocols) {
-                    var bytes = [UInt8](packet)
-                    _ = bytes.withUnsafeMutableBufferPointer { buffer in
-                        SwihomoCoreInputPacket(buffer.baseAddress, buffer.count, family.int32Value)
-                    }
-                }
+                self.forwardPackets(packets, protocols: protocols)
                 self.readPackets()
+            }
+        }
+    }
+
+    /// Flattens the batch into a single FFI call so the core locks its
+    /// runtime state once per batch instead of once per packet.
+    private func forwardPackets(_ packets: [Data], protocols: [NSNumber]) {
+        guard !packets.isEmpty else { return }
+        var buffer = [UInt8]()
+        buffer.reserveCapacity(packets.reduce(0) { $0 + $1.count })
+        var lengths = [Int]()
+        var families = [Int32]()
+        lengths.reserveCapacity(packets.count)
+        families.reserveCapacity(packets.count)
+        for (packet, family) in zip(packets, protocols) {
+            buffer.append(contentsOf: packet)
+            lengths.append(packet.count)
+            families.append(family.int32Value)
+        }
+        buffer.withUnsafeBufferPointer { bufferPointer in
+            lengths.withUnsafeBufferPointer { lengthsPointer in
+                families.withUnsafeBufferPointer { familiesPointer in
+                    _ = SwihomoCoreInputPackets(
+                        bufferPointer.baseAddress,
+                        lengthsPointer.baseAddress,
+                        familiesPointer.baseAddress,
+                        packets.count
+                    )
+                }
             }
         }
     }
@@ -336,11 +360,11 @@ private enum PacketFlowBridgeRegistry {
         lock.unlock()
     }
 
-    static func write(_ data: Data, family: Int32) {
+    static func write(_ packets: [Data], families: [NSNumber]) {
         lock.lock()
         let bridge = activeBridge
         lock.unlock()
-        bridge?.write(data, family: family)
+        bridge?.write(packets, families: families)
     }
 }
 
@@ -360,14 +384,28 @@ enum CoreLogStore {
     }
 }
 
-@_cdecl("swihomo_write_packet")
-func swihomoWritePacket(
-    _ packet: UnsafePointer<UInt8>?,
-    _ length: Int,
-    _ family: Int32
+@_cdecl("swihomo_write_packets")
+func swihomoWritePackets(
+    _ buffer: UnsafePointer<UInt8>?,
+    _ lengths: UnsafePointer<Int>?,
+    _ families: UnsafePointer<Int32>?,
+    _ count: Int
 ) {
-    guard let packet, length > 0 else { return }
-    PacketFlowBridgeRegistry.write(Data(bytes: packet, count: length), family: family)
+    guard let buffer, let lengths, let families, count > 0 else { return }
+    var packets = [Data]()
+    var protocols = [NSNumber]()
+    packets.reserveCapacity(count)
+    protocols.reserveCapacity(count)
+    var offset = 0
+    for i in 0..<count {
+        let length = lengths[i]
+        if length > 0 {
+            packets.append(Data(bytes: buffer.advanced(by: offset), count: length))
+            protocols.append(NSNumber(value: families[i]))
+            offset += length
+        }
+    }
+    PacketFlowBridgeRegistry.write(packets, families: protocols)
 }
 
 @_cdecl("swihomo_write_log")
