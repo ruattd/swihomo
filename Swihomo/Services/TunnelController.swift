@@ -59,7 +59,8 @@ final class TunnelController {
             "bypassedCIDRs": bypassedCIDRs,
             "mtu": NSNumber(value: mtu),
             "customDNSServers": customDNSServers,
-            "ipv6Enabled": NSNumber(value: ipv6Enabled)
+            "ipv6Enabled": NSNumber(value: ipv6Enabled),
+            "useMipstack": NSNumber(value: useMipstack)
         ]
         manager.protocolConfiguration = tunnelProtocol
         manager.localizedDescription = "Swihomo"
@@ -122,6 +123,10 @@ final class TunnelController {
 
     private var ipv6Enabled: Bool {
         AppDefaults.store.object(forKey: "packetTunnelIPv6Enabled") as? Bool ?? true
+    }
+
+    private var useMipstack: Bool {
+        AppDefaults.store.object(forKey: "packetTunnelUseMipstack") as? Bool ?? false
     }
 
     private var packetTunnelExcludeCellularServices: Bool {

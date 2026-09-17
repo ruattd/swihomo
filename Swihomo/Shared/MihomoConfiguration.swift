@@ -2,6 +2,7 @@ import Foundation
 
 struct MihomoRuntimeConfiguration {
     let profileYAML: Data
+    var useMipstack = false
 }
 
 struct MihomoGeoDataRequirements {

@@ -23,6 +23,7 @@ struct PreferencesView: View {
     @AppStorage("packetTunnelMTU", store: AppDefaults.store) private var packetTunnelMTU = PacketTunnelMTULimits.defaultValue
     @AppStorage("packetTunnelCustomDNSServers", store: AppDefaults.store) private var packetTunnelCustomDNSServers = ""
     @AppStorage("packetTunnelIPv6Enabled", store: AppDefaults.store) private var packetTunnelIPv6Enabled = true
+    @AppStorage("packetTunnelUseMipstack", store: AppDefaults.store) private var packetTunnelUseMipstack = false
     @State private var editingPacketTunnelField: PacketTunnelTextField?
     @State private var packetTunnelMTUInput: String?
     #if os(macOS)
@@ -90,6 +91,14 @@ struct PreferencesView: View {
                 description: Text("preferences.experimental.replaceGeoDatabases.description")
             ) {
                 Toggle("preferences.experimental.replaceGeoDatabases", isOn: $replaceGeoDatabasesWithRulesets)
+                    .labelsHidden()
+            }
+
+            PreferenceRow(
+                title: Text("preferences.experimental.useMipstack"),
+                description: Text("preferences.experimental.useMipstack.description")
+            ) {
+                Toggle("preferences.experimental.useMipstack", isOn: $packetTunnelUseMipstack)
                     .labelsHidden()
             }
 

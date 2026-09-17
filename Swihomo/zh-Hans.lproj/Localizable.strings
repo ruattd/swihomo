@@ -316,6 +316,8 @@
 "menubar.quitApp" = "退出 Swihomo";
 "preferences.experimental.replaceGeoDatabases" = "用规则集替代 Geo 数据库";
 "preferences.experimental.replaceGeoDatabases.description" = "将 GEOIP/GEOSITE 规则与 DNS 中的 geosite 策略改写为 mrs 规则集, 并移除 Geo 数据库设置以减少内存占用, 不会迁移 dns.fallback-filter.geosite, 下次连接时生效";
+"preferences.experimental.useMipstack" = "为 Packet Tunnel 使用 mipstack";
+"preferences.experimental.useMipstack.description" = "将 Packet Tunnel 的网络栈从 gVisor 切换为更轻量的 mipstack 以减少内存占用, 下次连接时生效";
 "preferences.experimental.delayTestConcurrency" = "延迟测试并发数量";
 "preferences.experimental.realtimeDelayTest" = "实时延迟测试";
 "preferences.experimental.realtimeDelayTest.description" = "逐个测试节点并实时更新结果卡片, 关闭时组测速使用统一的组 API, 失败的节点一律视为错误";

@@ -34,6 +34,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let mtu = (configuration.providerConfiguration?["mtu"] as? NSNumber)?.intValue ?? PacketTunnelMTULimits.defaultValue
         let customDNSServers = configuration.providerConfiguration?["customDNSServers"] as? [String] ?? []
         let ipv6Enabled = (configuration.providerConfiguration?["ipv6Enabled"] as? NSNumber)?.boolValue ?? true
+        let useMipstack = (configuration.providerConfiguration?["useMipstack"] as? NSNumber)?.boolValue ?? false
 
         // Download required geodata before the default route reaches the core's packet flow.
         let geoDataRequirements = MihomoGeoDataRequirements(profileYAML: profileYAML)
@@ -54,7 +55,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         do {
             CoreLogStore.append(level: .debug, message: "startTunnel: starting Mihomo core.")
             try await core.start(
-                configuration: MihomoRuntimeConfiguration(profileYAML: profileYAML),
+                configuration: MihomoRuntimeConfiguration(profileYAML: profileYAML, useMipstack: useMipstack),
                 packetFlow: packetFlow
             )
         } catch {

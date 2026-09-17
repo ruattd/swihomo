@@ -39,7 +39,8 @@ private final class EmbeddedMihomoCore: MihomoCoreEngine {
                 SwihomoCoreStart(
                     profileBuffer.baseAddress,
                     profileBuffer.count,
-                    homeDirectoryPointer
+                    homeDirectoryPointer,
+                    configuration.useMipstack ? 1 : 0
                 )
             }
         }

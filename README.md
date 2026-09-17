@@ -86,7 +86,7 @@ SwiftUI app
     v
 Packet Tunnel extension
     |
-    | NEPacketTunnelFlow <-> C bridge <-> mihomo sing-tun gVisor stack
+    | NEPacketTunnelFlow <-> C bridge <-> mihomo sing-tun stack (gVisor or mipstack)
     v
 Embedded mihomo core
 ```
