@@ -40,6 +40,13 @@ struct ContentView: View {
     /// Selected tab in the compact layout; the outer stack reads its title
     /// (TabView is opaque to it, so per-page titles can't bubble out).
     @State private var compactTab = CompactTab.home
+    /// Sidebar-column path on regular width (iPad): the tools drill-in pushes
+    /// INSIDE the sidebar column (mirroring macOS) onto the column's own typed
+    /// stack. Unused by the compact tab layout, which has its own outer stack.
+    @State private var sidebarPath: [CompactRoute] = []
+    /// Selected detail-column section on regular width (iPad); the compact
+    /// layout pushes sections onto the outer stack instead.
+    @State private var selectedSection: HomeSection = .connection
     #endif
 
     var body: some View {
@@ -134,12 +141,7 @@ struct ContentView: View {
                 }
             }
             .navigationDestination(for: CompactRoute.self) { route in
-                switch route {
-                case .section(let section):
-                    FeatureDetailView(section: section)
-                case .connection(let activity):
-                    ConnectionDetailView(activity: activity)
-                }
+                routeDestination(route, push: { compactPath.append($0) })
             }
         }
         // Attached ABOVE the stack: custom environment values set on the TabView
@@ -147,6 +149,29 @@ struct ContentView: View {
         .environment(\.pushCompactRoute) { compactPath.append($0) }
         .environment(\.compactTabLayout, true)
     }
+
+    /// Single destination builder shared by both typed stacks (the compact
+    /// layout's outer stack and the iPad sidebar column's stack): one `for:`
+    /// destination per stack, and nothing else pushes inside either. The push
+    /// closure is threaded EXPLICITLY — custom environment values do not
+    /// reliably reach navigationDestination content (probed: tool row taps
+    /// no-op'd with an environment-injected pusher).
+    @ViewBuilder
+    private func routeDestination(_ route: CompactRoute, push: @escaping (CompactRoute) -> Void) -> some View {
+        switch route {
+        case .section(.tools):
+            ToolsView(onSelectTool: { push(.tool($0.id)) })
+        case .section(let section):
+            FeatureDetailView(section: section)
+        case .connection(let activity):
+            ConnectionDetailView(activity: activity)
+        case .tool(let id):
+            if let tool = Tool.placeholderTools.first(where: { $0.id == id }) {
+                ToolPlaceholderView(tool: tool)
+            }
+        }
+    }
+
     #endif
 
     private var splitContent: some View {
@@ -167,8 +192,17 @@ struct ContentView: View {
             .navigationSplitViewColumnWidth(min: 310, ideal: 310, max: 516)
             .frame(minWidth: 310)
             #else
-            HomeView()
-                .navigationSplitViewColumnWidth(min: 310, ideal: 310, max: 516)
+            // iPad mirrors macOS: section taps drive the detail column's
+            // selection, while tools pushes INSIDE the sidebar column's own
+            // typed stack — a plain link would land in the detail column (and
+            // mixing destination styles desyncs pop state).
+            NavigationStack(path: $sidebarPath) {
+                HomeView(activeSection: $selectedSection, openTools: { sidebarPath.append(.section(.tools)) })
+                    .navigationDestination(for: CompactRoute.self) { route in
+                        routeDestination(route, push: { sidebarPath.append($0) })
+                    }
+            }
+            .navigationSplitViewColumnWidth(min: 310, ideal: 310, max: 516)
             #endif
         } detail: {
             #if os(macOS)
@@ -245,7 +279,7 @@ struct ContentView: View {
                 model.setConnectionMonitoringEnabled(activeSection == .connection)
             }
             #else
-            FeatureDetailView(section: .connection)
+            FeatureDetailView(section: selectedSection)
             #endif
         }
         .navigationSplitViewStyle(.balanced)

@@ -75,18 +75,24 @@ enum HomeSection: String, CaseIterable, Hashable, Identifiable {
 }
 
 #if os(iOS)
-/// Routes of the compact tab layout's outer stack. One typed path + one
-/// `navigationDestination(for:)` — mixing in `navigationDestination(item:)`
-/// anywhere inside a path-based stack crashes SwiftUI with
-/// AnyNavigationPath.comparisonTypeMismatch.
+/// Routes pushed onto the app's typed navigation stacks: the compact layout's
+/// outer stack, and the iPad sidebar column's own stack (the tools drill-in).
+/// One typed path + one `navigationDestination(for:)` per stack — mixing in
+/// `navigationDestination(item:)` or plain links inside a path-based stack
+/// desyncs pop state (`item:` outright crashes SwiftUI with
+/// AnyNavigationPath.comparisonTypeMismatch).
 enum CompactRoute: Hashable {
     case section(HomeSection)
     case connection(MihomoConnectionActivity)
+    /// A tool sub-page, by Tool.id (Tool itself is not Hashable —
+    /// LocalizedStringKey isn't).
+    case tool(String)
 }
 
-/// Injected by the compact tab layout: pushes a route onto the stack that wraps
-/// the TabView, so the tab bar rides the push transition. Nil elsewhere, where
-/// plain NavigationLinks / nested stacks handle navigation.
+/// Injected above a typed navigation stack: pushes a route onto it. Set by the
+/// compact tab layout (outer stack) and by the iPad sidebar column (its own
+/// stack); nil elsewhere, where plain NavigationLinks / nested stacks handle
+/// navigation.
 private struct PushCompactRouteKey: EnvironmentKey {
     static let defaultValue: ((CompactRoute) -> Void)? = nil
 }
@@ -116,6 +122,17 @@ struct HomeView: View {
     #if os(iOS)
     @Environment(\.pushCompactRoute) private var pushCompactRoute
     @Environment(\.compactTabLayout) private var compactTabLayout
+    // Regular width (iPad) mirrors macOS: section taps drive the detail
+    // column's selection, and tools drills into the sidebar column's own
+    // stack. Both are nil in the compact tab layout, where everything pushes
+    // onto the outer stack instead.
+    let activeSection: Binding<HomeSection>?
+    let openTools: (() -> Void)?
+
+    init(activeSection: Binding<HomeSection>? = nil, openTools: (() -> Void)? = nil) {
+        self.activeSection = activeSection
+        self.openTools = openTools
+    }
     #endif
     #if os(macOS)
     // macOS navigates by driving the detail column's selection: pushing links
@@ -336,7 +353,29 @@ struct HomeView: View {
         }
         .buttonStyle(.plain)
         #else
-        if let pushCompactRoute {
+        if section == .tools, let openTools {
+            // iPad: drills into the sidebar column itself (mirrors macOS). The
+            // compact layout has no openTools and falls through to the
+            // outer-stack push below.
+            Button {
+                openTools()
+            } label: {
+                label()
+            }
+            .buttonStyle(.plain)
+        } else if let activeSection {
+            // iPad: drive the detail column's selection. This branch MUST come
+            // before pushCompactRoute: the iPad sidebar stack injects that
+            // environment too (for tool sub-pages), and without the priority
+            // every section tap would push onto the sidebar stack instead of
+            // switching the detail column.
+            Button {
+                activeSection.wrappedValue = section
+            } label: {
+                label()
+            }
+            .buttonStyle(.plain)
+        } else if let pushCompactRoute {
             // Compact tab layout: push onto the outer stack covering the TabView.
             Button {
                 pushCompactRoute(.section(section))
@@ -344,17 +383,9 @@ struct HomeView: View {
                 label()
             }
             .buttonStyle(.plain)
-        } else {
-            NavigationLink {
-                FeatureDetailView(section: section)
-            } label: {
-                label()
-            }
-            .buttonStyle(.plain)
         }
         #endif
     }
-
     private func value(for section: HomeSection) -> String {
         switch section {
         case .connection:

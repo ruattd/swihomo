@@ -13,13 +13,14 @@ struct Tool: Identifiable {
     ]
 }
 
-// iOS pushes this onto the enclosing stack (sidebar column / compact-tab outer
-// stack), where plain NavigationLinks handle everything. macOS has no usable
-// sidebar push — a NavigationStack inside the split view's sidebar column
-// renders broken inline chrome (back chevron under the titlebar, the title
-// squeezed in between) — so there ContentView swaps the column's content
-// through LayerSwapHost (GPU-side layer animation), and this view renders its
-// own header.
+// iOS pushes this onto the enclosing typed stack (the iPad sidebar column's
+// own stack, or the compact layout's outer stack), so the system owns the
+// push animation, back button, and pop state. macOS has no usable sidebar
+// push — a NavigationStack inside the split view's sidebar column renders
+// broken inline chrome (back chevron under the titlebar, the title squeezed
+// in between) — so there ContentView swaps the column's content through
+// LayerSwapHost (GPU-side layer animation), and this view renders its own
+// header.
 struct ToolsView: View {
     /// macOS only: closes the drill-in and restores the home grid. Nil when the
     /// view is rendered as a detail-column page (FeatureDetailView needs the
@@ -29,9 +30,15 @@ struct ToolsView: View {
     #if os(macOS)
     @State private var selectedTool: Tool?
     #endif
+    /// iOS only: pushes a tool sub-page onto the enclosing typed stack.
+    /// Threaded explicitly — custom environment values do not reliably reach
+    /// navigationDestination content (probed: row taps no-op'd). Unused on
+    /// macOS, where tool selection is internal state.
+    let onSelectTool: ((Tool) -> Void)?
 
-    init(onClose: (() -> Void)? = nil) {
+    init(onClose: (() -> Void)? = nil, onSelectTool: ((Tool) -> Void)? = nil) {
         self.onClose = onClose
+        self.onSelectTool = onSelectTool
     }
 
     var body: some View {
@@ -46,18 +53,22 @@ struct ToolsView: View {
             }
         }
         #else
-        Form {
-            Section {
+        // Card rows match the first-level grid. Taps push onto the enclosing
+        // typed stack via the explicitly threaded pusher — plain links inside
+        // a path-based stack desync pop state.
+        ScrollView {
+            VStack(spacing: 12) {
                 ForEach(Tool.placeholderTools) { tool in
-                    NavigationLink {
-                        ToolPlaceholderView(tool: tool)
+                    Button {
+                        onSelectTool?(tool)
                     } label: {
-                        Label(tool.titleKey, systemImage: tool.icon)
+                        ToolRow(tool: tool)
                     }
+                    .buttonStyle(.plain)
                 }
             }
+            .padding()
         }
-        .formStyle(.grouped)
         .uniformTopScrollEdge()
         .detailPageTitle("navigation.tools")
         #endif
@@ -114,6 +125,7 @@ private struct ToolsPageHeader: View {
         .padding(.bottom, 2)
     }
 }
+#endif
 
 // Sized and padded like HomeBannerRow so the tools list aligns with the grid.
 private struct ToolRow: View {
@@ -138,9 +150,8 @@ private struct ToolRow: View {
         .liquidGlassCard(interactive: true)
     }
 }
-#endif
 
-private struct ToolPlaceholderView: View {
+struct ToolPlaceholderView: View {
     let tool: Tool
     /// macOS only: pops back to the tools list. Nil = rendered inside a
     /// navigation stack (iOS), where the system back button handles it.
