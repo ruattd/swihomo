@@ -31,6 +31,45 @@ struct PageNavigationStack<Content: View>: View {
     }
 }
 
+/// Editor-page navigation host. iOS compact layout: renders content plain —
+/// editor routes push onto the outer typed stack whose destinations live in
+/// ContentView.routeDestination. Everywhere else: owns a local typed stack
+/// and path. macOS: plain NavigationStack (editors stay sheets; path and
+/// destination are unused there).
+struct EditorPageHost<Content: View, Destination: View>: View {
+    #if os(iOS)
+    @Environment(\.pushCompactRoute) private var pushCompactRoute
+    #endif
+    @Binding private var editorPath: [CompactRoute]
+    @ViewBuilder private let content: Content
+    private let destination: (CompactRoute) -> Destination
+
+    init(
+        path: Binding<[CompactRoute]>,
+        @ViewBuilder content: () -> Content,
+        @ViewBuilder destination: @escaping (CompactRoute) -> Destination
+    ) {
+        self._editorPath = path
+        self.content = content()
+        self.destination = destination
+    }
+
+    var body: some View {
+        #if os(iOS)
+        if pushCompactRoute != nil {
+            content
+        } else {
+            NavigationStack(path: $editorPath) {
+                content
+                    .navigationDestination(for: CompactRoute.self, destination: destination)
+            }
+        }
+        #else
+        NavigationStack { content }
+        #endif
+    }
+}
+
 extension View {
     /// Page navigation title — iOS only. On macOS the detail container owns the
     /// window title; titles declared inside nested hosting controllers bridge into

@@ -5,20 +5,32 @@ import UniformTypeIdentifiers
 struct ProfilesView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var showingImporter = false
-    @State private var showingRemoteSheet = false
 #if os(iOS)
-    @State private var showingQRCodeScanner = false
-    @State private var scannedSubscriptionURL: URL?
+    @Environment(\.pushCompactRoute) private var pushCompactRoute
+#endif
+    @State private var editorPath: [CompactRoute] = []
+    @State private var showingImporter = false
+#if os(macOS)
+    @State private var showingRemoteSheet = false
 #endif
 
+    private func openEditor(_ route: CompactRoute) {
+#if os(iOS)
+        if let pushCompactRoute {
+            pushCompactRoute(route)
+            return
+        }
+#endif
+        editorPath.append(route)
+    }
+
     var body: some View {
-        PageNavigationStack {
+        EditorPageHost(path: $editorPath, content: {
             Form {
                 ForEach(model.snapshot.profiles) { profile in
                     // One profile per section: the whole card is the section's single row.
                     Section {
-                        ProfileCard(profile: profile)
+                        ProfileCard(profile: profile, openEditor: openEditor)
                     }
                 }
             }
@@ -53,14 +65,20 @@ struct ProfilesView: View {
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
                     ProfilesToolbarContent(
-                        showingRemoteSheet: $showingRemoteSheet,
-                        showingImporter: $showingImporter,
-                        showingQRCodeScanner: $showingQRCodeScanner
+                        openEditor: openEditor,
+                        showingImporter: $showingImporter
                     )
                 }
             }
             #endif
-        }
+        }, destination: { route in
+            Self.editorDestination(
+                route,
+                model: model,
+                push: { editorPath.append($0) },
+                pop: { editorPath.removeLast() }
+            )
+        })
         .fileImporter(
             isPresented: $showingImporter,
             allowedContentTypes: [.text, .data],
@@ -79,38 +97,60 @@ struct ProfilesView: View {
                 model.errorMessage = error.localizedDescription
             }
         }
+#if os(macOS)
         .sheet(isPresented: $showingRemoteSheet) {
-            RemoteProfileSheet(prefilledURL: remoteSheetPrefilledURL) { name, url, customUserAgent in
+            RemoteProfileSheet(prefilledURL: nil) { name, url, customUserAgent in
                 Task { await model.addRemoteProfile(name: name, url: url, customUserAgent: customUserAgent) }
                 showingRemoteSheet = false
-            }
-        }
-#if os(iOS)
-        .sheet(isPresented: $showingQRCodeScanner, onDismiss: {
-            if scannedSubscriptionURL != nil {
-                showingRemoteSheet = true
-            }
-        }) {
-            QRCodeScannerSheet { payload in
-                guard let url = Self.subscriptionURL(from: payload) else { return false }
-                scannedSubscriptionURL = url
-                return true
-            }
-        }
-        .onChange(of: showingRemoteSheet) { _, isPresented in
-            if !isPresented {
-                scannedSubscriptionURL = nil
             }
         }
 #endif
     }
 
-    private var remoteSheetPrefilledURL: URL? {
+    @MainActor @ViewBuilder
+    static func editorDestination(
+        _ route: CompactRoute,
+        model: AppModel,
+        push: @escaping (CompactRoute) -> Void,
+        pop: @escaping () -> Void
+    ) -> some View {
+        switch route {
+        case let .remoteProfileAdd(prefilledURL):
+            RemoteProfileSheet(profile: nil, prefilledURL: prefilledURL) { name, url, customUserAgent in
+                Task { await model.addRemoteProfile(name: name, url: url, customUserAgent: customUserAgent) }
+            }
+        case let .remoteProfileEdit(profile):
+            RemoteProfileSheet(profile: profile) { name, url, customUserAgent in
+                Task { await model.updateRemoteProfile(profile, name: name, url: url, customUserAgent: customUserAgent) }
+            }
+        case let .profileContentEditor(profile):
+            ProfileContentEditor(profile: profile)
+        case let .profileOverrideEditor(profile):
+            ProfileOverrideSheet(profile: profile) { contents, globalOverridesEnabled in
+                Task {
+                    if globalOverridesEnabled != profile.customOverridesEnabled {
+                        await model.setCustomOverridesEnabled(globalOverridesEnabled, for: profile)
+                    }
+                    if contents != profile.customOverrideYAML {
+                        await model.setProfileCustomOverride(contents, for: profile)
+                    }
+                }
+            }
 #if os(iOS)
-        scannedSubscriptionURL
-#else
-        nil
+        case .qrCodeScanner:
+            QRCodeScannerSheet(
+                onCodeScanned: { payload in
+                    Self.subscriptionURL(from: payload) != nil
+                },
+                onAccept: { url in
+                    pop()
+                    push(.remoteProfileAdd(prefilledURL: url))
+                }
+            )
 #endif
+        default:
+            EmptyView()
+        }
     }
 
 #if os(iOS)
@@ -130,25 +170,32 @@ struct ProfilesView: View {
 // Toolbar content for the profiles page, rendered by the container on macOS (via
 // ChromeProvider) and in-page on iOS.
 private struct ProfilesToolbarContent: View {
+#if os(macOS)
     @Binding var showingRemoteSheet: Bool
+#else
+    let openEditor: (CompactRoute) -> Void
+#endif
     @Binding var showingImporter: Bool
-    #if os(iOS)
-    @Binding var showingQRCodeScanner: Bool
-    #endif
 
     var body: some View {
-        Button { showingRemoteSheet = true } label: {
+        Button {
+#if os(iOS)
+            openEditor(.remoteProfileAdd(prefilledURL: nil))
+#else
+            showingRemoteSheet = true
+#endif
+        } label: {
             Label("profiles.networkSource", systemImage: "link.badge.plus")
         }
         Menu {
             Button { showingImporter = true } label: {
                 Label("profiles.import", systemImage: "doc.badge.plus")
             }
-            #if os(iOS)
-            Button { showingQRCodeScanner = true } label: {
+#if os(iOS)
+            Button { openEditor(.qrCodeScanner) } label: {
                 Label("profiles.import.qr", systemImage: "qrcode.viewfinder")
             }
-            #endif
+#endif
         } label: {
             Image(systemName: "ellipsis.circle")
         }
@@ -161,9 +208,12 @@ private struct ProfileCard: View {
     @Environment(\.locale) private var locale
     @AppStorage("subscriptionInfoDisplay", store: AppDefaults.store) private var subscriptionInfoDisplay = SubscriptionInfoDisplay.used.rawValue
     let profile: Profile
+    let openEditor: (CompactRoute) -> Void
+#if os(macOS)
     @State private var showingRemoteEditor = false
     @State private var showingContentEditor = false
     @State private var showingProfileOverrideEditor = false
+#endif
     @State private var showingDeleteConfirmation = false
     @State private var isRefreshing = false
 
@@ -187,28 +237,30 @@ private struct ProfileCard: View {
             .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
             .listRowBackground(isActive ? Color.green.opacity(0.12) : nil)
             .animation(.snappy, value: isActive)
-        .sheet(isPresented: $showingRemoteEditor) {
-            RemoteProfileSheet(profile: profile) { name, url, customUserAgent in
-                Task { await model.updateRemoteProfile(profile, name: name, url: url, customUserAgent: customUserAgent) }
-                showingRemoteEditor = false
-            }
-        }
-        .sheet(isPresented: $showingContentEditor) {
-            ProfileContentEditor(profile: profile)
-        }
-        .sheet(isPresented: $showingProfileOverrideEditor) {
-            ProfileOverrideSheet(profile: profile) { contents, globalOverridesEnabled in
-                Task {
-                    if globalOverridesEnabled != profile.customOverridesEnabled {
-                        await model.setCustomOverridesEnabled(globalOverridesEnabled, for: profile)
-                    }
-                    if contents != profile.customOverrideYAML {
-                        await model.setProfileCustomOverride(contents, for: profile)
-                    }
+#if os(macOS)
+            .sheet(isPresented: $showingRemoteEditor) {
+                RemoteProfileSheet(profile: profile) { name, url, customUserAgent in
+                    Task { await model.updateRemoteProfile(profile, name: name, url: url, customUserAgent: customUserAgent) }
+                    showingRemoteEditor = false
                 }
-                showingProfileOverrideEditor = false
             }
-        }
+            .sheet(isPresented: $showingContentEditor) {
+                ProfileContentEditor(profile: profile)
+            }
+            .sheet(isPresented: $showingProfileOverrideEditor) {
+                ProfileOverrideSheet(profile: profile) { contents, globalOverridesEnabled in
+                    Task {
+                        if globalOverridesEnabled != profile.customOverridesEnabled {
+                            await model.setCustomOverridesEnabled(globalOverridesEnabled, for: profile)
+                        }
+                        if contents != profile.customOverrideYAML {
+                            await model.setProfileCustomOverride(contents, for: profile)
+                        }
+                    }
+                    showingProfileOverrideEditor = false
+                }
+            }
+#endif
         .confirmationDialog(
             deletionConfirmationTitle,
             isPresented: $showingDeleteConfirmation,
@@ -262,21 +314,33 @@ private struct ProfileCard: View {
 
                 Menu {
                     Button {
+#if os(iOS)
+                        openEditor(.profileOverrideEditor(profile))
+#else
                         showingProfileOverrideEditor = true
+#endif
                     } label: {
                         Label("profiles.overrides", systemImage: "curlybraces.square")
                     }
 
                     if profile.source == .remote {
                         Button {
+#if os(iOS)
+                            openEditor(.remoteProfileEdit(profile))
+#else
                             showingRemoteEditor = true
+#endif
                         } label: {
                             Label("profiles.edit", systemImage: "pencil")
                         }
                     }
 
                     Button {
+#if os(iOS)
+                        openEditor(.profileContentEditor(profile))
+#else
                         showingContentEditor = true
+#endif
                     } label: {
                         Label("profiles.editContent", systemImage: "doc.text")
                     }
@@ -360,7 +424,7 @@ private struct ProfileCard: View {
     }
 }
 
-private struct ProfileContentEditor: View {
+struct ProfileContentEditor: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
     let profile: Profile
@@ -369,50 +433,57 @@ private struct ProfileContentEditor: View {
     @State private var isLoading = true
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if isLoading {
-                    ProgressView {
-                        Text("common.loading") + Text(verbatim: " \(profile.name)")
-                    }
-                } else {
-                    MultilineCodeEditor(
-                        text: $contents,
-                        language: .yaml,
-                        minHeight: 360,
-                        releasesResourcesOnDisappear: true
-                    )
+#if os(macOS)
+        NavigationStack { editorContent }
+            .frame(minWidth: 520, minHeight: 420)
+#else
+        editorContent
+#endif
+    }
+
+    @ViewBuilder
+    private var editorContent: some View {
+        Group {
+            if isLoading {
+                ProgressView {
+                    Text("common.loading") + Text(verbatim: " \(profile.name)")
                 }
-            }
-            .navigationTitle(Text(verbatim: profile.name))
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("common.cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("common.save") {
-                        Task {
-                            if await model.saveProfileContents(contents, for: profile) {
-                                dismiss()
-                            }
-                        }
-                    }
-                    .disabled(isLoading || contents == originalContents)
-                }
-            }
-            .task {
-                guard let text = await model.profileContents(profile) else {
-                    isLoading = false
-                    return
-                }
-                contents = text
-                originalContents = text
-                isLoading = false
+            } else {
+                MultilineCodeEditor(
+                    text: $contents,
+                    language: .yaml,
+                    minHeight: 360,
+                    releasesResourcesOnDisappear: true
+                )
             }
         }
+        .navigationTitle(Text(verbatim: profile.name))
+        .toolbar {
 #if os(macOS)
-        .frame(minWidth: 520, minHeight: 420)
+            ToolbarItem(placement: .cancellationAction) {
+                Button("common.cancel") { dismiss() }
+            }
 #endif
+            ToolbarItem(placement: .confirmationAction) {
+                Button("common.save") {
+                    Task {
+                        if await model.saveProfileContents(contents, for: profile) {
+                            dismiss()
+                        }
+                    }
+                }
+                .disabled(isLoading || contents == originalContents)
+            }
+        }
+        .task {
+            guard let text = await model.profileContents(profile) else {
+                isLoading = false
+                return
+            }
+            contents = text
+            originalContents = text
+            isLoading = false
+        }
         .onDisappear {
             contents.removeAll(keepingCapacity: false)
             originalContents.removeAll(keepingCapacity: false)
@@ -420,7 +491,7 @@ private struct ProfileContentEditor: View {
     }
 }
 
-private struct ProfileOverrideSheet: View {
+struct ProfileOverrideSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var contents: String
@@ -440,88 +511,96 @@ private struct ProfileOverrideSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    HStack(spacing: 14) {
-                        Image(systemName: "curlybraces.square")
-                            .font(.system(size: 30, weight: .semibold))
-                            .foregroundStyle(.purple)
-                            .frame(width: 58, height: 58)
-                            .background(Color.purple.opacity(0.14), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("profiles.customOverride.title")
-                                .font(.title3.weight(.semibold))
-                            Text("profiles.customOverride.description")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
+#if os(macOS)
+        NavigationStack { editorContent }
+            .frame(minWidth: 520, minHeight: 500)
+#else
+        editorContent
+#endif
+    }
 
-                    Toggle(isOn: $globalOverridesEnabled) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("profiles.customOverride.enableGlobal")
-                            Text("profiles.customOverride.enableGlobal.description")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    MultilineCodeEditor(
-                        text: $contents,
-                        language: .yaml,
-                        minHeight: 320,
-                        releasesResourcesOnDisappear: true
-                    )
-
-                    GroupBox {
-                        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
-                            GridRow {
-                                Text("key!")
-                                    .foregroundStyle(.purple)
-                                Text("overrides.replaceObject")
-                            }
-                            GridRow {
-                                Text("+key / key+")
-                                    .foregroundStyle(.purple)
-                                Text("overrides.arrayItems")
-                            }
-                            GridRow {
-                                Text("<key>")
-                                    .foregroundStyle(.purple)
-                                Text("overrides.escapeKey")
-                            }
-                        }
-                        .font(.caption)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(6)
+    @ViewBuilder
+    private var editorContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                HStack(spacing: 14) {
+                    Image(systemName: "curlybraces.square")
+                        .font(.system(size: 30, weight: .semibold))
+                        .foregroundStyle(.purple)
+                        .frame(width: 58, height: 58)
+                        .background(Color.purple.opacity(0.14), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("profiles.customOverride.title")
+                            .font(.title3.weight(.semibold))
+                        Text("profiles.customOverride.description")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
                 }
-                .padding(.horizontal, pagePadding)
-                .padding(.vertical, pagePadding)
+
+                Toggle(isOn: $globalOverridesEnabled) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("profiles.customOverride.enableGlobal")
+                        Text("profiles.customOverride.enableGlobal.description")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                MultilineCodeEditor(
+                    text: $contents,
+                    language: .yaml,
+                    minHeight: 320,
+                    releasesResourcesOnDisappear: true
+                )
+
+                GroupBox {
+                    Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
+                        GridRow {
+                            Text("key!")
+                                .foregroundStyle(.purple)
+                            Text("overrides.replaceObject")
+                        }
+                        GridRow {
+                            Text("+key / key+")
+                                .foregroundStyle(.purple)
+                            Text("overrides.arrayItems")
+                        }
+                        GridRow {
+                            Text("<key>")
+                                .foregroundStyle(.purple)
+                            Text("overrides.escapeKey")
+                        }
+                    }
+                    .font(.caption)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(6)
+                }
             }
-            .navigationTitle(Text(verbatim: profile.name))
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("common.cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("common.save") {
-                        save(contents, globalOverridesEnabled)
-                    }
+            .padding(.horizontal, pagePadding)
+            .padding(.vertical, pagePadding)
+        }
+        .navigationTitle(Text(verbatim: profile.name))
+        .toolbar {
+#if os(macOS)
+            ToolbarItem(placement: .cancellationAction) {
+                Button("common.cancel") { dismiss() }
+            }
+#endif
+            ToolbarItem(placement: .confirmationAction) {
+                Button("common.save") {
+                    save(contents, globalOverridesEnabled)
+                    dismiss()
                 }
             }
         }
-#if os(macOS)
-        .frame(minWidth: 520, minHeight: 500)
-#endif
         .onDisappear {
             contents.removeAll(keepingCapacity: false)
         }
     }
 }
 
-private struct RemoteProfileSheet: View {
+struct RemoteProfileSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var name: String
@@ -562,100 +641,108 @@ private struct RemoteProfileSheet: View {
     private var isEditing: Bool { profile != nil }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    HStack(spacing: 14) {
-                        Image(systemName: "link.badge.plus")
-                            .font(.system(size: 30, weight: .semibold))
-                            .foregroundStyle(.indigo)
-                            .frame(width: 58, height: 58)
-                            .background(Color.indigo.opacity(0.14), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(LocalizedStringKey(isEditing ? "profiles.editOnline" : "profiles.addOnline"))
-                                .font(.title3.weight(.semibold))
-                            Text(LocalizedStringKey(isEditing ? "profiles.editOnline.description" : "profiles.addOnline.description"))
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
+#if os(macOS)
+        NavigationStack { editorContent }
+            .frame(minWidth: 460, minHeight: 430)
+#else
+        editorContent
+#endif
+    }
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label("profiles.subscriptionURL", systemImage: "link")
-                            .font(.subheadline.weight(.semibold))
-                        TextField(text: $address, prompt: Text(verbatim: SharedText.subscriptionURLPlaceholder)) {
-                            Text(verbatim: SharedText.subscriptionURLPlaceholder)
-                        }
-                            .textFieldStyle(.roundedBorder)
-                            .focused($focusedField, equals: .address)
-                    #if os(iOS)
-                            .textInputAutocapitalization(.never)
-                            .keyboardType(.URL)
-                    #endif
-                        if let subscriptionURL {
-                            Label(subscriptionURL.host ?? subscriptionURL.absoluteString, systemImage: "checkmark.circle.fill")
-                                .font(.caption)
-                                .foregroundStyle(.green)
-                        } else {
-                            Label("profiles.subscriptionURL.invalid", systemImage: "info.circle")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label("profiles.name", systemImage: "text.cursor")
-                            .font(.subheadline.weight(.semibold))
-                        TextField("profiles.name.placeholder", text: $name)
-                            .textFieldStyle(.roundedBorder)
-                            .focused($focusedField, equals: .name)
-                        Text("profiles.name.description")
-                            .font(.caption)
+    @ViewBuilder
+    private var editorContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                HStack(spacing: 14) {
+                    Image(systemName: "link.badge.plus")
+                        .font(.system(size: 30, weight: .semibold))
+                        .foregroundStyle(.indigo)
+                        .frame(width: 58, height: 58)
+                        .background(Color.indigo.opacity(0.14), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(LocalizedStringKey(isEditing ? "profiles.editOnline" : "profiles.addOnline"))
+                            .font(.title3.weight(.semibold))
+                        Text(LocalizedStringKey(isEditing ? "profiles.editOnline.description" : "profiles.addOnline.description"))
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
+                }
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label("profiles.userAgent", systemImage: "network")
-                            .font(.subheadline.weight(.semibold))
-                        TextField(
-                            "profiles.userAgent",
-                            text: $customUserAgent,
-                            prompt: Text("profiles.userAgent.placeholder") + Text(verbatim: " \(MihomoCoreVersion.userAgent)")
-                        )
-                            .textFieldStyle(.roundedBorder)
-                            .focused($focusedField, equals: .customUserAgent)
-                        (Text(LocalizedStringKey(isEditing ? "profiles.userAgent.editDescription" : "profiles.userAgent.addDescription"))
-                            + Text(verbatim: " \(MihomoCoreVersion.userAgent)."))
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("profiles.subscriptionURL", systemImage: "link")
+                        .font(.subheadline.weight(.semibold))
+                    TextField(text: $address, prompt: Text(verbatim: SharedText.subscriptionURLPlaceholder)) {
+                        Text(verbatim: SharedText.subscriptionURLPlaceholder)
+                    }
+                        .textFieldStyle(.roundedBorder)
+                        .focused($focusedField, equals: .address)
+                #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                #endif
+                    if let subscriptionURL {
+                        Label(subscriptionURL.host ?? subscriptionURL.absoluteString, systemImage: "checkmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                    } else {
+                        Label("profiles.subscriptionURL.invalid", systemImage: "info.circle")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
-                .padding(.horizontal, pagePadding)
-                .padding(.vertical, pagePadding)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("profiles.name", systemImage: "text.cursor")
+                        .font(.subheadline.weight(.semibold))
+                    TextField("profiles.name.placeholder", text: $name)
+                        .textFieldStyle(.roundedBorder)
+                        .focused($focusedField, equals: .name)
+                    Text("profiles.name.description")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("profiles.userAgent", systemImage: "network")
+                        .font(.subheadline.weight(.semibold))
+                    TextField(
+                        "profiles.userAgent",
+                        text: $customUserAgent,
+                        prompt: Text("profiles.userAgent.placeholder") + Text(verbatim: " \(MihomoCoreVersion.userAgent)")
+                    )
+                        .textFieldStyle(.roundedBorder)
+                        .focused($focusedField, equals: .customUserAgent)
+                    (Text(LocalizedStringKey(isEditing ? "profiles.userAgent.editDescription" : "profiles.userAgent.addDescription"))
+                        + Text(verbatim: " \(MihomoCoreVersion.userAgent)."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
-            .navigationTitle(Text(LocalizedStringKey(isEditing ? "profiles.editOnline" : "profiles.online")))
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("common.cancel") { dismiss() }
+            .padding(.horizontal, pagePadding)
+            .padding(.vertical, pagePadding)
+        }
+        .navigationTitle(Text(LocalizedStringKey(isEditing ? "profiles.editOnline" : "profiles.online")))
+        .toolbar {
+#if os(macOS)
+            ToolbarItem(placement: .cancellationAction) {
+                Button("common.cancel") { dismiss() }
+            }
+#endif
+            ToolbarItem(placement: .confirmationAction) {
+                Button(LocalizedStringKey(isEditing ? "profiles.saveChanges" : "profiles.add")) {
+                    guard let subscriptionURL else { return }
+                    let profileName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let userAgent = customUserAgent.trimmingCharacters(in: .whitespacesAndNewlines)
+                    save(
+                        profileName.isEmpty ? subscriptionURL.host ?? "Online Profile" : profileName,
+                        subscriptionURL,
+                        userAgent.isEmpty ? nil : userAgent
+                    )
+                    dismiss()
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(LocalizedStringKey(isEditing ? "profiles.saveChanges" : "profiles.add")) {
-                        guard let subscriptionURL else { return }
-                        let profileName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-                        let userAgent = customUserAgent.trimmingCharacters(in: .whitespacesAndNewlines)
-                        save(
-                            profileName.isEmpty ? subscriptionURL.host ?? "Online Profile" : profileName,
-                            subscriptionURL,
-                            userAgent.isEmpty ? nil : userAgent
-                        )
-                    }
-                    .disabled(subscriptionURL == nil)
-                }
+                .disabled(subscriptionURL == nil)
             }
         }
-#if os(macOS)
-        .frame(minWidth: 460, minHeight: 430)
-#endif
         .onAppear { focusedField = .address }
     }
 }

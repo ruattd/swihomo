@@ -32,16 +32,16 @@ struct ContentView: View {
     @StateObject private var connectionDrill = ConnectionDrill()
     #endif
     #if os(iOS)
-    /// Outer-stack path of the compact tab layout (sections + connection
-    /// drill-in). One typed path, one `for:` destination, no item-based
+    /// Outer-stack path of the compact tab layout (sections, connection drill-in,
+    /// and editor routes). One typed path, one `for:` destination, no item-based
     /// destinations anywhere inside — mixing them crashes SwiftUI with
     /// AnyNavigationPath.comparisonTypeMismatch.
     @State private var compactPath: [CompactRoute] = []
     /// Selected tab in the compact layout; the outer stack reads its title
     /// (TabView is opaque to it, so per-page titles can't bubble out).
     @State private var compactTab = CompactTab.home
-    /// Sidebar-column path on regular width (iPad): the tools drill-in pushes
-    /// INSIDE the sidebar column (mirroring macOS) onto the column's own typed
+    /// Sidebar-column path on regular width (iPad): the tools drill-in and editor
+    /// routes push INSIDE the sidebar column (mirroring macOS) onto its own typed
     /// stack. Unused by the compact tab layout, which has its own outer stack.
     @State private var sidebarPath: [CompactRoute] = []
     /// Selected detail-column section on regular width (iPad); the compact
@@ -141,7 +141,11 @@ struct ContentView: View {
                 }
             }
             .navigationDestination(for: CompactRoute.self) { route in
-                routeDestination(route, push: { compactPath.append($0) })
+                routeDestination(
+                    route,
+                    push: { compactPath.append($0) },
+                    pop: { compactPath.removeLast() }
+                )
             }
         }
         // Attached ABOVE the stack: custom environment values set on the TabView
@@ -151,13 +155,16 @@ struct ContentView: View {
     }
 
     /// Single destination builder shared by both typed stacks (the compact
-    /// layout's outer stack and the iPad sidebar column's stack): one `for:`
-    /// destination per stack, and nothing else pushes inside either. The push
-    /// closure is threaded EXPLICITLY — custom environment values do not
-    /// reliably reach navigationDestination content (probed: tool row taps
-    /// no-op'd with an environment-injected pusher).
+    /// layout's outer stack and the iPad sidebar column's stack): section,
+    /// tool, and editor routes all ride their stack's single `for:` destination.
+    /// The push and pop closures are threaded EXPLICITLY — custom environment
+    /// values do not reliably reach navigationDestination content (probed).
     @ViewBuilder
-    private func routeDestination(_ route: CompactRoute, push: @escaping (CompactRoute) -> Void) -> some View {
+    private func routeDestination(
+        _ route: CompactRoute,
+        push: @escaping (CompactRoute) -> Void,
+        pop: @escaping () -> Void
+    ) -> some View {
         switch route {
         case .section(.tools):
             ToolsView(onSelectTool: { push(.tool($0.id)) })
@@ -169,6 +176,13 @@ struct ContentView: View {
             if let tool = Tool.placeholderTools.first(where: { $0.id == id }) {
                 ToolPlaceholderView(tool: tool)
             }
+        case .remoteProfileAdd, .remoteProfileEdit, .profileContentEditor,
+             .profileOverrideEditor, .qrCodeScanner:
+            ProfilesView.editorDestination(route, model: model, push: push, pop: pop)
+        case .packetTunnelEditor:
+            PreferencesView.editorDestination(route, model: model, push: push, pop: pop)
+        case .externalResourceEditor:
+            ExternalResourcesView.editorDestination(route, model: model, push: push, pop: pop)
         }
     }
 
@@ -199,7 +213,11 @@ struct ContentView: View {
             NavigationStack(path: $sidebarPath) {
                 HomeView(activeSection: $selectedSection, openTools: { sidebarPath.append(.section(.tools)) })
                     .navigationDestination(for: CompactRoute.self) { route in
-                        routeDestination(route, push: { sidebarPath.append($0) })
+                        routeDestination(
+                            route,
+                            push: { sidebarPath.append($0) },
+                            pop: { sidebarPath.removeLast() }
+                        )
                     }
             }
             .navigationSplitViewColumnWidth(min: 310, ideal: 310, max: 516)

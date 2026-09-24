@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 
 struct PreferencesView: View {
+    @EnvironmentObject private var model: AppModel
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @AppStorage("appTheme", store: AppDefaults.store) private var selectedTheme = AppTheme.system.rawValue
     @State private var systemThemeResetID = UUID()
@@ -24,13 +25,37 @@ struct PreferencesView: View {
     @AppStorage("packetTunnelCustomDNSServers", store: AppDefaults.store) private var packetTunnelCustomDNSServers = ""
     @AppStorage("packetTunnelIPv6Enabled", store: AppDefaults.store) private var packetTunnelIPv6Enabled = true
     @AppStorage("packetTunnelUseMipstack", store: AppDefaults.store) private var packetTunnelUseMipstack = false
-    @State private var editingPacketTunnelField: PacketTunnelTextField?
     @State private var packetTunnelMTUInput: String?
-    #if os(macOS)
+#if os(iOS)
+    @State private var editorPath: [CompactRoute] = []
+    @Environment(\.pushCompactRoute) private var pushCompactRoute
+#endif
+#if os(macOS)
+    @State private var editingPacketTunnelField: PacketTunnelTextField?
     @AppStorage("hidesDockIcon", store: AppDefaults.store) private var hidesDockIcon = false
-    #endif
+#endif
 
     var body: some View {
+#if os(iOS)
+        EditorPageHost(path: $editorPath) {
+            Form {
+                appearanceSettings
+                applicationSettings
+                packetTunnelSettings
+                memoryManagementSettings
+            }
+            .formStyle(.grouped)
+            .uniformTopScrollEdge()
+            .detailPageTitle("navigation.preferences")
+        } destination: { route in
+            Self.editorDestination(
+                route,
+                model: model,
+                push: { editorPath.append($0) },
+                pop: { editorPath.removeLast() }
+            )
+        }
+#else
         Form {
             appearanceSettings
 #if os(macOS)
@@ -43,7 +68,49 @@ struct PreferencesView: View {
         .formStyle(.grouped)
         .uniformTopScrollEdge()
         .detailPageTitle("navigation.preferences")
+#endif
     }
+    @MainActor @ViewBuilder
+    static func editorDestination(
+        _ route: CompactRoute,
+        model: AppModel,
+        push: @escaping (CompactRoute) -> Void,
+        pop: @escaping () -> Void
+    ) -> some View {
+        @AppStorage("packetTunnelCustomDNSServers", store: AppDefaults.store) var packetTunnelCustomDNSServers = ""
+        @AppStorage("packetTunnelBypassCIDRs", store: AppDefaults.store) var packetTunnelBypassCIDRs = ""
+
+        switch route {
+        case .packetTunnelEditor(let field):
+            switch field {
+            case .customDNS:
+                PacketTunnelTextEditor(
+                    titleKey: "preferences.packetTunnel.customDNS",
+                    descriptionKey: "preferences.packetTunnel.customDNS.description",
+                    text: $packetTunnelCustomDNSServers,
+                    minHeight: 220
+                )
+            case .bypassIPRanges:
+                PacketTunnelTextEditor(
+                    titleKey: "preferences.packetTunnel.bypassIPRanges",
+                    descriptionKey: "preferences.packetTunnel.bypassIPRanges.description",
+                    text: $packetTunnelBypassCIDRs,
+                    minHeight: 240
+                )
+            }
+        default:
+            EmptyView()
+        }
+    }
+#if os(iOS)
+    private func openEditor(_ route: CompactRoute) {
+        if let pushCompactRoute {
+            pushCompactRoute(route)
+        } else {
+            editorPath.append(route)
+        }
+    }
+#endif
 
     private var appearanceSettings: some View {
         Section {
@@ -273,6 +340,7 @@ struct PreferencesView: View {
                     .foregroundStyle(.secondary)
             }
         }
+#if os(macOS)
         .sheet(item: $editingPacketTunnelField) { field in
             NavigationStack {
                 switch field {
@@ -293,6 +361,7 @@ struct PreferencesView: View {
                 }
             }
         }
+#endif
     }
 
     private var packetTunnelMTUInputBinding: Binding<String> {
@@ -342,7 +411,11 @@ struct PreferencesView: View {
                     Spacer(minLength: 8)
 
                     Button {
+#if os(iOS)
+                        openEditor(.packetTunnelEditor(field))
+#else
                         editingPacketTunnelField = field
+#endif
                     } label: {
                         Label("preferences.packetTunnel.edit", systemImage: "pencil")
                     }
@@ -456,14 +529,14 @@ struct PreferencesView: View {
 #endif
 }
 
-private enum PacketTunnelTextField: String, Identifiable {
+enum PacketTunnelTextField: String, Identifiable {
     case customDNS
     case bypassIPRanges
 
     var id: String { rawValue }
 }
 
-private struct PacketTunnelTextEditor: View {
+struct PacketTunnelTextEditor: View {
     @Environment(\.dismiss) private var dismiss
     let titleKey: LocalizedStringKey
     let descriptionKey: LocalizedStringKey

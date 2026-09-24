@@ -74,7 +74,6 @@ enum HomeSection: String, CaseIterable, Hashable, Identifiable {
     }
 }
 
-#if os(iOS)
 /// Routes pushed onto the app's typed navigation stacks: the compact layout's
 /// outer stack, and the iPad sidebar column's own stack (the tools drill-in).
 /// One typed path + one `navigationDestination(for:)` per stack — mixing in
@@ -87,7 +86,15 @@ enum CompactRoute: Hashable {
     /// A tool sub-page, by Tool.id (Tool itself is not Hashable —
     /// LocalizedStringKey isn't).
     case tool(String)
+    case externalResourceEditor(ExternalResource)
+    case packetTunnelEditor(PacketTunnelTextField)
+    case remoteProfileAdd(prefilledURL: URL?)
+    case remoteProfileEdit(Profile)
+    case profileContentEditor(Profile)
+    case profileOverrideEditor(Profile)
+    case qrCodeScanner
 }
+#if os(iOS)
 
 /// Injected above a typed navigation stack: pushes a route onto it. Set by the
 /// compact tab layout (outer stack) and by the iPad sidebar column (its own

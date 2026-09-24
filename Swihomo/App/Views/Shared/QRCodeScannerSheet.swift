@@ -11,6 +11,7 @@ struct QRCodeScannerSheet: View {
     @State private var didAcceptPayload = false
 
     let onCodeScanned: (String) -> Bool
+    let onAccept: (URL) -> Void
 
     private enum ScannerState: Equatable {
         case preparing
@@ -23,8 +24,7 @@ struct QRCodeScannerSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 20) {
+        VStack(spacing: 20) {
                 if scannerState == .scanning {
                     ZStack(alignment: .bottom) {
                         QRCodeScannerView(
@@ -88,12 +88,6 @@ struct QRCodeScannerSheet: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .navigationTitle(Text("profiles.qr.title"))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("common.cancel") { dismiss() }
-                }
-            }
-        }
         .task {
             await prepareScanner()
         }
@@ -180,9 +174,10 @@ struct QRCodeScannerSheet: View {
 
     private func handlePayload(_ payload: String) {
         guard !didAcceptPayload else { return }
-        if onCodeScanned(payload) {
+        if onCodeScanned(payload),
+           let url = URL(string: payload.trimmingCharacters(in: .whitespacesAndNewlines)) {
             didAcceptPayload = true
-            dismiss()
+            onAccept(url)
         } else {
             scannerState = .invalidPayload
         }

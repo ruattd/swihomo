@@ -4,12 +4,18 @@ import UniformTypeIdentifiers
 
 struct ExternalResourcesView: View {
     @EnvironmentObject private var model: AppModel
+#if os(macOS)
     @State private var editingResource: ExternalResource?
+#endif
+    @State private var editorPath: [CompactRoute] = []
+#if os(iOS)
+    @Environment(\.pushCompactRoute) private var pushCompactRoute
+#endif
     @State private var importedResource: ExternalResource?
     @State private var showingImporter = false
 
     var body: some View {
-        PageNavigationStack {
+        EditorPageHost(path: $editorPath) {
             Form {
                 Section {
                     Text("resources.description")
@@ -26,7 +32,13 @@ struct ExternalResourcesView: View {
                             ForEach(resources) { resource in
                                 ExternalResourceCard(
                                     resource: resource,
-                                    edit: { editingResource = resource },
+                                    edit: {
+#if os(iOS)
+                                        openEditor(.externalResourceEditor(resource))
+#else
+                                        editingResource = resource
+#endif
+                                    },
                                     replace: {
                                         importedResource = resource
                                         showingImporter = true
@@ -61,9 +73,11 @@ struct ExternalResourcesView: View {
             }
             .detailPageTitle("navigation.resources")
             .task { await model.reloadExternalResources() }
+#if os(macOS)
             .sheet(item: $editingResource) { resource in
                 ExternalResourceEditor(resource: resource)
             }
+#endif
             .fileImporter(
                 isPresented: $showingImporter,
                 allowedContentTypes: [.text, .data],
@@ -84,9 +98,42 @@ struct ExternalResourcesView: View {
                     model.errorMessage = error.localizedDescription
                 }
             }
+        } destination: { route in
+            Self.editorDestination(
+                route,
+                model: model,
+                push: { editorPath.append($0) },
+                pop: { editorPath.removeLast() }
+            )
         }
     }
+
+    @MainActor @ViewBuilder
+    static func editorDestination(
+        _ route: CompactRoute,
+        model: AppModel,
+        push: @escaping (CompactRoute) -> Void,
+        pop: @escaping () -> Void
+    ) -> some View {
+        switch route {
+        case let .externalResourceEditor(resource):
+            ExternalResourceEditor(resource: resource)
+        default:
+            EmptyView()
+        }
+    }
+
+    private func openEditor(_ route: CompactRoute) {
+#if os(iOS)
+        if let pushCompactRoute {
+            pushCompactRoute(route)
+            return
+        }
+#endif
+        editorPath.append(route)
+    }
 }
+
 
 private extension ExternalResourcesView {
     static func sectionIcon(for kind: ExternalResourceKind) -> String {
@@ -244,7 +291,7 @@ private struct ExternalResourceCard: View {
     }
 }
 
-private struct ExternalResourceEditor: View {
+struct ExternalResourceEditor: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
     let resource: ExternalResource
@@ -254,61 +301,70 @@ private struct ExternalResourceEditor: View {
     @State private var isText = true
 
     var body: some View {
+#if os(macOS)
         NavigationStack {
-            Group {
-                if isLoading {
-                    ProgressView {
-                        Text("common.loading") + Text(verbatim: " \(resource.name)")
-                    }
-                } else if !isText {
-                    ContentUnavailableView(
-                        LocalizedStringKey("resources.unsupportedEncoding"),
-                        systemImage: "doc.questionmark",
-                        description: Text(LocalizedStringKey("resources.unsupportedEncoding.description"))
-                    )
-                } else {
-                    MultilineCodeEditor(
-                        text: $contents,
-                        language: .yaml,
-                        minHeight: 360,
-                        releasesResourcesOnDisappear: true
-                    )
+            content
+        }
+        .frame(minWidth: 520, minHeight: 420)
+#else
+        content
+#endif
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        Group {
+            if isLoading {
+                ProgressView {
+                    Text("common.loading") + Text(verbatim: " \(resource.name)")
                 }
-            }
-            .navigationTitle(Text(verbatim: resource.name))
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("common.cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("common.save") {
-                        Task {
-                            if await model.saveExternalResource(resource, contents: Data(contents.utf8)) {
-                                dismiss()
-                            }
-                        }
-                    }
-                    .disabled(isLoading || !isText || contents == originalContents)
-                }
-            }
-            .task {
-                guard let data = await model.externalResourceContents(resource) else {
-                    isLoading = false
-                    return
-                }
-                guard let text = String(data: data, encoding: .utf8) else {
-                    isText = false
-                    isLoading = false
-                    return
-                }
-                contents = text
-                originalContents = text
-                isLoading = false
+            } else if !isText {
+                ContentUnavailableView(
+                    LocalizedStringKey("resources.unsupportedEncoding"),
+                    systemImage: "doc.questionmark",
+                    description: Text(LocalizedStringKey("resources.unsupportedEncoding.description"))
+                )
+            } else {
+                MultilineCodeEditor(
+                    text: $contents,
+                    language: .yaml,
+                    minHeight: 360,
+                    releasesResourcesOnDisappear: true
+                )
             }
         }
+        .navigationTitle(Text(verbatim: resource.name))
+        .toolbar {
 #if os(macOS)
-        .frame(minWidth: 520, minHeight: 420)
+            ToolbarItem(placement: .cancellationAction) {
+                Button("common.cancel") { dismiss() }
+            }
 #endif
+            ToolbarItem(placement: .confirmationAction) {
+                Button("common.save") {
+                    Task {
+                        if await model.saveExternalResource(resource, contents: Data(contents.utf8)) {
+                            dismiss()
+                        }
+                    }
+                }
+                .disabled(isLoading || !isText || contents == originalContents)
+            }
+        }
+        .task {
+            guard let data = await model.externalResourceContents(resource) else {
+                isLoading = false
+                return
+            }
+            guard let text = String(data: data, encoding: .utf8) else {
+                isText = false
+                isLoading = false
+                return
+            }
+            contents = text
+            originalContents = text
+            isLoading = false
+        }
         .onDisappear {
             contents.removeAll(keepingCapacity: false)
             originalContents.removeAll(keepingCapacity: false)
