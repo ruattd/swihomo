@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Compiles the mihomo core for all Apple targets and assembles MihomoCore.xcframework.
-# Requires Go 1.26.5 on PATH (CI provides it via actions/setup-go).
+# Requires Go 1.26.8 on PATH (CI provides it via actions/setup-go).
 set -euo pipefail
 
 # Xcode's GUI runs build phases with a minimal PATH; pick up common Go installs.

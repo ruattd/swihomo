@@ -20,7 +20,7 @@ jobs:
     steps:
       - name: Generate Swihomo Automation app token
         id: app-token
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ secrets.SWIHOMO_AUTOMATION_APP_ID }}
           private-key: ${{ secrets.SWIHOMO_AUTOMATION_PRIVATE_KEY }}
@@ -31,7 +31,7 @@ jobs:
           permission-contents: write
 
       - name: Checkout dev
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           token: ${{ steps.app-token.outputs.token }}
           ref: dev
