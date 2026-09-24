@@ -13,7 +13,7 @@ final class SwihomoAppDelegate: NSObject, NSApplicationDelegate {
             sender.windows.first(where: \.canBecomeKey)?.makeKeyAndOrderFront(nil)
         }
         sender.setActivationPolicy(
-            AppDefaults.store.bool(forKey: "showsMenuBar") && AppDefaults.store.bool(forKey: "hidesDockIcon")
+            SettingsStore.shared.settings.showsMenuBar && SettingsStore.shared.settings.hidesDockIcon
                 ? .accessory
                 : .regular
         )
@@ -26,15 +26,15 @@ final class SwihomoAppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct SwihomoApp: App {
     @StateObject private var model = AppModel()
-    @AppStorage("showsMenuBar", store: AppDefaults.store) private var showsMenuBar = true
-    @AppStorage("appLanguage", store: AppDefaults.store) private var selectedLanguage = AppLanguage.system.rawValue
+    @AppSetting(\.showsMenuBar) private var showsMenuBar
+    @AppSetting(\.appLanguage) private var selectedLanguage
 
     #if os(macOS)
     @NSApplicationDelegateAdaptor(SwihomoAppDelegate.self) private var appDelegate
     #endif
 
     var body: some Scene {
-        let language = AppLanguage(rawValue: selectedLanguage) ?? .system
+        let language = selectedLanguage
         #if os(macOS)
         Window("Swihomo", id: "main") {
             ContentView()

@@ -1,23 +1,119 @@
 import Foundation
+import os.log
+import Darwin
 
 actor SharedProfileRepository {
     private let fileManager = FileManager.default
+    private let logger: Logger
+    private let storageRoot: URL?
+    private let profilesRoot: URL?
+    private let manifestFile: URL?
+    private let backupManifestFile: URL?
+    private let lockFile: URL?
+    private var lockFileDescriptor: Int32?
+    private(set) var isStorageReadOnly = false
+
+    private var snapshot: ClientSnapshot = .empty()
+    private var profileContentsByID: [UUID: String] = [:]
+    private var profileFileURLs: [UUID: URL] = [:]
+    private var pendingInitializationError: Error? = nil
 
     private struct DownloadedProfile {
         let contents: String
         let subscriptionInfo: MihomoSubscriptionInfo?
     }
 
-    func loadSnapshot() throws -> ClientSnapshot {
-        let manifest = try manifestURL()
-        guard fileManager.fileExists(atPath: manifest.path) else {
-            return .empty()
+    private struct LoadedStorage {
+        let snapshot: ClientSnapshot
+        let contentsByID: [UUID: String]
+        let fileURLsByID: [UUID: URL]
+        let rebuilt: Bool
+    }
+
+    private enum ProfileStorageError: LocalizedError {
+        case readOnly
+        case contentsUnavailable
+
+        var errorDescription: String? {
+            switch self {
+            case .readOnly:
+                "Profile storage is read-only because another Swihomo instance owns the storage lock."
+            case .contentsUnavailable:
+                "The profile contents are unavailable in the in-memory profile store."
+            }
+        }
+    }
+
+    init() {
+        let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.swihomo.client", category: "ProfileStore")
+        self.logger = logger
+
+        if ScreenshotDemoMode.isEnabled {
+            // Screenshot demo mode serves in-memory fixtures through AppModel and
+            // never touches profile storage: leave storage unconfigured and
+            // read-only — no directories, no lock, no disk IO.
+            self.storageRoot = nil
+            self.profilesRoot = nil
+            self.manifestFile = nil
+            self.backupManifestFile = nil
+            self.lockFile = nil
+            self.lockFileDescriptor = nil
+            self.isStorageReadOnly = true
+            return
         }
 
-        let data = try Data(contentsOf: manifest)
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(ClientSnapshot.self, from: data)
+        guard let applicationSupport = fileManager.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first else {
+            self.storageRoot = nil
+            self.profilesRoot = nil
+            self.manifestFile = nil
+            self.backupManifestFile = nil
+            self.lockFile = nil
+            self.lockFileDescriptor = nil
+            self.pendingInitializationError = ClientError.storageUnavailable
+            return
+        }
+
+        let root = applicationSupport.appendingPathComponent("Swihomo", isDirectory: true)
+        let profiles = root.appendingPathComponent("Profiles", isDirectory: true)
+        self.storageRoot = root
+        self.profilesRoot = profiles
+        self.manifestFile = root.appendingPathComponent("profiles.json")
+        self.backupManifestFile = root.appendingPathComponent("profiles.json.bak")
+        self.lockFile = root.appendingPathComponent("profiles.lock")
+        self.lockFileDescriptor = nil
+
+        do {
+            try ensureDirectory(root)
+            try ensureDirectory(profiles)
+            acquireStorageLock()
+            if !isStorageReadOnly {
+                try repairStoragePermissions()
+            }
+            let loaded = try loadStorage()
+            self.snapshot = loaded.snapshot
+            self.profileContentsByID = loaded.contentsByID
+            self.profileFileURLs = loaded.fileURLsByID
+            if loaded.rebuilt, !isStorageReadOnly {
+                try save(loaded.snapshot)
+            }
+        } catch {
+            self.pendingInitializationError = error
+        }
+    }
+
+    deinit {
+        if let lockFileDescriptor {
+            // Closing the descriptor releases the exclusive lock acquired via O_EXLOCK.
+            _ = Darwin.close(lockFileDescriptor)
+        }
+    }
+
+    func loadSnapshot() throws -> ClientSnapshot {
+        try throwPendingInitializationErrorIfNeeded()
+        return snapshot
     }
 
     func createLocalProfile(name: String, contents: String) throws -> ClientSnapshot {
@@ -29,6 +125,7 @@ actor SharedProfileRepository {
         remoteURL: URL,
         customUserAgent: String?
     ) async throws -> ClientSnapshot {
+        try ensureWritable()
         let downloadedProfile = try await downloadProfile(at: remoteURL, customUserAgent: customUserAgent)
         return try createProfile(
             name: name,
@@ -41,20 +138,26 @@ actor SharedProfileRepository {
     }
 
     func refreshProfile(_ id: UUID) async throws -> ClientSnapshot {
-        var snapshot = try loadSnapshot()
-        guard let index = snapshot.profiles.firstIndex(where: { $0.id == id }),
-              let remoteURL = snapshot.profiles[index].remoteURL else {
+        try ensureWritable()
+        guard let profile = snapshot.profiles.first(where: { $0.id == id }),
+              let remoteURL = profile.remoteURL else {
             throw ClientError.missingProfile
         }
 
         let downloadedProfile = try await downloadProfile(
             at: remoteURL,
-            customUserAgent: snapshot.profiles[index].customUserAgent
+            customUserAgent: profile.customUserAgent
         )
-        try writeProfileContents(downloadedProfile.contents, for: id)
-        snapshot.profiles[index].updatedAt = .now
-        snapshot.profiles[index].lastFetchedAt = .now
+        guard let index = snapshot.profiles.firstIndex(where: { $0.id == id }) else {
+            throw ClientError.missingProfile
+        }
+
+        let now = Date.now
+        profileContentsByID[id] = downloadedProfile.contents
+        snapshot.profiles[index].updatedAt = now
+        snapshot.profiles[index].lastFetchedAt = now
         snapshot.profiles[index].subscriptionInfo = downloadedProfile.subscriptionInfo
+        try writeProfileContents(downloadedProfile.contents, for: id)
         try save(snapshot)
         return snapshot
     }
@@ -65,7 +168,7 @@ actor SharedProfileRepository {
         remoteURL: URL,
         customUserAgent: String?
     ) throws -> ClientSnapshot {
-        var snapshot = try loadSnapshot()
+        try ensureWritable()
         guard let index = snapshot.profiles.firstIndex(where: { $0.id == id }),
               snapshot.profiles[index].source == .remote else {
             throw ClientError.missingProfile
@@ -82,30 +185,34 @@ actor SharedProfileRepository {
     }
 
     func profileContents(for id: UUID) throws -> String {
-        let snapshot = try loadSnapshot()
+        try throwPendingInitializationErrorIfNeeded()
         guard snapshot.profiles.contains(where: { $0.id == id }) else {
             throw ClientError.missingProfile
         }
-        return try String(contentsOf: configurationURL(for: id), encoding: .utf8)
+        guard let contents = profileContentsByID[id] else {
+            throw ProfileStorageError.contentsUnavailable
+        }
+        return contents
     }
 
     func updateProfileContents(_ contents: String, for id: UUID) throws -> ClientSnapshot {
+        try ensureWritable()
         guard !contents.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw ClientError.invalidProfile
         }
 
-        var snapshot = try loadSnapshot()
         guard let index = snapshot.profiles.firstIndex(where: { $0.id == id }) else {
             throw ClientError.missingProfile
         }
-        try writeProfileContents(contents, for: id)
+        profileContentsByID[id] = contents
         snapshot.profiles[index].updatedAt = .now
+        try writeProfileContents(contents, for: id)
         try save(snapshot)
         return snapshot
     }
 
     func setCustomOverridesEnabled(_ isEnabled: Bool, for id: UUID) throws -> ClientSnapshot {
-        var snapshot = try loadSnapshot()
+        try ensureWritable()
         guard let index = snapshot.profiles.firstIndex(where: { $0.id == id }) else {
             throw ClientError.missingProfile
         }
@@ -115,7 +222,7 @@ actor SharedProfileRepository {
     }
 
     func setCustomOverrideYAML(_ contents: String, for id: UUID) throws -> ClientSnapshot {
-        var snapshot = try loadSnapshot()
+        try ensureWritable()
         guard let index = snapshot.profiles.firstIndex(where: { $0.id == id }) else {
             throw ClientError.missingProfile
         }
@@ -125,20 +232,21 @@ actor SharedProfileRepository {
     }
 
     func deleteProfile(_ id: UUID) throws -> ClientSnapshot {
-        var snapshot = try loadSnapshot()
+        try ensureWritable()
+        let configuration = try configurationURL(for: id)
         snapshot.profiles.removeAll { $0.id == id }
         if snapshot.activeProfileID == id {
             snapshot.activeProfileID = nil
         }
-
-        let configuration = try configurationURL(for: id)
+        profileContentsByID.removeValue(forKey: id)
+        profileFileURLs.removeValue(forKey: id)
         try? fileManager.removeItem(at: configuration)
         try save(snapshot)
         return snapshot
     }
 
     func activateProfile(_ id: UUID) throws -> ClientSnapshot {
-        var snapshot = try loadSnapshot()
+        try ensureWritable()
         guard snapshot.profiles.contains(where: { $0.id == id }) else {
             throw ClientError.missingProfile
         }
@@ -148,18 +256,20 @@ actor SharedProfileRepository {
     }
 
     func saveOverrides(_ overrides: ProxyOverrides) throws -> ClientSnapshot {
-        var snapshot = try loadSnapshot()
+        try ensureWritable()
         snapshot.overrides = overrides
         try save(snapshot)
         return snapshot
     }
 
     func runtimeConfiguration(for id: UUID) throws -> (profile: Profile, contents: String, overrides: ProxyOverrides) {
-        let snapshot = try loadSnapshot()
+        try throwPendingInitializationErrorIfNeeded()
         guard let profile = snapshot.profiles.first(where: { $0.id == id }) else {
             throw ClientError.missingProfile
         }
-        let contents = try String(contentsOf: configurationURL(for: id), encoding: .utf8)
+        guard let contents = profileContentsByID[id] else {
+            throw ProfileStorageError.contentsUnavailable
+        }
         return (profile, contents, snapshot.overrides)
     }
 
@@ -171,11 +281,11 @@ actor SharedProfileRepository {
         contents: String,
         subscriptionInfo: MihomoSubscriptionInfo? = nil
     ) throws -> ClientSnapshot {
+        try ensureWritable()
         guard !contents.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw ClientError.invalidProfile
         }
 
-        var snapshot = try loadSnapshot()
         let now = Date.now
         let profile = Profile(
             id: UUID(),
@@ -188,8 +298,10 @@ actor SharedProfileRepository {
             lastFetchedAt: source == .remote ? now : nil,
             subscriptionInfo: subscriptionInfo
         )
-        try writeProfileContents(contents, for: profile.id)
+        profileContentsByID[profile.id] = contents
+        profileFileURLs[profile.id] = try canonicalConfigurationURL(for: profile.id)
         snapshot.profiles.append(profile)
+        try writeProfileContents(contents, for: profile.id)
         try save(snapshot)
         return snapshot
     }
@@ -212,42 +324,262 @@ actor SharedProfileRepository {
         return DownloadedProfile(contents: contents, subscriptionInfo: subscriptionInfo)
     }
 
+    private func ensureWritable() throws {
+        try throwPendingInitializationErrorIfNeeded()
+        guard !isStorageReadOnly else {
+            throw ProfileStorageError.readOnly
+        }
+    }
+
+    private func throwPendingInitializationErrorIfNeeded() throws {
+        guard let error = pendingInitializationError else { return }
+        pendingInitializationError = nil
+        throw error
+    }
+
+    private func acquireStorageLock() {
+        guard let lockFile else { return }
+        // O_EXLOCK | O_NONBLOCK atomically acquires a non-blocking exclusive
+        // flock(2) lock at open time; closing the descriptor releases it.
+        let descriptor = lockFile.path.withCString { path in
+            Darwin.open(path, O_RDWR | O_CREAT | O_EXLOCK | O_NONBLOCK, mode_t(0o600))
+        }
+        guard descriptor >= 0 else {
+            isStorageReadOnly = true
+            let openError = errno
+            if openError == EAGAIN {
+                logger.error("profiles.lock is held by another instance; profile storage is read-only.")
+            } else {
+                logger.error("Unable to open profiles.lock (errno \(openError)); profile storage is read-only.")
+            }
+            return
+        }
+        _ = Darwin.chmod(lockFile.path, mode_t(0o600))
+        lockFileDescriptor = descriptor
+    }
+
+    private func loadStorage() throws -> LoadedStorage {
+        let primaryExists = manifestFile.map { fileManager.fileExists(atPath: $0.path) } ?? false
+        let backupExists = backupManifestFile.map { fileManager.fileExists(atPath: $0.path) } ?? false
+
+        if primaryExists, let manifestFile, let snapshot = try? decodeManifest(at: manifestFile) {
+            return try loadProfileContents(for: snapshot, rebuilt: false)
+        }
+        if backupExists, let backupManifestFile, let snapshot = try? decodeManifest(at: backupManifestFile) {
+            return try loadProfileContents(for: snapshot, rebuilt: false)
+        }
+
+        if primaryExists || backupExists {
+            if !isStorageReadOnly {
+                if primaryExists, let manifestFile {
+                    archiveCorruptManifest(at: manifestFile, isBackup: false, primaryExists: primaryExists)
+                }
+                if backupExists, let backupManifestFile {
+                    archiveCorruptManifest(at: backupManifestFile, isBackup: true, primaryExists: primaryExists)
+                }
+            }
+            logger.warning("Both profile manifests were undecodable; rebuilding metadata from local YAML files.")
+        }
+
+        let rebuilt = try rebuildManifestFromProfiles()
+        return LoadedStorage(
+            snapshot: rebuilt.snapshot,
+            contentsByID: rebuilt.contentsByID,
+            fileURLsByID: rebuilt.fileURLsByID,
+            rebuilt: primaryExists || backupExists || !rebuilt.snapshot.profiles.isEmpty
+        )
+    }
+
+    private func decodeManifest(at url: URL) throws -> ClientSnapshot {
+        let data = try Data(contentsOf: url)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(ClientSnapshot.self, from: data)
+    }
+
+    private func loadProfileContents(for snapshot: ClientSnapshot, rebuilt: Bool) throws -> LoadedStorage {
+        var contentsByID: [UUID: String] = [:]
+        var fileURLsByID: [UUID: URL] = [:]
+        for profile in snapshot.profiles {
+            let url = try canonicalConfigurationURL(for: profile.id)
+            contentsByID[profile.id] = try String(contentsOf: url, encoding: .utf8)
+            fileURLsByID[profile.id] = url
+        }
+        return LoadedStorage(
+            snapshot: snapshot,
+            contentsByID: contentsByID,
+            fileURLsByID: fileURLsByID,
+            rebuilt: rebuilt
+        )
+    }
+
+    private func rebuildManifestFromProfiles() throws -> LoadedStorage {
+        guard let profilesRoot else {
+            throw ClientError.storageUnavailable
+        }
+        let files = try fileManager.contentsOfDirectory(
+            at: profilesRoot,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+        .filter { $0.pathExtension.lowercased() == "yaml" }
+        .sorted { $0.lastPathComponent < $1.lastPathComponent }
+
+        var profiles: [Profile] = []
+        var contentsByID: [UUID: String] = [:]
+        var fileURLsByID: [UUID: URL] = [:]
+        let now = Date.now
+        for file in files {
+            let contents = try String(contentsOf: file, encoding: .utf8)
+            let stem = file.deletingPathExtension().lastPathComponent
+            let id = UUID(uuidString: stem) ?? UUID()
+            let profile = Profile(
+                id: id,
+                name: stem,
+                source: .local,
+                remoteURL: nil,
+                customUserAgent: nil,
+                createdAt: now,
+                updatedAt: now,
+                lastFetchedAt: nil,
+                subscriptionInfo: nil
+            )
+            profiles.append(profile)
+            contentsByID[id] = contents
+            fileURLsByID[id] = file
+        }
+
+        // Remote URLs and override metadata are unrecoverable here because the YAML filenames carry only local content.
+        let snapshot = ClientSnapshot(
+            schemaVersion: 1,
+            profiles: profiles,
+            activeProfileID: profiles.first?.id,
+            overrides: .default()
+        )
+        return LoadedStorage(
+            snapshot: snapshot,
+            contentsByID: contentsByID,
+            fileURLsByID: fileURLsByID,
+            rebuilt: true
+        )
+    }
+
+    private func archiveCorruptManifest(at url: URL, isBackup: Bool, primaryExists: Bool) {
+        let timestamp = Int(Date.now.timeIntervalSince1970 * 1_000)
+        let suffix = isBackup && primaryExists ? "-backup" : ""
+        var destination = url.deletingLastPathComponent()
+            .appendingPathComponent("profiles.corrupt-\(timestamp)\(suffix).json")
+        while fileManager.fileExists(atPath: destination.path) {
+            destination = url.deletingLastPathComponent()
+                .appendingPathComponent("profiles.corrupt-\(timestamp)-\(UUID().uuidString)\(suffix).json")
+        }
+        do {
+            try fileManager.moveItem(at: url, to: destination)
+        } catch {
+            logger.error("Unable to preserve corrupt profile manifest at \(url.lastPathComponent, privacy: .public).")
+        }
+    }
+
+    private func repairStoragePermissions() throws {
+        if let storageRoot {
+            try setPermissions(storageRoot, to: 0o700)
+        }
+        if let profilesRoot {
+            try setPermissions(profilesRoot, to: 0o700)
+            let files = try fileManager.contentsOfDirectory(
+                at: profilesRoot,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            )
+            for file in files where file.pathExtension.lowercased() == "yaml" {
+                try setPermissions(file, to: 0o600)
+            }
+        }
+        if let manifestFile, fileManager.fileExists(atPath: manifestFile.path) {
+            try setPermissions(manifestFile, to: 0o600)
+        }
+        if let backupManifestFile, fileManager.fileExists(atPath: backupManifestFile.path) {
+            try setPermissions(backupManifestFile, to: 0o600)
+        }
+    }
+
+    private func ensureDirectory(_ url: URL) throws {
+        try fileManager.createDirectory(at: url, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        try setPermissions(url, to: 0o700)
+    }
+
+    private func setPermissions(_ url: URL, to permissions: Int) throws {
+        try fileManager.setAttributes([.posixPermissions: permissions], ofItemAtPath: url.path)
+    }
+
     private func manifestURL() throws -> URL {
-        try storageDirectory().appendingPathComponent("profiles.json")
+        guard let manifestFile else { throw ClientError.storageUnavailable }
+        return manifestFile
+    }
+
+    private func backupManifestURL() throws -> URL {
+        guard let backupManifestFile else { throw ClientError.storageUnavailable }
+        return backupManifestFile
     }
 
     private func configurationURL(for id: UUID) throws -> URL {
-        try profilesDirectory().appendingPathComponent("\(id.uuidString).yaml")
+        if let url = profileFileURLs[id] {
+            return url
+        }
+        return try canonicalConfigurationURL(for: id)
+    }
+
+    private func canonicalConfigurationURL(for id: UUID) throws -> URL {
+        guard let profilesRoot else { throw ClientError.storageUnavailable }
+        return profilesRoot.appendingPathComponent("\(id.uuidString).yaml")
     }
 
     private func writeProfileContents(_ contents: String, for id: UUID) throws {
         let directory = try profilesDirectory()
-        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        try contents.write(to: configurationURL(for: id), atomically: true, encoding: .utf8)
+        try ensureDirectory(directory)
+        let url = try configurationURL(for: id)
+        try contents.write(to: url, atomically: true, encoding: .utf8)
+        try setPermissions(url, to: 0o600)
     }
 
     private func save(_ snapshot: ClientSnapshot) throws {
         let root = try storageDirectory()
-        try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
+        let profiles = try profilesDirectory()
+        try ensureDirectory(root)
+        try ensureDirectory(profiles)
+
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
         let data = try encoder.encode(snapshot)
-        try data.write(to: manifestURL(), options: .atomic)
+        let manifest = try manifestURL()
+        try atomicWrite(data, to: manifest)
+        let backup = try backupManifestURL()
+        try atomicWrite(data, to: backup)
+    }
+
+    private func atomicWrite(_ data: Data, to destination: URL) throws {
+        let temporary = destination.deletingLastPathComponent().appendingPathComponent(
+            ".\(destination.lastPathComponent).\(UUID().uuidString).tmp"
+        )
+        defer { try? fileManager.removeItem(at: temporary) }
+        try data.write(to: temporary)
+        guard Darwin.chmod(temporary.path, mode_t(0o600)) == 0 else {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno), userInfo: [NSFilePathErrorKey: temporary.path])
+        }
+        guard Darwin.rename(temporary.path, destination.path) == 0 else {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno), userInfo: [NSFilePathErrorKey: destination.path])
+        }
     }
 
     private func storageDirectory() throws -> URL {
-        guard let applicationSupport = fileManager.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        ).first else {
-            throw ClientError.storageUnavailable
-        }
-        return applicationSupport.appendingPathComponent("Swihomo", isDirectory: true)
+        guard let storageRoot else { throw ClientError.storageUnavailable }
+        return storageRoot
     }
 
     private func profilesDirectory() throws -> URL {
-        try storageDirectory().appendingPathComponent("Profiles", isDirectory: true)
+        guard let profilesRoot else { throw ClientError.storageUnavailable }
+        return profilesRoot
     }
 }
 

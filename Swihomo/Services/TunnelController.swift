@@ -89,19 +89,19 @@ final class TunnelController {
     }
 
     private var automaticallyReclaimsMemory: Bool {
-        AppDefaults.store.object(forKey: "automaticallyReclaimsMemory") as? Bool ?? false
+        SettingsStore.shared.settings.automaticallyReclaimsMemory
     }
 
     private var bypassesPrivateNetworks: Bool {
-        AppDefaults.store.object(forKey: "packetTunnelBypassesPrivateNetworks") as? Bool ?? false
+        SettingsStore.shared.settings.packetTunnelBypassesPrivateNetworks
     }
 
     private var bypassesAPNs: Bool {
-        AppDefaults.store.object(forKey: "packetTunnelBypassAPNs") as? Bool ?? false
+        SettingsStore.shared.settings.packetTunnelBypassAPNs
     }
 
     private var bypassedCIDRs: [String] {
-        let rawValue = AppDefaults.store.string(forKey: "packetTunnelBypassCIDRs") ?? ""
+        let rawValue = SettingsStore.shared.settings.packetTunnelBypassCIDRs
         return rawValue
             .split(whereSeparator: { $0.isNewline || $0 == "," })
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -109,12 +109,12 @@ final class TunnelController {
     }
 
     private var mtu: Int {
-        let value = AppDefaults.store.object(forKey: "packetTunnelMTU") as? Int ?? PacketTunnelMTULimits.defaultValue
+        let value = SettingsStore.shared.settings.packetTunnelMTU
         return min(max(value, PacketTunnelMTULimits.minimum), PacketTunnelMTULimits.maximum)
     }
 
     private var customDNSServers: [String] {
-        let rawValue = AppDefaults.store.string(forKey: "packetTunnelCustomDNSServers") ?? ""
+        let rawValue = SettingsStore.shared.settings.packetTunnelCustomDNSServers
         return rawValue
             .split(whereSeparator: { $0.isNewline || $0 == "," })
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -122,19 +122,19 @@ final class TunnelController {
     }
 
     private var ipv6Enabled: Bool {
-        AppDefaults.store.object(forKey: "packetTunnelIPv6Enabled") as? Bool ?? true
+        SettingsStore.shared.settings.packetTunnelIPv6Enabled
     }
 
     private var useMipstack: Bool {
-        AppDefaults.store.object(forKey: "packetTunnelUseMipstack") as? Bool ?? false
+        SettingsStore.shared.settings.packetTunnelUseMipstack
     }
 
     private var packetTunnelExcludeCellularServices: Bool {
-        AppDefaults.store.object(forKey: "packetTunnelExcludeCellularServices") as? Bool ?? true
+        SettingsStore.shared.settings.packetTunnelExcludeCellularServices
     }
 
     private var packetTunnelIncludeAllNetworks: Bool {
-        AppDefaults.store.object(forKey: "packetTunnelIncludeAllNetworks") as? Bool ?? false
+        SettingsStore.shared.settings.packetTunnelIncludeAllNetworks
     }
 
     func disconnect() {

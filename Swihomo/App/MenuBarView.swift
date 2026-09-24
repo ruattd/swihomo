@@ -28,10 +28,10 @@ enum MenuBarDisplay: String, CaseIterable, Identifiable {
 
 struct MenuBarLabelView: View {
     @ObservedObject var model: AppModel
-    @AppStorage("menuBarDisplay", store: AppDefaults.store) private var menuBarDisplay = MenuBarDisplay.iconAndSpeed.rawValue
+    @AppSetting(\.menuBarDisplay) private var menuBarDisplay
 
     private var display: MenuBarDisplay {
-        MenuBarDisplay(rawValue: menuBarDisplay) ?? .iconAndSpeed
+        menuBarDisplay
     }
 
     @ViewBuilder
@@ -156,10 +156,10 @@ struct MenuBarLabelView: View {
 struct MenuBarContentView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.openWindow) private var openWindow
-    @AppStorage("menuBarDisplay", store: AppDefaults.store) private var menuBarDisplay = MenuBarDisplay.iconAndSpeed.rawValue
+    @AppSetting(\.menuBarDisplay) private var menuBarDisplay
 
     private var trafficSummary: String {
-        let display = MenuBarDisplay(rawValue: menuBarDisplay) ?? .iconAndSpeed
+        let display = menuBarDisplay
         if display == .icon {
             return "↑ \(byteRate(model.trafficUploadSpeed)) ↓ \(byteRate(model.trafficDownloadSpeed))"
         }

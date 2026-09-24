@@ -4,10 +4,10 @@ struct ProxiesView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var expandedGroupNames: Set<String> = []
-    @AppStorage("proxyGroupSortCriterion", store: AppDefaults.store) private var groupSortCriterion = ProxyGroupSortCriterion.original
-    @AppStorage("proxyGroupSortDirection", store: AppDefaults.store) private var groupSortDirection = ProxySortDirection.ascending
-    @AppStorage("proxyNodeSortCriterion", store: AppDefaults.store) private var nodeSortCriterion = ProxyNodeSortCriterion.original
-    @AppStorage("proxyNodeSortDirection", store: AppDefaults.store) private var nodeSortDirection = ProxySortDirection.ascending
+    @AppSetting(\.proxyGroupSortCriterion) private var groupSortCriterion
+    @AppSetting(\.proxyGroupSortDirection) private var groupSortDirection
+    @AppSetting(\.proxyNodeSortCriterion) private var nodeSortCriterion
+    @AppSetting(\.proxyNodeSortDirection) private var nodeSortDirection
 
     var body: some View {
         PageNavigationStack {
@@ -92,7 +92,7 @@ struct ProxiesView: View {
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
             if expandedGroupNames.contains(group.id) {
                 expandedGroupNames.remove(group.id)
-            } else if AppDefaults.store.bool(forKey: "autoCollapseProxyGroups") {
+            } else if SettingsStore.shared.settings.autoCollapseProxyGroups {
                 expandedGroupNames = [group.id]
             } else {
                 expandedGroupNames.insert(group.id)
@@ -102,7 +102,7 @@ struct ProxiesView: View {
 
     private func test(_ group: MihomoProxyGroup) {
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
-            if AppDefaults.store.bool(forKey: "autoCollapseProxyGroups") {
+            if SettingsStore.shared.settings.autoCollapseProxyGroups {
                 expandedGroupNames = [group.id]
             } else {
                 _ = expandedGroupNames.insert(group.id)
@@ -122,13 +122,13 @@ struct ProxiesView: View {
 }
 
 // Toolbar content for the proxies page, rendered by the container on macOS (via
-// ChromeProvider) and in-page on iOS. Declares its own AppStorage so it stays
+// ChromeProvider) and in-page on iOS. Declares its own AppSetting so it stays
 // reactive in whichever view graph renders it.
 private struct ProxiesToolbarContent: View {
-    @AppStorage("proxyGroupSortCriterion", store: AppDefaults.store) private var groupSortCriterion = ProxyGroupSortCriterion.original
-    @AppStorage("proxyGroupSortDirection", store: AppDefaults.store) private var groupSortDirection = ProxySortDirection.ascending
-    @AppStorage("proxyNodeSortCriterion", store: AppDefaults.store) private var nodeSortCriterion = ProxyNodeSortCriterion.original
-    @AppStorage("proxyNodeSortDirection", store: AppDefaults.store) private var nodeSortDirection = ProxySortDirection.ascending
+    @AppSetting(\.proxyGroupSortCriterion) private var groupSortCriterion
+    @AppSetting(\.proxyGroupSortDirection) private var groupSortDirection
+    @AppSetting(\.proxyNodeSortCriterion) private var nodeSortCriterion
+    @AppSetting(\.proxyNodeSortDirection) private var nodeSortDirection
 
     var body: some View {
         Menu {

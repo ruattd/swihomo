@@ -48,9 +48,6 @@ final class AppModel: ObservableObject {
     private var originalProxyCandidateIndices: [String: [String: Int]] = [:]
     private var connectionTransferSamples: [String: ConnectionTransferSample] = [:]
 
-    private static let geoDataLastUpdatedKeyPrefix = "com.swihomo.geodata.lastUpdated."
-    private static let appLogLevelKey = "appLogLevel"
-
     init(demoMode: Bool = ScreenshotDemoMode.isEnabled) {
         screenshotDemoMode = demoMode
 
@@ -358,7 +355,7 @@ final class AppModel: ObservableObject {
                 globalOverrides: runtime.profile.customOverridesEnabled ? runtime.overrides.customYAML : "",
                 profileOverrides: runtime.profile.customOverrideYAML,
                 standardOverrides: MihomoConfigurationBuilder.standardOverridesYAML(runtime.overrides),
-                replacingGeoDatabasesWithRulesets: AppDefaults.store.bool(forKey: "replaceGeoDatabasesWithRulesets")
+                replacingGeoDatabasesWithRulesets: SettingsStore.shared.settings.replaceGeoDatabasesWithRulesets
             )
             for warning in rulesetWarnings {
                 record(.warning, module: "Configuration", warning)
@@ -518,13 +515,13 @@ final class AppModel: ObservableObject {
         guard testingProxyGroupIDs.insert(group.id).inserted else { return }
         defer { testingProxyGroupIDs.remove(group.id) }
 
-        if AppDefaults.store.bool(forKey: "realtimeDelayTest") {
+        if SettingsStore.shared.settings.realtimeDelayTest {
             // Per-node requests instead of the group endpoint: the group endpoint omits failures
             // without a reason, while single-node calls distinguish timeout (504) from test
             // errors (503) — and each card updates as soon as its own result lands.
             // In-flight tests are capped: every test allocates connection/test buffers in
             // mihomo, so large groups run in a sliding window instead of unbounded fan-out.
-            let configuredLimit = AppDefaults.store.integer(forKey: "delayTestMaxConcurrency")
+            let configuredLimit = SettingsStore.shared.settings.delayTestMaxConcurrency
             let maxConcurrentTests = max(1, configuredLimit == 0 ? 4 : configuredLimit)
             var pending = group.candidates.makeIterator()
             await withTaskGroup(of: Void.self) { taskGroup in
@@ -704,11 +701,10 @@ final class AppModel: ObservableObject {
         logEntries = logStore.clear(source: source)
     }
 
-    private static let pendingCoreLogClearDefaultsKey = "logs.pendingCoreLogClear"
 
     private var hasPendingCoreLogClear: Bool {
-        get { AppDefaults.store.bool(forKey: Self.pendingCoreLogClearDefaultsKey) }
-        set { AppDefaults.store.set(newValue, forKey: Self.pendingCoreLogClearDefaultsKey) }
+        get { SettingsStore.shared.settings.pendingCoreLogClear }
+        set { SettingsStore.shared.settings.pendingCoreLogClear = newValue }
     }
 
     private func flushPendingCoreLogClear() async {
@@ -963,7 +959,7 @@ final class AppModel: ObservableObject {
                     resource.format = details.format
                 }
                 if resource.kind == .geoData,
-                   let lastUpdated = AppDefaults.store.object(forKey: Self.geoDataLastUpdatedKey(resource.id)) as? Date,
+                   let lastUpdated = SettingsStore.shared.settings.geoDataLastUpdated[resource.id],
                    lastUpdated > (resource.updatedAt ?? .distantPast) {
                     resource.updatedAt = lastUpdated
                 }
@@ -1056,12 +1052,8 @@ final class AppModel: ObservableObject {
 
     private func recordGeoDataUpdate(at date: Date) {
         for resource in externalResources where resource.kind == .geoData {
-            AppDefaults.store.set(date, forKey: Self.geoDataLastUpdatedKey(resource.id))
+            SettingsStore.shared.settings.geoDataLastUpdated[resource.id] = date
         }
-    }
-
-    private static func geoDataLastUpdatedKey(_ resourceID: String) -> String {
-        geoDataLastUpdatedKeyPrefix + resourceID
     }
 
     private func originalGroupIndex(for group: MihomoProxyGroup) -> Int {
@@ -1122,7 +1114,7 @@ final class AppModel: ObservableObject {
     }
 
     private func record(_ level: LogLevel, module: String, _ message: String) {
-        let appLogLevel = LogLevel(rawValue: AppDefaults.store.string(forKey: Self.appLogLevelKey) ?? "") ?? .info
+        let appLogLevel = SettingsStore.shared.settings.appLogLevel
         guard appLogLevel.includes(level) else { return }
         guard let logStore else { return }
         logEntries = logStore.append(source: .app, module: module, level: level, message: message)

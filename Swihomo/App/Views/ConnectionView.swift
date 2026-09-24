@@ -16,8 +16,8 @@ struct DashboardView: View {
     @Environment(\.pushCompactRoute) private var pushCompactRoute
     @State private var selectedConnection: MihomoConnectionActivity?
     #endif
-    @AppStorage("connectionSortCriterion", store: AppDefaults.store) private var connectionSortCriterion = ConnectionSortCriterion.process
-    @AppStorage("connectionSortDirection", store: AppDefaults.store) private var connectionSortDirection = ProxySortDirection.ascending
+    @AppSetting(\.connectionSortCriterion) private var connectionSortCriterion
+    @AppSetting(\.connectionSortDirection) private var connectionSortDirection
 
     private var showsConnections: Bool {
         model.tunnelStatus == .connected
@@ -100,12 +100,12 @@ private struct ConnectionDetailDestination: ViewModifier {
 #endif
 
 // Toolbar content for the connections page, rendered by the container on macOS (via
-// ChromeProvider) and in-page on iOS. Reads model/AppStorage directly so it stays
+// ChromeProvider) and in-page on iOS. Reads model/settings directly so it stays
 // reactive no matter which view graph renders it.
 private struct ConnectionToolbarContent: View {
     @EnvironmentObject private var model: AppModel
-    @AppStorage("connectionSortCriterion", store: AppDefaults.store) private var sortCriterion = ConnectionSortCriterion.process
-    @AppStorage("connectionSortDirection", store: AppDefaults.store) private var sortDirection = ProxySortDirection.ascending
+    @AppSetting(\.connectionSortCriterion) private var sortCriterion
+    @AppSetting(\.connectionSortDirection) private var sortDirection
     @Binding var showingCloseAllConfirmation: Bool
 
     var body: some View {
@@ -154,8 +154,8 @@ private struct ConnectionToolbarContent: View {
 // Actions are compared by identity of intent, so == ignores the closures.
 private struct ConnectionListView: View, Equatable {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage("connectionSortCriterion", store: AppDefaults.store) private var connectionSortCriterion = ConnectionSortCriterion.process
-    @AppStorage("connectionSortDirection", store: AppDefaults.store) private var connectionSortDirection = ProxySortDirection.ascending
+    @AppSetting(\.connectionSortCriterion) private var connectionSortCriterion
+    @AppSetting(\.connectionSortDirection) private var connectionSortDirection
     @State private var showingCloseAllConfirmation = false
     @State private var connectionSearchText = ""
     // While the user is scrolling, the list renders this frozen snapshot instead of the

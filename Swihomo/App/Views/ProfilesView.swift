@@ -206,7 +206,7 @@ private struct ProfilesToolbarContent: View {
 private struct ProfileCard: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.locale) private var locale
-    @AppStorage("subscriptionInfoDisplay", store: AppDefaults.store) private var subscriptionInfoDisplay = SubscriptionInfoDisplay.used.rawValue
+    @AppSetting(\.subscriptionInfoDisplay) private var subscriptionInfoDisplay
     let profile: Profile
     let openEditor: (CompactRoute) -> Void
 #if os(macOS)
@@ -222,7 +222,7 @@ private struct ProfileCard: View {
     }
 
     private var subscriptionDisplay: SubscriptionInfoDisplay {
-        SubscriptionInfoDisplay(rawValue: subscriptionInfoDisplay) ?? .used
+        subscriptionInfoDisplay
     }
 
     private var deletionConfirmationTitle: Text {

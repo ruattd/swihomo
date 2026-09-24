@@ -147,7 +147,7 @@ private extension ExternalResourcesView {
 
 private struct ExternalResourceCard: View {
     @EnvironmentObject private var model: AppModel
-    @AppStorage("subscriptionInfoDisplay", store: AppDefaults.store) private var subscriptionInfoDisplay = SubscriptionInfoDisplay.used.rawValue
+    @AppSetting(\.subscriptionInfoDisplay) private var subscriptionInfoDisplay
     let resource: ExternalResource
     let edit: () -> Void
     let replace: () -> Void
@@ -170,7 +170,7 @@ private struct ExternalResourceCard: View {
     private var subscriptionInfo: MihomoSubscriptionInfo? { resource.kind == .proxyProvider ? resource.subscriptionInfo : nil }
 
     private var subscriptionDisplay: SubscriptionInfoDisplay {
-        SubscriptionInfoDisplay(rawValue: subscriptionInfoDisplay) ?? .used
+        subscriptionInfoDisplay
     }
 
     var body: some View {

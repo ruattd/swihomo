@@ -56,6 +56,7 @@
 		100000000000000000000053 /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000026 /* Formatting.swift */; };
 		100000000000000000000051 /* QRCodeScannerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000051 /* QRCodeScannerSheet.swift */; };
 		100000000000000000000052 /* ScreenshotDemoFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000052 /* ScreenshotDemoFixtures.swift */; };
+		100000000000000000000057 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000057 /* SettingsStore.swift */; };
 		D000000000000000000000001 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = D000000000000000000000003 /* Yams */; };
 		D000000000000000000000004 /* CodeEditorView in Frameworks */ = {isa = PBXBuildFile; productRef = D000000000000000000000006 /* CodeEditorView */; };
 		D000000000000000000000005 /* LanguageSupport in Frameworks */ = {isa = PBXBuildFile; productRef = D000000000000000000000007 /* LanguageSupport */; };
@@ -137,6 +138,7 @@
 		200000000000000000000029 /* SharedText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedText.swift; sourceTree = "<group>"; };
 		200000000000000000000051 /* QRCodeScannerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeScannerSheet.swift; sourceTree = "<group>"; };
 		200000000000000000000052 /* ScreenshotDemoFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotDemoFixtures.swift; sourceTree = "<group>"; };
+		200000000000000000000057 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -207,6 +209,7 @@
 			isa = PBXGroup;
 			children = (
 				200000000000000000000004 /* Models.swift */,
+				200000000000000000000057 /* SettingsStore.swift */,
 				200000000000000000000006 /* ProfileStore.swift */,
 				200000000000000000000007 /* MihomoConfiguration.swift */,
 				200000000000000000000021 /* PersistentLogStore.swift */,
@@ -492,6 +495,7 @@
 				100000000000000000000051 /* QRCodeScannerSheet.swift in Sources */,
 				100000000000000000000003 /* AppModel.swift in Sources */,
 				100000000000000000000004 /* Models.swift in Sources */,
+				100000000000000000000057 /* SettingsStore.swift in Sources */,
 				100000000000000000000006 /* ProfileStore.swift in Sources */,
 				100000000000000000000007 /* MihomoConfiguration.swift in Sources */,
 				100000000000000000000008 /* TunnelController.swift in Sources */,

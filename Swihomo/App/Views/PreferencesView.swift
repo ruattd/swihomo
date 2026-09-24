@@ -1,30 +1,33 @@
 import Foundation
+#if os(macOS)
+import AppKit
+#endif
 import SwiftUI
 
 struct PreferencesView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @AppStorage("appTheme", store: AppDefaults.store) private var selectedTheme = AppTheme.system.rawValue
+    @AppSetting(\.appTheme) private var selectedTheme
     @State private var systemThemeResetID = UUID()
-    @AppStorage("automaticallyReclaimsMemory", store: AppDefaults.store) private var automaticallyReclaimsMemory = false
-    @AppStorage("replaceGeoDatabasesWithRulesets", store: AppDefaults.store) private var replaceGeoDatabasesWithRulesets = false
-    @AppStorage("realtimeDelayTest", store: AppDefaults.store) private var realtimeDelayTest = false
-    @AppStorage("delayTestMaxConcurrency", store: AppDefaults.store) private var delayTestMaxConcurrency = 4
-    @AppStorage("autoCollapseProxyGroups", store: AppDefaults.store) private var autoCollapseProxyGroups = false
-    @AppStorage("subscriptionInfoDisplay", store: AppDefaults.store) private var subscriptionInfoDisplay = SubscriptionInfoDisplay.used.rawValue
-    @AppStorage("showsMenuBar", store: AppDefaults.store) private var showsMenuBar = true
-    @AppStorage("menuBarDisplay", store: AppDefaults.store) private var menuBarDisplay = "iconAndSpeed"
-    @AppStorage("appLogLevel", store: AppDefaults.store) private var appLogLevel = LogLevel.info.rawValue
-    @AppStorage("appLanguage", store: AppDefaults.store) private var selectedLanguage = AppLanguage.system.rawValue
-    @AppStorage("packetTunnelBypassesPrivateNetworks", store: AppDefaults.store) private var packetTunnelBypassesPrivateNetworks = false
-    @AppStorage("packetTunnelBypassAPNs", store: AppDefaults.store) private var packetTunnelBypassAPNs = false
-    @AppStorage("packetTunnelExcludeCellularServices", store: AppDefaults.store) private var packetTunnelExcludeCellularServices = true
-    @AppStorage("packetTunnelIncludeAllNetworks", store: AppDefaults.store) private var packetTunnelIncludeAllNetworks = false
-    @AppStorage("packetTunnelBypassCIDRs", store: AppDefaults.store) private var packetTunnelBypassCIDRs = ""
-    @AppStorage("packetTunnelMTU", store: AppDefaults.store) private var packetTunnelMTU = PacketTunnelMTULimits.defaultValue
-    @AppStorage("packetTunnelCustomDNSServers", store: AppDefaults.store) private var packetTunnelCustomDNSServers = ""
-    @AppStorage("packetTunnelIPv6Enabled", store: AppDefaults.store) private var packetTunnelIPv6Enabled = true
-    @AppStorage("packetTunnelUseMipstack", store: AppDefaults.store) private var packetTunnelUseMipstack = false
+    @AppSetting(\.automaticallyReclaimsMemory) private var automaticallyReclaimsMemory
+    @AppSetting(\.replaceGeoDatabasesWithRulesets) private var replaceGeoDatabasesWithRulesets
+    @AppSetting(\.realtimeDelayTest) private var realtimeDelayTest
+    @AppSetting(\.delayTestMaxConcurrency) private var delayTestMaxConcurrency
+    @AppSetting(\.autoCollapseProxyGroups) private var autoCollapseProxyGroups
+    @AppSetting(\.subscriptionInfoDisplay) private var subscriptionInfoDisplay
+    @AppSetting(\.showsMenuBar) private var showsMenuBar
+    @AppSetting(\.menuBarDisplay) private var menuBarDisplay
+    @AppSetting(\.appLogLevel) private var appLogLevel
+    @AppSetting(\.appLanguage) private var selectedLanguage
+    @AppSetting(\.packetTunnelBypassesPrivateNetworks) private var packetTunnelBypassesPrivateNetworks
+    @AppSetting(\.packetTunnelBypassAPNs) private var packetTunnelBypassAPNs
+    @AppSetting(\.packetTunnelExcludeCellularServices) private var packetTunnelExcludeCellularServices
+    @AppSetting(\.packetTunnelIncludeAllNetworks) private var packetTunnelIncludeAllNetworks
+    @AppSetting(\.packetTunnelBypassCIDRs) private var packetTunnelBypassCIDRs
+    @AppSetting(\.packetTunnelMTU) private var packetTunnelMTU
+    @AppSetting(\.packetTunnelCustomDNSServers) private var packetTunnelCustomDNSServers
+    @AppSetting(\.packetTunnelIPv6Enabled) private var packetTunnelIPv6Enabled
+    @AppSetting(\.packetTunnelUseMipstack) private var packetTunnelUseMipstack
     @State private var packetTunnelMTUInput: String?
 #if os(iOS)
     @State private var editorPath: [CompactRoute] = []
@@ -32,7 +35,7 @@ struct PreferencesView: View {
 #endif
 #if os(macOS)
     @State private var editingPacketTunnelField: PacketTunnelTextField?
-    @AppStorage("hidesDockIcon", store: AppDefaults.store) private var hidesDockIcon = false
+    @AppSetting(\.hidesDockIcon) private var hidesDockIcon
 #endif
 
     var body: some View {
@@ -77,8 +80,8 @@ struct PreferencesView: View {
         push: @escaping (CompactRoute) -> Void,
         pop: @escaping () -> Void
     ) -> some View {
-        @AppStorage("packetTunnelCustomDNSServers", store: AppDefaults.store) var packetTunnelCustomDNSServers = ""
-        @AppStorage("packetTunnelBypassCIDRs", store: AppDefaults.store) var packetTunnelBypassCIDRs = ""
+        @AppSetting(\.packetTunnelCustomDNSServers) var packetTunnelCustomDNSServers
+        @AppSetting(\.packetTunnelBypassCIDRs) var packetTunnelBypassCIDRs
 
         switch route {
         case .packetTunnelEditor(let field):
@@ -115,9 +118,9 @@ struct PreferencesView: View {
     private var appearanceSettings: some View {
         Section {
             if horizontalSizeClass == .compact {
-                Picker("preferences.appearance.title", selection: themeSelection) {
+                Picker("preferences.appearance.title", selection: $selectedTheme) {
                     ForEach(AppTheme.allCases) { theme in
-                        Text(theme.titleKey).tag(theme.rawValue)
+                        Text(theme.titleKey).tag(theme)
                     }
                 }
                 .labelsHidden()
@@ -210,7 +213,7 @@ struct PreferencesView: View {
                 SettingsPickerRow(
                     "preferences.application.logLevel",
                     selection: $appLogLevel,
-                    options: LogLevel.allCases.map { ($0.rawValue, Text(LocalizedStringKey($0.localizationKey))) }
+                    options: LogLevel.allCases.map { ($0, Text(LocalizedStringKey($0.localizationKey))) }
                 )
                 Text("preferences.application.logLevel.description")
                     .font(.caption)
@@ -222,9 +225,9 @@ struct PreferencesView: View {
                 selection: $selectedLanguage,
                 options: AppLanguage.allCases.map { language in
                     if let titleKey = language.titleKey {
-                        (language.rawValue, Text(titleKey))
+                        (language, Text(titleKey))
                     } else {
-                        (language.rawValue, Text(verbatim: language.endonym ?? language.rawValue))
+                        (language, Text(verbatim: language.endonym ?? language.rawValue))
                     }
                 }
             )
@@ -240,7 +243,7 @@ struct PreferencesView: View {
             SettingsPickerRow(
                 "preferences.application.showSubscriptionInfo",
                 selection: $subscriptionInfoDisplay,
-                options: SubscriptionInfoDisplay.allCases.map { ($0.rawValue, Text(LocalizedStringKey($0.localizationKey))) }
+                options: SubscriptionInfoDisplay.allCases.map { ($0, Text(LocalizedStringKey($0.localizationKey))) }
             )
         } header: {
             SectionHeaderLabel("preferences.application.title", systemImage: "app.badge")
@@ -453,43 +456,34 @@ struct PreferencesView: View {
         ForEach(AppTheme.allCases) { theme in
             ThemeOptionCard(
                 theme: theme,
-                isSelected: selectedTheme == theme.rawValue
+                isSelected: selectedTheme == theme
             ) {
                 selectTheme(theme)
             }
         }
     }
 
-    private var themeSelection: Binding<String> {
-        Binding(
-            get: { self.selectedTheme },
-            set: { newValue in
-                guard let theme = AppTheme(rawValue: newValue) else { return }
-                self.selectTheme(theme)
-            }
-        )
-    }
 
     private func selectTheme(_ theme: AppTheme) {
         #if os(macOS)
         let resetID = UUID()
         systemThemeResetID = resetID
 
-        guard theme == .system, selectedTheme != AppTheme.system.rawValue else {
-            selectedTheme = theme.rawValue
+        guard theme == .system, selectedTheme != .system else {
+            selectedTheme = theme
             return
         }
 
-        // Preserve the current system appearance while SwiftUI releases the explicit override.
-        selectedTheme = AppDefaults.store.string(forKey: "AppleInterfaceStyle") == "Dark"
-            ? AppTheme.dark.rawValue
-            : AppTheme.light.rawValue
+        let systemTheme = NSApplication.shared.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? AppTheme.dark
+            : AppTheme.light
+        selectedTheme = systemTheme
         DispatchQueue.main.async {
             guard systemThemeResetID == resetID else { return }
-            selectedTheme = AppTheme.system.rawValue
+            selectedTheme = .system
         }
         #else
-        selectedTheme = theme.rawValue
+        selectedTheme = theme
         #endif
     }
 
@@ -500,13 +494,13 @@ struct PreferencesView: View {
 
             PreferenceRow(
                 title: Text("preferences.menuBar.display"),
-                description: menuBarDisplay == MenuBarDisplay.icon.rawValue
+                description: menuBarDisplay == .icon
                     ? Text("preferences.menuBar.display.iconOnlyDescription")
                     : nil
             ) {
                 Picker("preferences.menuBar.display", selection: $menuBarDisplay) {
                     ForEach(MenuBarDisplay.allCases) { display in
-                        Text(display.titleKey).tag(display.rawValue)
+                        Text(display.titleKey).tag(display)
                     }
                 }
                 .labelsHidden()
