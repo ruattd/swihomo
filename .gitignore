@@ -24,6 +24,7 @@ xcuserdata/
 *.xcodeproj/project.xcworkspace/xcuserdata/
 *.xcworkspace/xcuserdata/
 *.xcodeproj/xcuserdata/
+*.xcodeproj/xcshareddata/xcodecloud/
 
 # Swift Package Manager
 .swiftpm/
