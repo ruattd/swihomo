@@ -315,6 +315,7 @@
 "logs.empty.description" = "App and mihomo core events will appear here.";
 "logs.search" = "Search module, message, or level";
 "logs.clearLogs" = "Clear Logs";
+"logs.returnToBottom" = "Return to Bottom";
 "logs.clearLogs.confirmationTitle" = "Clear Logs?";
 "logs.clearLogs.description" = "Choose which logs to permanently remove.";
 "logs.clearApp" = "App Logs";

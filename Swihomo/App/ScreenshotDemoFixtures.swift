@@ -361,18 +361,18 @@ enum ScreenshotDemoFixtures {
         ]
 
         let logEntries = [
-            log("B0000000-0000-4000-8000-000000000001", "2025-06-18T09:21:12Z", .app, "Lifecycle", .info, "Loaded screenshot demo fixtures."),
-            log("B0000000-0000-4000-8000-000000000002", "2025-06-18T09:20:44Z", .core, "mihomo", .info, "REST controller is ready on 127.0.0.1:9097."),
-            log("B0000000-0000-4000-8000-000000000003", "2025-06-18T09:20:31Z", .app, "Profiles", .debug, "Loaded 3 profiles from the in-memory demo catalog."),
-            log("B0000000-0000-4000-8000-000000000004", "2025-06-18T09:20:27Z", .core, "DNS", .debug, "Using demo resolver policy with 3 upstreams."),
-            log("B0000000-0000-4000-8000-000000000005", "2025-06-18T09:20:18Z", .app, "Proxies", .info, "Loaded 4 proxy groups and 9 delay results."),
-            log("B0000000-0000-4000-8000-000000000006", "2025-06-18T09:19:55Z", .core, "Router", .warning, "Fallback route selected for an unclassified destination."),
-            log("B0000000-0000-4000-8000-000000000007", "2025-06-18T09:19:42Z", .app, "Resources", .info, "Loaded 6 external resources."),
-            log("B0000000-0000-4000-8000-000000000008", "2025-06-18T09:19:20Z", .core, "Provider", .warning, "Cedar Community Nodes is not present in the cache."),
-            log("B0000000-0000-4000-8000-000000000009", "2025-06-18T09:18:47Z", .app, "Connections", .debug, "Tracking 5 live connections."),
-            log("B0000000-0000-4000-8000-000000000010", "2025-06-18T09:18:11Z", .core, "Tunnel", .error, "A sample upstream was retried after a timeout."),
+            log("B0000000-0000-4000-8000-000000000012", "2025-06-18T09:16:58Z", .core, "TUN", .debug, "Packet flow attached with MTU 1400."),
             log("B0000000-0000-4000-8000-000000000011", "2025-06-18T09:17:36Z", .app, "Configuration", .info, "Applied routing mode Rule and DNS settings."),
-            log("B0000000-0000-4000-8000-000000000012", "2025-06-18T09:16:58Z", .core, "TUN", .debug, "Packet flow attached with MTU 1400.")
+            log("B0000000-0000-4000-8000-000000000010", "2025-06-18T09:18:11Z", .core, "Tunnel", .error, "A sample upstream was retried after a timeout."),
+            log("B0000000-0000-4000-8000-000000000009", "2025-06-18T09:18:47Z", .app, "Connections", .debug, "Tracking 5 live connections."),
+            log("B0000000-0000-4000-8000-000000000008", "2025-06-18T09:19:20Z", .core, "Provider", .warning, "Cedar Community Nodes is not present in the cache."),
+            log("B0000000-0000-4000-8000-000000000007", "2025-06-18T09:19:42Z", .app, "Resources", .info, "Loaded 6 external resources."),
+            log("B0000000-0000-4000-8000-000000000006", "2025-06-18T09:19:55Z", .core, "Router", .warning, "Fallback route selected for an unclassified destination."),
+            log("B0000000-0000-4000-8000-000000000005", "2025-06-18T09:20:18Z", .app, "Proxies", .info, "Loaded 4 proxy groups and 9 delay results."),
+            log("B0000000-0000-4000-8000-000000000004", "2025-06-18T09:20:27Z", .core, "DNS", .debug, "Using demo resolver policy with 3 upstreams."),
+            log("B0000000-0000-4000-8000-000000000003", "2025-06-18T09:20:31Z", .app, "Profiles", .debug, "Loaded 3 profiles from the in-memory demo catalog."),
+            log("B0000000-0000-4000-8000-000000000002", "2025-06-18T09:20:44Z", .core, "mihomo", .info, "REST controller is ready on 127.0.0.1:9097."),
+            log("B0000000-0000-4000-8000-000000000001", "2025-06-18T09:21:12Z", .app, "Lifecycle", .info, "Loaded screenshot demo fixtures.")
         ]
 
         let profileContents = [

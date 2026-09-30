@@ -71,22 +71,32 @@ struct LogsView: View {
     @State private var visibleEntries: [LogEntry] = []
     @State private var showingClearLogsConfirmation = false
 
+    /// Increment to force the list back to the latest entries (the toolbar's
+    /// return-to-bottom button); the follower re-arms on the new value.
+    @State private var followRequest = 0
+
     // Body re-evaluates on every AppModel publish (traffic 1/s) because the page stays cached,
-    // so the filter+sort pipeline must not run in body.
+    // so the filter pipeline must not run in body.
+    // model.logEntries is already chronological (PersistentLogStore maintains
+    // ascending order), so display order needs no sort: newest entries append at
+    // the bottom. With no filters active the array assigns directly — it is
+    // copy-on-write, so the common path is O(1).
     private func recomputeEntries() {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard filter != .all || levelFilter != .all || !query.isEmpty else {
+            visibleEntries = model.logEntries
+            return
+        }
         visibleEntries = model.logEntries
             .filter { filter == .all || $0.source.rawValue == filter.rawValue }
             .filter { levelFilter.level == nil || $0.level == levelFilter.level }
             .filter { entry in
-                let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !query.isEmpty else { return true }
                 return [entry.module, entry.message, entry.source.displayName, entry.level.displayName]
                     .joined(separator: " ")
                     .localizedCaseInsensitiveContains(query)
             }
-            .sorted { $0.timestamp > $1.timestamp }
     }
-
     var body: some View {
         PageNavigationStack {
             List {
@@ -100,17 +110,15 @@ struct LogsView: View {
                 }
             }
             .listStyle(.plain)
-            // Prepending rows must not move visible content: SwiftUI's implicit
-            // insert animation slides existing rows down in content space, and
-            // no offset compensation can counter a frame animation.
+            // Instant inserts: bursts of appended rows must not animate — a frame
+            // animation moves content under the reader and fights the tail follow.
             .transaction { $0.animation = nil }
-            // Keeps the position pixel-exactly when entries prepend: observes
-            // the backing scroll view itself (offset + content size) and
-            // compensates growth in the same frame — no SwiftUI-side anchoring,
-            // whose update timing raced three earlier attempts. Overlay, not
+            // Rows append at the bottom, so the reading position is preserved by
+            // construction; the follower only jumps to the bottom when the view
+            // already rests there or a jump is explicitly requested. Overlay, not
             // background: List drops background representables entirely.
             .overlay(alignment: .top) {
-                LogScrollPositionKeeper()
+                LogTailFollower(followRequest: followRequest)
                     .frame(width: 0, height: 0)
             }
             .overlay {
@@ -132,7 +140,8 @@ struct LogsView: View {
                     AnyView(LogsToolbarContent(
                         filter: $filter,
                         levelFilter: $levelFilter,
-                        showingClearLogsConfirmation: $showingClearLogsConfirmation
+                        showingClearLogsConfirmation: $showingClearLogsConfirmation,
+                        onReturnToBottom: { followRequest += 1 }
                     ))
                 },
                 searchText: $searchText,
@@ -145,7 +154,8 @@ struct LogsView: View {
                     LogsToolbarContent(
                         filter: $filter,
                         levelFilter: $levelFilter,
-                        showingClearLogsConfirmation: $showingClearLogsConfirmation
+                        showingClearLogsConfirmation: $showingClearLogsConfirmation,
+                        onReturnToBottom: { followRequest += 1 }
                     )
                 }
             }
@@ -185,6 +195,7 @@ private struct LogsToolbarContent: View {
     @Binding var filter: LogFilter
     @Binding var levelFilter: LogLevelFilter
     @Binding var showingClearLogsConfirmation: Bool
+    let onReturnToBottom: () -> Void
 
     var body: some View {
         Menu {
@@ -196,6 +207,11 @@ private struct LogsToolbarContent: View {
         }
 
         Menu {
+            Button {
+                onReturnToBottom()
+            } label: {
+                Label("logs.returnToBottom", systemImage: "arrow.down.to.line")
+            }
             Button(role: .destructive) {
                 showingClearLogsConfirmation = true
             } label: {
@@ -289,33 +305,43 @@ private struct LogEntryRow: View {
     }
 }
 
-private struct LogScrollPositionKeeper: View {
+/// Pins the log list to the latest entries while it rests at the bottom.
+/// Rows append at the bottom, so growth never moves what the user is reading
+/// and no offset compensation is needed — the follower only re-asserts the
+/// bottom edge when the view is already there. Programmatic offset changes
+/// cancel UIScrollView deceleration, which is exactly why this MUST NOT fire
+/// mid-fling: it never touches the offset unless the view is at rest at the
+/// bottom, so scroll momentum survives.
+private struct LogTailFollower: View {
+    /// Increment to force a jump to the bottom (return-to-bottom button);
+    /// also re-arms following.
+    let followRequest: Int
+
     var body: some View {
         #if os(iOS)
-        UIKitKeeper()
+        UIKitFollower(followRequest: followRequest)
         #else
-        AppKitKeeper()
+        AppKitFollower(followRequest: followRequest)
         #endif
     }
 
     #if os(iOS)
-    private struct UIKitKeeper: UIViewRepresentable {
-        func makeUIView(context: Context) -> UIView {
-            KeeperView()
+    private struct UIKitFollower: UIViewRepresentable {
+        let followRequest: Int
+
+        func makeUIView(context: Context) -> FollowerView {
+            FollowerView()
         }
-        func updateUIView(_ uiView: UIView, context: Context) {}
 
+        func updateUIView(_ uiView: FollowerView, context: Context) {
+            uiView.handleFollowRequest(followRequest)
+        }
 
-        private final class KeeperView: UIView {
+        fileprivate final class FollowerView: UIView {
             private var offsetObservation: NSKeyValueObservation?
             private var sizeObservation: NSKeyValueObservation?
-            private var lastContentHeight: CGFloat = 0
-            private var isAtTop = true
-            /// Where the visible content must rest while rows prepend. The
-            /// collection view reconciles estimated cell heights on its own
-            /// schedule and moves the offset whenever it likes, so the target
-            /// is re-asserted on every offset change until the user drags.
-            private var pendingTargetY: CGFloat?
+            private var isAtBottom = true
+            private var handledFollowRequest = 0
 
             override init(frame: CGRect) {
                 super.init(frame: .zero)
@@ -329,42 +355,49 @@ private struct LogScrollPositionKeeper: View {
             override func didMoveToWindow() {
                 super.didMoveToWindow()
                 guard sizeObservation == nil, let scrollView = resolveScrollView() else { return }
-                lastContentHeight = scrollView.contentSize.height
-                lastContentHeight = scrollView.contentSize.height
+                // Open pinned to the latest entries.
+                scrollView.setContentOffset(Self.bottomOffset(of: scrollView), animated: false)
                 offsetObservation = scrollView.observe(\.contentOffset, options: [.new]) { [weak self] view, _ in
                     guard let self else { return }
-                    self.isAtTop = view.contentOffset.y <= -view.adjustedContentInset.top + 1
-                    if view.isTracking {
-                        // The user owns the offset while dragging.
-                        self.pendingTargetY = nil
-                    } else if let target = self.pendingTargetY, !view.isDecelerating,
-                              abs(view.contentOffset.y - target) > 0.5 {
-                        // Setting the offset re-fires this observer; the guard
-                        // then passes and the recursion ends.
-                        view.setContentOffset(CGPoint(x: 0, y: target), animated: false)
+                    self.isAtBottom = Self.offsetIsAtBottom(view)
+                    guard !view.isTracking, !view.isDecelerating, self.isAtBottom else { return }
+                    // The collection view reconciles estimated cell heights on its
+                    // own schedule and can drift the offset; re-assert the bottom
+                    // while the view is supposed to rest there. Setting the offset
+                    // re-fires this observer; the guard then passes and the
+                    // recursion ends.
+                    let bottom = Self.bottomOffset(of: view)
+                    if abs(view.contentOffset.y - bottom.y) > 0.5 {
+                        view.setContentOffset(bottom, animated: false)
                     }
                 }
-                sizeObservation = scrollView.observe(\.contentSize, options: [.new]) { [weak self, weak scrollView] view, _ in
-                    guard let self, let scrollView else { return }
-                    let newHeight = view.contentSize.height
-                    let growth = newHeight - self.lastContentHeight
-                    self.lastContentHeight = newHeight
-                    guard growth > 0 else { return }
-                    if self.isAtTop {
-                        self.pendingTargetY = nil
-                        scrollView.setContentOffset(CGPoint(x: 0, y: -scrollView.adjustedContentInset.top), animated: false)
-                    } else {
-                        // Accumulate on the pending target, not the transient
-                        // offset — the collection view may not have settled to
-                        // the previous target yet.
-                        let target = (self.pendingTargetY ?? scrollView.contentOffset.y) + growth
-                        self.pendingTargetY = target
-                        scrollView.setContentOffset(CGPoint(x: 0, y: target), animated: false)
-                    }
+                sizeObservation = scrollView.observe(\.contentSize, options: [.new]) { [weak self, weak scrollView] _, _ in
+                    guard let self, let scrollView, self.isAtBottom else { return }
+                    scrollView.setContentOffset(Self.bottomOffset(of: scrollView), animated: false)
                 }
             }
 
-            /// The keeper sits in an overlay next to the list's scroll view:
+            func handleFollowRequest(_ request: Int) {
+                guard request != handledFollowRequest else { return }
+                handledFollowRequest = request
+                isAtBottom = true
+                if let scrollView = resolveScrollView() {
+                    scrollView.setContentOffset(Self.bottomOffset(of: scrollView), animated: false)
+                }
+            }
+
+            private static func bottomOffset(of scrollView: UIScrollView) -> CGPoint {
+                CGPoint(
+                    x: 0,
+                    y: scrollView.contentSize.height - scrollView.bounds.height + scrollView.adjustedContentInset.bottom
+                )
+            }
+
+            private static func offsetIsAtBottom(_ scrollView: UIScrollView) -> Bool {
+                scrollView.contentOffset.y >= Self.bottomOffset(of: scrollView).y - 1
+            }
+
+            /// The follower sits in an overlay next to the list's scroll view:
             /// walk up, then search the ancestor's subtree downwards.
             private func resolveScrollView() -> UIScrollView? {
                 func search(_ view: UIView) -> UIScrollView? {
@@ -382,21 +415,25 @@ private struct LogScrollPositionKeeper: View {
         }
     }
     #else
-    private struct AppKitKeeper: NSViewRepresentable {
-        func makeNSView(context: Context) -> NSView {
-            KeeperView()
+    private struct AppKitFollower: NSViewRepresentable {
+        let followRequest: Int
+
+        func makeNSView(context: Context) -> FollowerView {
+            FollowerView()
         }
 
-        func updateNSView(_ nsView: NSView, context: Context) {}
+        func updateNSView(_ nsView: FollowerView, context: Context) {
+            nsView.handleFollowRequest(followRequest)
+        }
 
-        private final class KeeperView: NSView {
+        fileprivate final class FollowerView: NSView {
             private var offsetObserver: NSObjectProtocol?
             private var frameObserver: NSObjectProtocol?
-            private var lastContentHeight: CGFloat = 0
-            private var isAtTop = true
+            private var isAtBottom = true
+            private var handledFollowRequest = 0
 
             override init(frame frameRect: NSRect) {
-                super.init(frame: .zero)
+                super.init(frame: frameRect)
             }
 
             @available(*, unavailable)
@@ -415,34 +452,48 @@ private struct LogScrollPositionKeeper: View {
                 guard frameObserver == nil,
                       let scrollView = resolveScrollView(),
                       let document = scrollView.documentView else { return }
-                lastContentHeight = document.frame.height
-                document.postsFrameChangedNotifications = true
+                // Open pinned to the latest entries.
+                Self.scrollToBottom(scrollView)
                 let clip = scrollView.contentView
                 clip.postsBoundsChangedNotifications = true
                 offsetObserver = NotificationCenter.default.addObserver(
                     forName: NSView.boundsDidChangeNotification, object: clip, queue: .main
                 ) { [weak self, weak scrollView] _ in
-                    guard let scrollView else { return }
-                    self?.isAtTop = scrollView.contentView.bounds.origin.y <= -scrollView.contentInsets.top + 1
+                    guard let self, let scrollView else { return }
+                    self.isAtBottom = Self.offsetIsAtBottom(scrollView)
                 }
+                document.postsFrameChangedNotifications = true
                 frameObserver = NotificationCenter.default.addObserver(
                     forName: NSView.frameDidChangeNotification, object: document, queue: .main
                 ) { [weak self, weak scrollView] _ in
-                    guard let self, let scrollView, let document = scrollView.documentView else { return }
-                    let newHeight = document.frame.height
-                    let growth = newHeight - self.lastContentHeight
-                    self.lastContentHeight = newHeight
-                    guard growth > 0 else { return }
-                    let clip = scrollView.contentView
-                    let targetY = self.isAtTop
-                        ? -scrollView.contentInsets.top
-                        : clip.bounds.origin.y + growth
-                    clip.scroll(to: CGPoint(x: 0, y: targetY))
-                    scrollView.reflectScrolledClipView(clip)
+                    guard let self, let scrollView, self.isAtBottom else { return }
+                    Self.scrollToBottom(scrollView)
                 }
             }
 
-            /// The keeper sits in an overlay next to the list's scroll view:
+            func handleFollowRequest(_ request: Int) {
+                guard request != handledFollowRequest else { return }
+                handledFollowRequest = request
+                isAtBottom = true
+                if let scrollView = resolveScrollView() {
+                    Self.scrollToBottom(scrollView)
+                }
+            }
+
+            private static func scrollToBottom(_ scrollView: NSScrollView) {
+                guard let document = scrollView.documentView else { return }
+                let clip = scrollView.contentView
+                clip.scroll(to: CGPoint(x: 0, y: document.frame.height - clip.bounds.height))
+                scrollView.reflectScrolledClipView(clip)
+            }
+
+            private static func offsetIsAtBottom(_ scrollView: NSScrollView) -> Bool {
+                guard let document = scrollView.documentView else { return true }
+                let clip = scrollView.contentView
+                return clip.bounds.origin.y >= document.frame.height - clip.bounds.height - 1
+            }
+
+            /// The follower sits in an overlay next to the list's scroll view:
             /// walk up, then search each ancestor's subtree downwards (never
             /// the whole window — the sidebar has its own scroll view).
             private func resolveScrollView() -> NSScrollView? {

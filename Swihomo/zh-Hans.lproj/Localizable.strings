@@ -315,6 +315,7 @@
 "logs.empty.description" = "应用和 mihomo 核心事件会显示在这里";
 "logs.search" = "搜索模块, 消息或级别";
 "logs.clearLogs" = "清除日志";
+"logs.returnToBottom" = "返回底部";
 "logs.clearLogs.confirmationTitle" = "清除日志？";
 "logs.clearLogs.description" = "选择要永久删除的日志";
 "logs.clearApp" = "清除应用日志";
