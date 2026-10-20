@@ -68,8 +68,8 @@ struct DetailPageHost: NSViewControllerRepresentable {
     @EnvironmentObject private var drill: ConnectionDrill
     // Hosting controllers do NOT inherit the SwiftUI environment on their own;
     // capture it whole (EnvironmentObject included) and hand it to the
-    // controller, which re-applies it per page — without this, a theme switch
-    // never reaches an already-cached page.
+    // controller, which re-applies it per page when it changed — without this,
+    // a theme switch never reaches an already-cached page.
     @Environment(\.self) private var environment
 
     func makeNSViewController(context: Context) -> LayerSwapViewController<DetailPage, AnyView> {

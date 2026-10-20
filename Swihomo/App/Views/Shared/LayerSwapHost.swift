@@ -50,19 +50,72 @@ struct LayerSwapHost<Selection: Hashable, Content: View>: NSViewControllerRepres
         // own, and pages are CACHED — without this, a theme/appearance change
         // never reaches an already-built page (stale glass rendering until the
         // page is destroyed). Re-applying the root view is diffed by SwiftUI,
-        // so state survives and unchanged content costs ~nothing.
+        // so state survives; it is skipped entirely when none of the consumed
+        // environment values changed.
         controller.environment = environment
         controller.reapplyEnvironment()
         controller.show(selection, direction: direction)
     }
 }
 
+/// The environment inputs cached pages actually consume. `EnvironmentValues`
+/// is not Equatable, so the controller snapshots the concrete values whose
+/// change must reach an already-built page — appearance (theme/system dark
+/// mode), localization, and the accessibility/layout values the pages read.
+private struct LayerSwapEnvironmentSnapshot: Equatable {
+    let colorScheme: ColorScheme
+    let colorSchemeContrast: ColorSchemeContrast
+    let controlActiveState: ControlActiveState
+    let locale: Locale
+    let calendar: Calendar
+    let timeZone: TimeZone
+    let layoutDirection: LayoutDirection
+    let horizontalSizeClass: UserInterfaceSizeClass?
+    let verticalSizeClass: UserInterfaceSizeClass?
+    let displayScale: CGFloat
+    let pixelLength: CGFloat
+    let dynamicTypeSize: DynamicTypeSize
+    let legibilityWeight: LegibilityWeight?
+    let accessibilityReduceMotion: Bool
+    let accessibilityReduceTransparency: Bool
+    let accessibilityDifferentiateWithoutColor: Bool
+
+    init(_ environment: EnvironmentValues) {
+        colorScheme = environment.colorScheme
+        colorSchemeContrast = environment.colorSchemeContrast
+        controlActiveState = environment.controlActiveState
+        locale = environment.locale
+        calendar = environment.calendar
+        timeZone = environment.timeZone
+        layoutDirection = environment.layoutDirection
+        horizontalSizeClass = environment.horizontalSizeClass
+        verticalSizeClass = environment.verticalSizeClass
+        displayScale = environment.displayScale
+        pixelLength = environment.pixelLength
+        dynamicTypeSize = environment.dynamicTypeSize
+        legibilityWeight = environment.legibilityWeight
+        accessibilityReduceMotion = environment.accessibilityReduceMotion
+        accessibilityReduceTransparency = environment.accessibilityReduceTransparency
+        accessibilityDifferentiateWithoutColor = environment.accessibilityDifferentiateWithoutColor
+    }
+}
+
 final class LayerSwapViewController<Selection: Hashable, Content: View>: NSViewController {
-    var environment: EnvironmentValues?
+    var environment: EnvironmentValues? {
+        didSet {
+            // No page has been built yet, so none can hold a stale environment:
+            // start the snapshot in sync instead of re-applying once for nothing.
+            if pages.isEmpty, let environment {
+                appliedEnvironment = LayerSwapEnvironmentSnapshot(environment)
+            }
+        }
+    }
 
     private let content: (Selection) -> Content
     private(set) var selection: Selection
     private var pages: [Selection: NSHostingController<AnyView>] = [:]
+    /// Snapshot of the environment last applied to the cached pages.
+    private var appliedEnvironment: LayerSwapEnvironmentSnapshot?
     private weak var currentView: NSView?
     private weak var currentPage: NSHostingController<AnyView>?
 
@@ -277,8 +330,15 @@ final class LayerSwapViewController<Selection: Hashable, Content: View>: NSViewC
     /// Re-applies the current environment to every cached page. Hosting
     /// controllers do not observe SwiftUI environment changes; without this a
     /// theme/appearance switch would only reach pages built AFTER the change.
+    /// Reassigning every cached page's root view is only necessary when those
+    /// values actually changed — otherwise this runs on each enclosing body
+    /// evaluation (the traffic poll alone is 1–2 Hz) and re-diffs every visited
+    /// page for nothing.
     func reapplyEnvironment() {
         guard let environment else { return }
+        let snapshot = LayerSwapEnvironmentSnapshot(environment)
+        guard snapshot != appliedEnvironment else { return }
+        appliedEnvironment = snapshot
         for (selection, host) in pages {
             host.rootView = AnyView(content(selection).environment(\.self, environment))
         }

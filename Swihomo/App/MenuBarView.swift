@@ -26,38 +26,47 @@ enum MenuBarDisplay: String, CaseIterable, Identifiable {
     }
 }
 
+/// Keeps the last rendered label image so unchanged text skips measuring and drawing.
+private final class MenuBarLabelImageCache {
+    private var key: String?
+    private var image: NSImage?
+
+    func image(for key: String, render: () -> NSImage) -> NSImage {
+        if self.key == key, let image { return image }
+        let image = render()
+        self.key = key
+        self.image = image
+        return image
+    }
+}
+
 struct MenuBarLabelView: View {
-    @ObservedObject var model: AppModel
+    @ObservedObject var status: MenuBarStatus
     @AppSetting(\.menuBarDisplay) private var menuBarDisplay
+    @State private var imageCache = MenuBarLabelImageCache()
 
     private var display: MenuBarDisplay {
         menuBarDisplay
     }
 
-    @ViewBuilder
     var body: some View {
-        switch display {
-        case .icon:
-            Image(nsImage: Self.image(
-                upload: byteRate(model.trafficUploadSpeed),
-                download: byteRate(model.trafficDownloadSpeed),
-                showsText: false,
-                showsIcon: true
-            ))
-        case .speed:
-            Image(nsImage: Self.image(
-                upload: byteRate(model.trafficUploadSpeed),
-                download: byteRate(model.trafficDownloadSpeed),
-                showsText: true,
-                showsIcon: false
-            ))
-        case .iconAndSpeed:
-            Image(nsImage: Self.image(
-                upload: byteRate(model.trafficUploadSpeed),
-                download: byteRate(model.trafficDownloadSpeed),
-                showsText: true,
-                showsIcon: true
-            ))
+        Image(nsImage: cachedImage(
+            upload: byteRate(status.traffic.uploadSpeed),
+            download: byteRate(status.traffic.downloadSpeed),
+            showsText: display != .icon,
+            showsIcon: display != .speed
+        ))
+    }
+
+    private func cachedImage(
+        upload: String,
+        download: String,
+        showsText: Bool,
+        showsIcon: Bool
+    ) -> NSImage {
+        let key = "\(showsText)|\(showsIcon)|\(upload)|\(download)"
+        return imageCache.image(for: key) {
+            Self.image(upload: upload, download: download, showsText: showsText, showsIcon: showsIcon)
         }
     }
 
@@ -155,15 +164,16 @@ struct MenuBarLabelView: View {
 
 struct MenuBarContentView: View {
     @EnvironmentObject private var model: AppModel
+    @ObservedObject var status: MenuBarStatus
     @Environment(\.openWindow) private var openWindow
     @AppSetting(\.menuBarDisplay) private var menuBarDisplay
 
     private var trafficSummary: String {
         let display = menuBarDisplay
         if display == .icon {
-            return "↑ \(byteRate(model.trafficUploadSpeed)) ↓ \(byteRate(model.trafficDownloadSpeed))"
+            return "↑ \(byteRate(status.traffic.uploadSpeed)) ↓ \(byteRate(status.traffic.downloadSpeed))"
         }
-        return "↑ \(byteCount(model.trafficUploadTotal)) ↓ \(byteCount(model.trafficDownloadTotal))"
+        return "↑ \(byteCount(status.traffic.uploadTotal)) ↓ \(byteCount(status.traffic.downloadTotal))"
     }
 
     var body: some View {

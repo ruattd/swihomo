@@ -16,14 +16,12 @@ final class AppModel: ObservableObject {
     @Published private(set) var externalResources: [ExternalResource] = []
     @Published private(set) var updatingExternalResourceIDs: Set<String> = []
     @Published private(set) var connectionActivities: [MihomoConnectionActivity] = []
-    @Published private(set) var trafficUploadSpeed: Int64 = 0
-    @Published private(set) var trafficDownloadSpeed: Int64 = 0
-    @Published private(set) var trafficUploadTotal: Int64 = 0
-    @Published private(set) var trafficDownloadTotal: Int64 = 0
     @Published private(set) var closingConnectionIDs: Set<String> = []
     @Published private(set) var isClosingAllConnections = false
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
+
+    let menuBarStatus = MenuBarStatus()
 
     private let profiles = SharedProfileRepository()
     private let tunnel = TunnelController()
@@ -59,10 +57,12 @@ final class AppModel: ObservableObject {
             logEntries = demo.logEntries
             externalResources = demo.externalResources
             connectionActivities = demo.connectionActivities
-            trafficUploadSpeed = demo.trafficUploadSpeed
-            trafficDownloadSpeed = demo.trafficDownloadSpeed
-            trafficUploadTotal = demo.trafficUploadTotal
-            trafficDownloadTotal = demo.trafficDownloadTotal
+            menuBarStatus.update(traffic: MenuBarTraffic(
+                uploadSpeed: demo.trafficUploadSpeed,
+                downloadSpeed: demo.trafficDownloadSpeed,
+                uploadTotal: demo.trafficUploadTotal,
+                downloadTotal: demo.trafficDownloadTotal
+            ))
             demoProfileContents = demo.profileContents
             demoResourceContents = demo.resourceContents
             recordOriginalProxyOrder(demo.proxyGroups)
@@ -1018,10 +1018,7 @@ final class AppModel: ObservableObject {
     private func stopTrafficStream() {
         trafficStreamTask?.cancel()
         trafficStreamTask = nil
-        trafficUploadSpeed = 0
-        trafficDownloadSpeed = 0
-        trafficUploadTotal = 0
-        trafficDownloadTotal = 0
+        menuBarStatus.reset()
     }
 
     // The /traffic stream rides the IPC stream channel — no external controller.
@@ -1030,10 +1027,12 @@ final class AppModel: ObservableObject {
         do {
             for try await frame in controller.trafficFrames() {
                 if Task.isCancelled { break }
-                trafficUploadSpeed = frame.up
-                trafficDownloadSpeed = frame.down
-                trafficUploadTotal = frame.upTotal
-                trafficDownloadTotal = frame.downTotal
+                menuBarStatus.update(traffic: MenuBarTraffic(
+                    uploadSpeed: frame.up,
+                    downloadSpeed: frame.down,
+                    uploadTotal: frame.upTotal,
+                    downloadTotal: frame.downTotal
+                ))
             }
         } catch {
             // The stream drops when the core restarts; the outer loop reconnects.
@@ -1483,4 +1482,27 @@ private struct ProfileOverrideError: LocalizedError {
     }
 
     var errorDescription: String? { message }
+}
+
+struct MenuBarTraffic: Equatable {
+    var uploadSpeed: Int64 = 0
+    var downloadSpeed: Int64 = 0
+    var uploadTotal: Int64 = 0
+    var downloadTotal: Int64 = 0
+}
+
+/// Holds only the traffic values the menu bar shows, so its label and menu
+/// content do not re-render on unrelated `AppModel` changes.
+@MainActor
+final class MenuBarStatus: ObservableObject {
+    @Published private(set) var traffic = MenuBarTraffic()
+
+    func update(traffic: MenuBarTraffic) {
+        guard self.traffic != traffic else { return }
+        self.traffic = traffic
+    }
+
+    func reset() {
+        update(traffic: MenuBarTraffic())
+    }
 }

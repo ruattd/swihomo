@@ -48,11 +48,11 @@ struct SwihomoApp: App {
         .defaultSize(width: 956, height: 680)
 
         MenuBarExtra(isInserted: $showsMenuBar) {
-            MenuBarContentView()
+            MenuBarContentView(status: model.menuBarStatus)
                 .environmentObject(model)
                 .environment(\.locale, language.locale)
         } label: {
-            MenuBarLabelView(model: model)
+            MenuBarLabelView(status: model.menuBarStatus)
         }
         #else
         WindowGroup {
