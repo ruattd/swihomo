@@ -220,6 +220,7 @@
 "profiles.saveChanges" = "Save Changes";
 "profiles.add" = "Add Profile";
 "profiles.updated" = "Updated ";
+"profiles.updatedUnknown" = "Updated —";
 "profiles.source.local" = "Local";
 "profiles.source.online" = "Online";
 "profiles.detail.importedConfiguration" = "Imported configuration";
@@ -337,6 +338,8 @@
 "preferences.experimental.iCloudSync.description" = "Syncs data between your devices through iCloud. A content category only syncs while its switch below is on.";
 "preferences.experimental.iCloudSync.content.preferences" = "Preferences";
 "preferences.experimental.iCloudSync.content.preferences.description" = "Appearance, sorting, and behavior preferences. Network and per-device settings always stay on this device.";
+"preferences.experimental.iCloudSync.content.profiles" = "Profiles";
+"preferences.experimental.iCloudSync.content.profiles.description" = "Profile list with contents, subscription URLs, custom per-profile overrides, and runtime overrides. The controller secret and the active profile selection stay on this device.";
 "preferences.experimental.iCloudSync.deleteData" = "Delete iCloud Data";
 "preferences.experimental.iCloudSync.deleteData.description" = "Removes everything Swihomo has stored in iCloud. Data on this device is not affected.";
 "preferences.experimental.iCloudSync.deleteData.confirmationTitle" = "Delete all Swihomo data stored in iCloud?";

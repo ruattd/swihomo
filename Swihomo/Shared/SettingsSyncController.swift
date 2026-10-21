@@ -103,6 +103,7 @@ final class SettingsSyncController {
         settings.iCloudSyncPreferences = false
         settings.iCloudSyncProfiles = false
         applyRemote(settings)
+        Task { await ProfileSyncEngine.shared.deleteAllSyncedData() }
         logger.notice("Deleted all settings data from the ubiquitous key-value store.")
     }
 
@@ -141,10 +142,18 @@ final class SettingsSyncController {
                     pullPreferences(reseedMissing: true)
                 }
             }
+            notifyProfileSyncEngine()
             return
         }
 
-        guard new.iCloudSyncEnabled else { return }
+        guard new.iCloudSyncEnabled else {
+            // Master switch off: stop all sync activity, including the profile
+            // engine. Content switches keep their values.
+            if old.iCloudSyncEnabled {
+                notifyProfileSyncEngine()
+            }
+            return
+        }
 
         if new.iCloudSyncPreferences != old.iCloudSyncPreferences
             || new.iCloudSyncProfiles != old.iCloudSyncProfiles {
@@ -160,6 +169,8 @@ final class SettingsSyncController {
                 pushChangedPreferences(new: new, old: old)
             }
         }
+
+        notifyProfileSyncEngine()
     }
 
     private func pushConfiguration(_ settings: Settings) {
@@ -227,14 +238,23 @@ final class SettingsSyncController {
             settings.iCloudSyncProfiles = value
             changed = true
         }
+        var profilesSilencedByDeletion = false
         if remoteDeletionSilencesLocal, remotePreferences == nil, remoteProfiles == nil,
            settings.iCloudSyncPreferences || settings.iCloudSyncProfiles {
+            profilesSilencedByDeletion = settings.iCloudSyncProfiles
             settings.iCloudSyncPreferences = false
             settings.iCloudSyncProfiles = false
             changed = true
         }
         if changed {
             applyRemote(settings)
+        }
+        if profilesSilencedByDeletion {
+            // The remote store was wiped: the sync zone is gone too, so the
+            // engine's merge base (tagged with the deleted zone's generation)
+            // must go with it. Otherwise a later re-enable reads a stale base
+            // against a fresh zone and the engine keeps silencing itself.
+            Task { await ProfileSyncEngine.shared.remoteDataWasDeleted() }
         }
     }
 
@@ -327,6 +347,24 @@ final class SettingsSyncController {
         isApplyingRemoteChanges = true
         settingsStore.settings = settings
         isApplyingRemoteChanges = false
+        // Remote applies skip settingsDidChange (echo guard), so notify the
+        // profile engine about configuration changes explicitly.
+        notifyProfileSyncEngine()
+    }
+
+    /// Turns the profiles content switch off WITHOUT publishing the change to
+    /// KVS. Used by the profile sync engine when the remote sync zone was
+    /// deleted elsewhere: pushing here would resurrect the deleted
+    /// configuration on every peer.
+    func silenceProfilesSyncFromRemote() {
+        guard isStarted, let settingsStore, settingsStore.settings.iCloudSyncProfiles else { return }
+        var settings = settingsStore.settings
+        settings.iCloudSyncProfiles = false
+        applyRemote(settings)
+    }
+
+    private func notifyProfileSyncEngine() {
+        Task { await ProfileSyncEngine.shared.configurationDidChange() }
     }
 
     private func remoteBool(forKey key: String) -> Bool? {

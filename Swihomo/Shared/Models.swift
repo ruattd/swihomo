@@ -263,11 +263,45 @@ struct ProxyOverrides: Codable, Equatable {
     }
 }
 
-struct ClientSnapshot: Codable {
+struct ClientSnapshot: Codable, Equatable {
     var schemaVersion: Int
     var profiles: [Profile]
     var activeProfileID: UUID?
     var overrides: ProxyOverrides
+    /// Last local modification time of `overrides`; the iCloud profile sync
+    /// uses it for last-writer-wins. `.distantPast` means never recorded.
+    var overridesUpdatedAt: Date = .distantPast
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case profiles
+        case activeProfileID
+        case overrides
+        case overridesUpdatedAt
+    }
+
+    init(
+        schemaVersion: Int,
+        profiles: [Profile],
+        activeProfileID: UUID?,
+        overrides: ProxyOverrides,
+        overridesUpdatedAt: Date = .distantPast
+    ) {
+        self.schemaVersion = schemaVersion
+        self.profiles = profiles
+        self.activeProfileID = activeProfileID
+        self.overrides = overrides
+        self.overridesUpdatedAt = overridesUpdatedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        profiles = try container.decode([Profile].self, forKey: .profiles)
+        activeProfileID = try container.decodeIfPresent(UUID.self, forKey: .activeProfileID)
+        overrides = try container.decode(ProxyOverrides.self, forKey: .overrides)
+        overridesUpdatedAt = try container.decodeIfPresent(Date.self, forKey: .overridesUpdatedAt) ?? .distantPast
+    }
 
     static func empty() -> ClientSnapshot {
         ClientSnapshot(

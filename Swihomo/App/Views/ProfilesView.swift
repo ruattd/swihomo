@@ -360,7 +360,11 @@ private struct ProfileCard: View {
                 HStack(spacing: 7) {
                     Text(LocalizedStringKey(profile.source.localizationKey))
                         .textCase(.uppercase)
-                    Text("profiles.updated") + Text(profile.updatedAt, format: .dateTime.month().day().hour().minute())
+                    if profile.updatedAt == .distantPast {
+                        Text("profiles.updatedUnknown")
+                    } else {
+                        Text("profiles.updated") + Text(profile.updatedAt, format: .dateTime.month().day().hour().minute())
+                    }
                 }
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)

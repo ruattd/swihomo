@@ -2,6 +2,16 @@ import Foundation
 import os.log
 import Darwin
 
+extension Date {
+    /// Whole-second timestamp for sync-comparable modification times. CloudKit
+    /// date fields keep roughly millisecond precision and the manifest's
+    /// ISO8601 encoding keeps seconds, so finer values would compare unequal
+    /// after a round trip and cause perpetual re-upload churn.
+    static var syncComparableNow: Date {
+        Date(timeIntervalSince1970: Date.now.timeIntervalSince1970.rounded())
+    }
+}
+
 actor SharedProfileRepository {
     private let fileManager = FileManager.default
     private let logger: Logger
@@ -17,6 +27,16 @@ actor SharedProfileRepository {
     private var profileContentsByID: [UUID: String] = [:]
     private var profileFileURLs: [UUID: URL] = [:]
     private var pendingInitializationError: Error? = nil
+
+    /// Fired synchronously after every successful manifest save, except saves
+    /// originating from `applySyncedChanges` (which sets the suppress flag so
+    /// remote-applied state never echoes back to the sync engine).
+    private var snapshotSaveObserver: (@Sendable (ClientSnapshot) -> Void)?
+    private var suppressSaveObserver = false
+
+    func setSnapshotSaveObserver(_ observer: (@Sendable (ClientSnapshot) -> Void)?) {
+        snapshotSaveObserver = observer
+    }
 
     private struct DownloadedProfile {
         let contents: String
@@ -152,7 +172,7 @@ actor SharedProfileRepository {
             throw ClientError.missingProfile
         }
 
-        let now = Date.now
+        let now = Date.syncComparableNow
         profileContentsByID[id] = downloadedProfile.contents
         snapshot.profiles[index].updatedAt = now
         snapshot.profiles[index].lastFetchedAt = now
@@ -179,7 +199,7 @@ actor SharedProfileRepository {
         snapshot.profiles[index].name = trimmedName.isEmpty ? remoteURL.host ?? "Online Profile" : trimmedName
         snapshot.profiles[index].remoteURL = remoteURL
         snapshot.profiles[index].customUserAgent = trimmedUserAgent?.isEmpty == false ? trimmedUserAgent : nil
-        snapshot.profiles[index].updatedAt = .now
+        snapshot.profiles[index].updatedAt = .syncComparableNow
         try save(snapshot)
         return snapshot
     }
@@ -205,7 +225,7 @@ actor SharedProfileRepository {
             throw ClientError.missingProfile
         }
         profileContentsByID[id] = contents
-        snapshot.profiles[index].updatedAt = .now
+        snapshot.profiles[index].updatedAt = .syncComparableNow
         try writeProfileContents(contents, for: id)
         try save(snapshot)
         return snapshot
@@ -217,6 +237,9 @@ actor SharedProfileRepository {
             throw ClientError.missingProfile
         }
         snapshot.profiles[index].customOverridesEnabled = isEnabled
+        // Bump the modification time: sync diffing and last-writer-wins are
+        // driven by updatedAt, and override toggles change no other field.
+        snapshot.profiles[index].updatedAt = .syncComparableNow
         try save(snapshot)
         return snapshot
     }
@@ -227,8 +250,122 @@ actor SharedProfileRepository {
             throw ClientError.missingProfile
         }
         snapshot.profiles[index].customOverrideYAML = contents
+        snapshot.profiles[index].updatedAt = .syncComparableNow
         try save(snapshot)
         return snapshot
+    }
+
+    /// What applySyncedChanges actually committed, so the sync engine can
+    /// fold exactly this into its merge base. Anything skipped (stale remote
+    /// versions, raced deletions) or failed stays out of the base and is
+    /// retried on the next cycle.
+    struct SyncApplyResult {
+        var appliedUpsertIDs: Set<UUID> = []
+        var appliedDeletionIDs: Set<UUID> = []
+        var overridesApplied = false
+    }
+
+    /// Applies changes pulled from iCloud. Last-writer-wins is re-validated
+    /// here, inside the actor, so a local mutation racing the apply cannot be
+    /// clobbered by older remote state: upserts lose to a newer local
+    /// `updatedAt`, and a deletion loses when the local profile was edited
+    /// after the base version the deletion was decided against. The work is
+    /// staged on a copy and committed only after the manifest save lands, so
+    /// a throw leaves actor state and disk consistent — files this call
+    /// created are removed, and the removed profiles' files are deleted only
+    /// on success. The manifest save suppresses the save observer to avoid
+    /// echoing back to the sync engine.
+    @discardableResult
+    func applySyncedChanges(
+        upserts: [(profile: Profile, contents: String)],
+        deletions: [(id: UUID, baseUpdatedAt: Date?)],
+        overrides: (value: ProxyOverrides, updatedAt: Date)?
+    ) throws -> SyncApplyResult {
+        try ensureWritable()
+        var result = SyncApplyResult()
+        var working = snapshot
+        var workingContents = profileContentsByID
+        var workingURLs = profileFileURLs
+        var removedFiles: [URL] = []
+        // Upsert contents are staged in temp files and renamed over the
+        // finals only after the manifest save lands, so a throw never leaves
+        // a YAML file ahead of the manifest.
+        var stagedFiles: [(temporary: URL, final: URL)] = []
+
+        do {
+            for deletion in deletions {
+                guard let index = working.profiles.firstIndex(where: { $0.id == deletion.id }) else { continue }
+                if let baseUpdatedAt = deletion.baseUpdatedAt,
+                   working.profiles[index].updatedAt > baseUpdatedAt {
+                    continue
+                }
+                let id = deletion.id
+                working.profiles.removeAll { $0.id == id }
+                if working.activeProfileID == id {
+                    working.activeProfileID = nil
+                }
+                workingContents.removeValue(forKey: id)
+                if let url = workingURLs.removeValue(forKey: id) {
+                    removedFiles.append(url)
+                }
+                result.appliedDeletionIDs.insert(id)
+            }
+
+            for upsert in upserts {
+                let id = upsert.profile.id
+                if let index = working.profiles.firstIndex(where: { $0.id == id }) {
+                    guard upsert.profile.updatedAt >= working.profiles[index].updatedAt else { continue }
+                    working.profiles[index] = upsert.profile
+                } else {
+                    working.profiles.append(upsert.profile)
+                    workingURLs[id] = try canonicalConfigurationURL(for: id)
+                }
+                guard let url = workingURLs[id] else { throw ClientError.storageUnavailable }
+                let temporary = url.deletingLastPathComponent().appendingPathComponent(
+                    ".\(url.lastPathComponent).\(UUID().uuidString).tmp"
+                )
+                try ensureDirectory(url.deletingLastPathComponent())
+                try upsert.contents.write(to: temporary, atomically: true, encoding: .utf8)
+                try setPermissions(temporary, to: 0o600)
+                stagedFiles.append((temporary, url))
+                workingContents[id] = upsert.contents
+                result.appliedUpsertIDs.insert(id)
+            }
+
+            if let overrides, overrides.updatedAt > working.overridesUpdatedAt {
+                working.overrides = overrides.value
+                working.overridesUpdatedAt = overrides.updatedAt
+                result.overridesApplied = true
+            }
+
+            let changed = !result.appliedUpsertIDs.isEmpty
+                || !result.appliedDeletionIDs.isEmpty
+                || result.overridesApplied
+            if changed {
+                suppressSaveObserver = true
+                // save() consumes the flag on success; the defer covers the
+                // throw path so the next user save still notifies the engine.
+                defer { suppressSaveObserver = false }
+                try save(working)
+            }
+        } catch {
+            for staged in stagedFiles {
+                try? fileManager.removeItem(at: staged.temporary)
+            }
+            throw error
+        }
+
+        snapshot = working
+        profileContentsByID = workingContents
+        profileFileURLs = workingURLs
+        for url in removedFiles {
+            try? fileManager.removeItem(at: url)
+        }
+        for staged in stagedFiles {
+            try? fileManager.removeItem(at: staged.final)
+            try? fileManager.moveItem(at: staged.temporary, to: staged.final)
+        }
+        return result
     }
 
     func deleteProfile(_ id: UUID) throws -> ClientSnapshot {
@@ -258,6 +395,7 @@ actor SharedProfileRepository {
     func saveOverrides(_ overrides: ProxyOverrides) throws -> ClientSnapshot {
         try ensureWritable()
         snapshot.overrides = overrides
+        snapshot.overridesUpdatedAt = .syncComparableNow
         try save(snapshot)
         return snapshot
     }
@@ -286,7 +424,7 @@ actor SharedProfileRepository {
             throw ClientError.invalidProfile
         }
 
-        let now = Date.now
+        let now = Date.syncComparableNow
         let profile = Profile(
             id: UUID(),
             name: name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Untitled Profile" : name,
@@ -332,9 +470,10 @@ actor SharedProfileRepository {
     }
 
     private func throwPendingInitializationErrorIfNeeded() throws {
-        guard let error = pendingInitializationError else { return }
-        pendingInitializationError = nil
-        throw error
+        // Sticky on purpose: a one-shot error would let a later load proceed
+        // on the empty fallback snapshot, and profile sync would then treat
+        // every cloud copy as remotely deleted.
+        if let error = pendingInitializationError { throw error }
     }
 
     private func acquireStorageLock() {
@@ -428,7 +567,11 @@ actor SharedProfileRepository {
         var profiles: [Profile] = []
         var contentsByID: [UUID: String] = [:]
         var fileURLsByID: [UUID: URL] = [:]
-        let now = Date.now
+        // Rebuilt metadata is degraded (name falls back to the file stem,
+        // subscription info is lost), so the timestamps must lose every
+        // last-writer-wins comparison: remote copies then repair the local
+        // manifest through sync instead of the rebuild spreading to peers.
+        let stale = Date.distantPast
         for file in files {
             let contents = try String(contentsOf: file, encoding: .utf8)
             let stem = file.deletingPathExtension().lastPathComponent
@@ -439,8 +582,8 @@ actor SharedProfileRepository {
                 source: .local,
                 remoteURL: nil,
                 customUserAgent: nil,
-                createdAt: now,
-                updatedAt: now,
+                createdAt: stale,
+                updatedAt: stale,
                 lastFetchedAt: nil,
                 subscriptionInfo: nil
             )
@@ -556,6 +699,12 @@ actor SharedProfileRepository {
         try atomicWrite(data, to: manifest)
         let backup = try backupManifestURL()
         try atomicWrite(data, to: backup)
+
+        if suppressSaveObserver {
+            suppressSaveObserver = false
+        } else {
+            snapshotSaveObserver?(snapshot)
+        }
     }
 
     private func atomicWrite(_ data: Data, to destination: URL) throws {

@@ -24,6 +24,7 @@ final class AppModel: ObservableObject {
     let menuBarStatus = MenuBarStatus()
 
     private let profiles = SharedProfileRepository()
+    private var profileSyncObserver: NSObjectProtocol?
     private let tunnel = TunnelController()
     private lazy var controller = MihomoControllerClient(tunnel: tunnel)
     private let screenshotDemoMode: Bool
@@ -166,6 +167,20 @@ final class AppModel: ObservableObject {
         defer { isLoading = false }
         do {
             snapshot = try await profiles.loadSnapshot()
+            await ProfileSyncEngine.shared.start(repository: profiles)
+            if profileSyncObserver == nil {
+                profileSyncObserver = NotificationCenter.default.addObserver(
+                    forName: .profileSyncDidApplyRemoteChanges,
+                    object: nil,
+                    queue: nil
+                ) { [weak self] _ in
+                    Task { @MainActor in
+                        guard let self, !self.screenshotDemoMode,
+                              let updated = try? await self.profiles.loadSnapshot() else { return }
+                        self.snapshot = updated
+                    }
+                }
+            }
             try await tunnel.prepare()
             tunnelStatus = tunnel.status
             if tunnelStatus == .connected, isConnectionMonitoringEnabled {

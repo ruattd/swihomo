@@ -16,6 +16,7 @@ struct PreferencesView: View {
     @AppSetting(\.delayTestMaxConcurrency) private var delayTestMaxConcurrency
     @AppSetting(\.iCloudSyncEnabled) private var iCloudSyncEnabled
     @AppSetting(\.iCloudSyncPreferences) private var iCloudSyncPreferences
+    @AppSetting(\.iCloudSyncProfiles) private var iCloudSyncProfiles
     @State private var showingDeleteICloudDataConfirmation = false
     @AppSetting(\.autoCollapseProxyGroups) private var autoCollapseProxyGroups
     @AppSetting(\.subscriptionInfoDisplay) private var subscriptionInfoDisplay
@@ -214,6 +215,14 @@ struct PreferencesView: View {
                     description: Text("preferences.experimental.iCloudSync.content.preferences.description")
                 ) {
                     Toggle("preferences.experimental.iCloudSync.content.preferences", isOn: $iCloudSyncPreferences)
+                        .labelsHidden()
+                }
+
+                PreferenceRow(
+                    title: Text("preferences.experimental.iCloudSync.content.profiles"),
+                    description: Text("preferences.experimental.iCloudSync.content.profiles.description")
+                ) {
+                    Toggle("preferences.experimental.iCloudSync.content.profiles", isOn: $iCloudSyncProfiles)
                         .labelsHidden()
                 }
 
