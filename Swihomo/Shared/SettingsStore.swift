@@ -37,8 +37,15 @@ struct Settings: Codable, Equatable, @unchecked Sendable {
     /// Master switch for iCloud sync. Local-only: each device opts in itself,
     /// while the content category switches below sync through iCloud.
     var iCloudSyncEnabled: Bool = false
-    var iCloudSyncPreferences: Bool = false
+    /// Synced content categories (KVS-synced configuration).
+    var iCloudSyncGeneral: Bool = false
+    var iCloudSyncSorting: Bool = false
+    var iCloudSyncNetwork: Bool = false
+    var iCloudSyncExperimental: Bool = false
     var iCloudSyncProfiles: Bool = false
+    /// Global runtime overrides live in the same sync zone as profiles but
+    /// get their own switch.
+    var iCloudSyncOverrides: Bool = false
     /// Geo-data timestamps keyed by ExternalResource.id (a string, not a UUID).
     var geoDataLastUpdated: [String: Date] = [:]
 
@@ -75,8 +82,12 @@ struct Settings: Codable, Equatable, @unchecked Sendable {
         case proxyNodeSortDirection
         case pendingCoreLogClear
         case iCloudSyncEnabled
-        case iCloudSyncPreferences
+        case iCloudSyncGeneral
+        case iCloudSyncSorting
+        case iCloudSyncNetwork
+        case iCloudSyncExperimental
         case iCloudSyncProfiles
+        case iCloudSyncOverrides
         case geoDataLastUpdated
     }
 
@@ -126,8 +137,12 @@ struct Settings: Codable, Equatable, @unchecked Sendable {
         proxyNodeSortDirection = try container.decodeIfPresent(ProxySortDirection.self, forKey: .proxyNodeSortDirection) ?? .ascending
         pendingCoreLogClear = try container.decodeIfPresent(Bool.self, forKey: .pendingCoreLogClear) ?? false
         iCloudSyncEnabled = try container.decodeIfPresent(Bool.self, forKey: .iCloudSyncEnabled) ?? false
-        iCloudSyncPreferences = try container.decodeIfPresent(Bool.self, forKey: .iCloudSyncPreferences) ?? false
+        iCloudSyncGeneral = try container.decodeIfPresent(Bool.self, forKey: .iCloudSyncGeneral) ?? false
+        iCloudSyncSorting = try container.decodeIfPresent(Bool.self, forKey: .iCloudSyncSorting) ?? false
+        iCloudSyncNetwork = try container.decodeIfPresent(Bool.self, forKey: .iCloudSyncNetwork) ?? false
+        iCloudSyncExperimental = try container.decodeIfPresent(Bool.self, forKey: .iCloudSyncExperimental) ?? false
         iCloudSyncProfiles = try container.decodeIfPresent(Bool.self, forKey: .iCloudSyncProfiles) ?? false
+        iCloudSyncOverrides = try container.decodeIfPresent(Bool.self, forKey: .iCloudSyncOverrides) ?? false
         geoDataLastUpdated = try container.decodeIfPresent([String: Date].self, forKey: .geoDataLastUpdated) ?? [:]
     }
 }

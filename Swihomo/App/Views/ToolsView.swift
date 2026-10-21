@@ -7,33 +7,41 @@ struct Tool: Identifiable {
     let icon: String
 
     static let placeholderTools: [Tool] = [
+        Tool(id: "icloudSync", titleKey: "tools.iCloudSync", icon: "icloud"),
         Tool(id: "speedTest", titleKey: "tools.speedTest", icon: "speedometer"),
         Tool(id: "ping", titleKey: "tools.ping", icon: "dot.radiowaves.right"),
         Tool(id: "dnsLookup", titleKey: "tools.dnsLookup", icon: "magnifyingglass"),
     ]
+
+    /// Detail page for a tool id, shared by the macOS detail-column page host
+    /// and the iOS typed-stack destinations.
+    @ViewBuilder
+    static func detailView(id: String) -> some View {
+        if id == "icloudSync" {
+            ICloudSyncSettingsView()
+        } else if let tool = placeholderTools.first(where: { $0.id == id }) {
+            ToolPlaceholderView(tool: tool)
+        }
+    }
 }
 
-// iOS pushes this onto the enclosing typed stack (the iPad sidebar column's
-// own stack, or the compact layout's outer stack), so the system owns the
-// push animation, back button, and pop state. macOS has no usable sidebar
-// push — a NavigationStack inside the split view's sidebar column renders
-// broken inline chrome (back chevron under the titlebar, the title squeezed
-// in between) — so there ContentView swaps the column's content through
-// LayerSwapHost (GPU-side layer animation), and this view renders its own
-// header.
+// Wide layouts (macOS, iPad) never push tool pages inside the sidebar
+// column — macOS has no usable sidebar push (a NavigationStack there renders
+// broken inline chrome), and on both the tool page belongs in the detail
+// column. Tool taps therefore hand the selection to the container through
+// onSelectTool: ContentView swaps the macOS detail page / iPad detail
+// column, while the compact iPhone layout pushes onto its outer typed stack
+// (the system owns the push animation, back button, and pop state).
 struct ToolsView: View {
     /// macOS only: closes the drill-in and restores the home grid. Nil when the
     /// view is rendered as a detail-column page (FeatureDetailView needs the
     /// case for switch exhaustiveness, but macOS never selects .tools there).
     let onClose: (() -> Void)?
 
-    #if os(macOS)
-    @State private var selectedTool: Tool?
-    #endif
-    /// iOS only: pushes a tool sub-page onto the enclosing typed stack.
-    /// Threaded explicitly — custom environment values do not reliably reach
-    /// navigationDestination content (probed: row taps no-op'd). Unused on
-    /// macOS, where tool selection is internal state.
+    /// Tool tap handler. Wide layouts drive their detail column with it; the
+    /// compact iPhone layout pushes onto the enclosing typed stack. Threaded
+    /// explicitly — custom environment values do not reliably reach
+    /// navigationDestination content (probed: row taps no-op'd).
     let onSelectTool: ((Tool) -> Void)?
 
     init(onClose: (() -> Void)? = nil, onSelectTool: ((Tool) -> Void)? = nil) {
@@ -43,15 +51,7 @@ struct ToolsView: View {
 
     var body: some View {
         #if os(macOS)
-        // Sub-page swap runs in the same layer host as the outer drill-in:
-        // GPU-side animation, no re-rasterization of the glass rows.
-        LayerSwapHost(selection: selectedTool?.id, direction: selectedTool != nil ? .push : .pop) { toolID in
-            if let toolID, let tool = Tool.placeholderTools.first(where: { $0.id == toolID }) {
-                ToolPlaceholderView(tool: tool, onBack: { selectedTool = nil })
-            } else {
-                toolsList
-            }
-        }
+        toolsList
         #else
         // Card rows match the first-level grid. Taps push onto the enclosing
         // typed stack via the explicitly threaded pusher — plain links inside
@@ -82,7 +82,7 @@ struct ToolsView: View {
 
                 ForEach(Tool.placeholderTools) { tool in
                     Button {
-                        selectedTool = tool
+                        onSelectTool?(tool)
                     } label: {
                         ToolRow(tool: tool)
                     }
@@ -99,7 +99,7 @@ struct ToolsView: View {
 }
 
 #if os(macOS)
-/// In-content page header for sidebar drill-ins: glass back button + title,
+/// In-content header of the tools list itself: glass back button + title,
 /// matching HomeView's in-content header slot.
 private struct ToolsPageHeader: View {
     let titleKey: LocalizedStringKey
@@ -153,30 +153,15 @@ private struct ToolRow: View {
 
 struct ToolPlaceholderView: View {
     let tool: Tool
-    /// macOS only: pops back to the tools list. Nil = rendered inside a
-    /// navigation stack (iOS), where the system back button handles it.
-    var onBack: (() -> Void)? = nil
 
+    // Chrome (title, back) is owned by the hosting container on every
+    // platform: the macOS detail column and the iOS navigation stacks.
     var body: some View {
-        #if os(macOS)
-        VStack(alignment: .leading, spacing: 12) {
-            ToolsPageHeader(titleKey: tool.titleKey, onBack: onBack)
-            ContentUnavailableView {
-                Label(tool.titleKey, systemImage: tool.icon)
-            } description: {
-                Text("tools.placeholder")
-            }
-            .frame(maxHeight: .infinity)
-        }
-        .padding()
-        .padding(.trailing, 4)
-        #else
         ContentUnavailableView {
             Label(tool.titleKey, systemImage: tool.icon)
         } description: {
             Text("tools.placeholder")
         }
-        .navigationTitle(tool.titleKey)
-        #endif
+        .detailPageTitle(tool.titleKey)
     }
 }

@@ -50,10 +50,12 @@ final class ConnectionDrill: ObservableObject {
     @Published var activity: MihomoConnectionActivity?
 }
 
-/// Detail-column page identity: a home section, or the connection drill-in.
+/// Detail-column page identity: a home section, the connection drill-in, or
+/// a tool page (by Tool.id — Tool itself is not Hashable).
 enum DetailPage: Hashable {
     case section(HomeSection)
     case connectionDetail(MihomoConnectionActivity)
+    case tool(String)
 }
 
 /// Detail-column page host on top of LayerSwapViewController: the container's
@@ -86,15 +88,17 @@ struct DetailPageHost: NSViewControllerRepresentable {
         controller.show(page, direction: direction(to: page, from: controller.selection))
     }
 
-    /// Push when drilling into a connection; pop only when returning to the
-    /// drill's own list — jumping straight to another section is a plain page
-    /// switch.
+    /// Push when drilling into a connection or a tool; pop when returning to
+    /// the drill's own list or leaving a tool — jumping straight to another
+    /// section is a plain page switch.
     private func direction(to newPage: DetailPage, from oldPage: DetailPage) -> LayerSwapDirection {
         switch (oldPage, newPage) {
-        case (.section, .connectionDetail):
+        case (.section, .connectionDetail), (.section, .tool):
             .push
         case (.connectionDetail, .section(let section)):
             section == .connection ? .pop : .neutral
+        case (.tool, .section):
+            .pop
         default:
             .neutral
         }
@@ -107,6 +111,8 @@ struct DetailPageHost: NSViewControllerRepresentable {
             content = AnyView(FeatureDetailView(section: section))
         case .connectionDetail(let activity):
             content = AnyView(ConnectionDetailView(activity: activity))
+        case .tool(let id):
+            content = AnyView(Tool.detailView(id: id))
         }
         return content
             .environmentObject(model)

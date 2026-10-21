@@ -20,12 +20,16 @@ struct ContentView: View {
     // macOS navigates by swapping the detail column; pushing destinations inside
     // the sidebar column tears down the whole home grid on every page switch.
     @State private var activeSection: HomeSection = .connection
-    // Tools is the exception: it drills into the sidebar column on purpose, so
-    // its sub-pages live in the left column instead of the detail page host.
-    // A NavigationStack inside the sidebar column renders broken inline chrome
-    // (back chevron under the titlebar, title squeezed in between), so the
-    // drill-in is a manual swap with directional transitions instead.
+    // Tools is the exception: it drills into the sidebar column on purpose (a
+    // NavigationStack inside the sidebar column renders broken inline chrome
+    // — back chevron under the titlebar, title squeezed in between — so the
+    // drill-in is a manual swap with directional transitions). Its sub-pages
+    // are NOT sidebar content though: the selected tool drives the detail
+    // column like any other page.
     @State private var toolsPresented = false
+    /// Selected tool; drives the detail column while the tools drill-in owns
+    /// the sidebar. Cleared when the drill-in closes or the section changes.
+    @State private var selectedTool: Tool?
     // One stable window chrome; pages register their toolbar/search content here.
     @StateObject private var detailChrome = DetailChrome()
     // Connection drill-in: a container-level page, so the window chrome swaps too.
@@ -47,6 +51,10 @@ struct ContentView: View {
     /// Selected detail-column section on regular width (iPad); the compact
     /// layout pushes sections onto the outer stack instead.
     @State private var selectedSection: HomeSection = .connection
+    /// Selected tool on regular width (iPad); drives the detail column while
+    /// the tools drill-in owns the sidebar stack. The compact layout pushes
+    /// tool pages onto its outer stack instead.
+    @State private var selectedTool: Tool?
     #endif
 
     var body: some View {
@@ -144,7 +152,8 @@ struct ContentView: View {
                 routeDestination(
                     route,
                     push: { compactPath.append($0) },
-                    pop: { compactPath.removeLast() }
+                    pop: { compactPath.removeLast() },
+                    onSelectTool: { compactPath.append(.tool($0.id)) }
                 )
             }
         }
@@ -157,25 +166,27 @@ struct ContentView: View {
     /// Single destination builder shared by both typed stacks (the compact
     /// layout's outer stack and the iPad sidebar column's stack): section,
     /// tool, and editor routes all ride their stack's single `for:` destination.
-    /// The push and pop closures are threaded EXPLICITLY — custom environment
-    /// values do not reliably reach navigationDestination content (probed).
+    /// The closures are threaded EXPLICITLY — custom environment values do not
+    /// reliably reach navigationDestination content (probed). Tool taps leave
+    /// the stack entirely on iPad (they drive the detail column), so the tool
+    /// handler is a separate closure from push/pop.
     @ViewBuilder
     private func routeDestination(
         _ route: CompactRoute,
         push: @escaping (CompactRoute) -> Void,
-        pop: @escaping () -> Void
+        pop: @escaping () -> Void,
+        onSelectTool: @escaping (Tool) -> Void
     ) -> some View {
         switch route {
         case .section(.tools):
-            ToolsView(onSelectTool: { push(.tool($0.id)) })
+            ToolsView(onSelectTool: onSelectTool)
         case .section(let section):
             FeatureDetailView(section: section)
         case .connection(let activity):
             ConnectionDetailView(activity: activity)
         case .tool(let id):
-            if let tool = Tool.placeholderTools.first(where: { $0.id == id }) {
-                ToolPlaceholderView(tool: tool)
-            }
+            // Compact layout only: iPad tool taps never push (see above).
+            Tool.detailView(id: id)
         case .remoteProfileAdd, .remoteProfileEdit, .profileContentEditor,
              .profileOverrideEditor, .qrCodeScanner:
             ProfilesView.editorDestination(route, model: model, push: push, pop: pop)
@@ -198,7 +209,7 @@ struct ContentView: View {
             // down on every switch.
             LayerSwapHost(selection: toolsPresented, direction: toolsPresented ? .push : .pop) { presented in
                 if presented {
-                    ToolsView(onClose: { toolsPresented = false })
+                    ToolsView(onClose: { toolsPresented = false }, onSelectTool: { selectedTool = $0 })
                 } else {
                     HomeView(activeSection: $activeSection, openTools: { toolsPresented = true })
                 }
@@ -216,7 +227,8 @@ struct ContentView: View {
                         routeDestination(
                             route,
                             push: { sidebarPath.append($0) },
-                            pop: { sidebarPath.removeLast() }
+                            pop: { sidebarPath.removeLast() },
+                            onSelectTool: { selectedTool = $0 }
                         )
                     }
             }
@@ -236,7 +248,7 @@ struct ContentView: View {
             let drilled = connectionDrill.activity
             let entry = detailChrome.entries[activeSection]
             NavigationStack {
-                DetailPageHost(page: drilled.map(DetailPage.connectionDetail) ?? .section(activeSection))
+                DetailPageHost(page: drilled.map(DetailPage.connectionDetail) ?? selectedTool.map { DetailPage.tool($0.id) } ?? .section(activeSection))
                     .environmentObject(detailChrome)
                     .environmentObject(connectionDrill)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -247,7 +259,7 @@ struct ContentView: View {
                     // safe area is ignored here (titlebar transparency is NOT
                     // involved — the working build has it off).
                     .ignoresSafeArea(.container, edges: .top)
-                    .navigationTitle(drilled != nil ? Text("connection.details") : Text(activeSection.titleKey))
+                    .navigationTitle(drilled != nil ? Text("connection.details") : Text(selectedTool?.titleKey ?? activeSection.titleKey))
                     .toolbar {
                         if let activity = drilled {
                             ToolbarItem(placement: .navigation) {
@@ -270,6 +282,18 @@ struct ContentView: View {
                                 }
                                 .disabled(model.closingConnectionIDs.contains(activity.id))
                             }
+                        } else if selectedTool != nil {
+                            // Tool pages borrow the drill-in chrome: a back
+                            // button that returns the detail column to the
+                            // active section, no toolbar/search content.
+                            ToolbarItem(placement: .navigation) {
+                                Button {
+                                    selectedTool = nil
+                                } label: {
+                                    Image(systemName: "chevron.left")
+                                }
+                                .help(Text("common.back"))
+                            }
                         } else {
                             if let toolbar = entry?.toolbar {
                                 ToolbarItemGroup(placement: .primaryAction) {
@@ -289,17 +313,38 @@ struct ContentView: View {
                         }
                     }
             }
-            // Leaving the section exits any drill-in with it.
-            .onChange(of: activeSection) { connectionDrill.activity = nil }
+            // Leaving the section exits any drill-in with it; closing the
+            // tools drill-in drops its tool page from the detail column.
+            .onChange(of: activeSection) {
+                connectionDrill.activity = nil
+                selectedTool = nil
+            }
+            .onChange(of: toolsPresented) {
+                if !toolsPresented { selectedTool = nil }
+            }
             // Monitoring follows the section on macOS: the drill-in keeps the
             // list's view off-screen, but updates must keep flowing.
             .task(id: activeSection) {
                 model.setConnectionMonitoringEnabled(activeSection == .connection)
             }
             #else
-            FeatureDetailView(section: selectedSection)
+            // Regular width: a selected tool owns the detail column until the
+            // sidebar pops out of the tools drill-in or the section changes.
+            if let tool = selectedTool {
+                Tool.detailView(id: tool.id)
+            } else {
+                FeatureDetailView(section: selectedSection)
+            }
             #endif
         }
         .navigationSplitViewStyle(.balanced)
+        #if os(iOS)
+        .onChange(of: sidebarPath) { _, newPath in
+            if !newPath.contains(.section(.tools)) { selectedTool = nil }
+        }
+        .onChange(of: selectedSection) { _, _ in
+            selectedTool = nil
+        }
+        #endif
     }
 }

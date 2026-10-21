@@ -94,6 +94,10 @@ actor ProfileSyncEngine {
     private var pollTask: Task<Void, Never>?
     private var activationObserver: NSObjectProtocol?
     private var lastObservedState: (profiles: [Profile], overrides: ProxyOverrides, overridesUpdatedAt: Date)?
+    /// Per-content switches captured when (re)configuring: profiles and the
+    /// global overrides record share the zone but sync independently.
+    private var syncsProfiles = false
+    private var syncsOverrides = false
 
     private var database: CKDatabase { container.privateCloudDatabase }
 
@@ -134,7 +138,9 @@ actor ProfileSyncEngine {
         // load but not apply changes; syncing against it would poison the
         // merge base, so the engine stays idle.
         let repositoryIsReadOnly = await repository?.isStorageReadOnly ?? true
-        let shouldSync = settings.iCloudSyncEnabled && settings.iCloudSyncProfiles && !repositoryIsReadOnly
+        syncsProfiles = settings.iCloudSyncProfiles
+        syncsOverrides = settings.iCloudSyncOverrides
+        let shouldSync = settings.iCloudSyncEnabled && (syncsProfiles || syncsOverrides) && !repositoryIsReadOnly
         if shouldSync, !isSyncing, didPrepare {
             isSyncing = true
             startPolling()
@@ -162,12 +168,15 @@ actor ProfileSyncEngine {
             try await database.deleteRecordZone(withID: zoneID)
             setPendingZoneDeletion(false, generation: nil)
             logger.notice("Deleted the iCloud profile sync zone.")
+            await recordStatus(String(localized: "icloudSync.status.dataDeleted"))
         } catch let error as CKError where error.code == .zoneNotFound {
             setPendingZoneDeletion(false, generation: nil)
             logger.notice("The iCloud profile sync zone was already gone.")
+            await recordStatus(String(localized: "icloudSync.status.dataDeleted"))
         } catch {
             setPendingZoneDeletion(true, generation: targetGeneration)
             logger.error("Unable to delete the iCloud profile sync zone (will retry): \(error.localizedDescription, privacy: .public)")
+            await recordFailure(error)
         }
     }
 
@@ -187,6 +196,7 @@ actor ProfileSyncEngine {
             let status = try await container.accountStatus()
             guard status == .available else {
                 logger.error("iCloud account is unavailable (status \(status.rawValue, privacy: .public)); profile sync stays idle.")
+                await recordStatus(String(localized: "icloudSync.status.accountUnavailable"), isError: true)
                 return
             }
 
@@ -237,6 +247,7 @@ actor ProfileSyncEngine {
             logger.notice("iCloud profile sync zone is ready.")
         } catch {
             logger.error("Unable to prepare iCloud profile sync: \(error.localizedDescription, privacy: .public)")
+            await recordFailure(error)
         }
     }
 
@@ -286,6 +297,17 @@ actor ProfileSyncEngine {
         await syncCycle()
     }
 
+    /// Records a sync event for the status line on the sync settings page.
+    private func recordStatus(_ message: String, isError: Bool = false) async {
+        await MainActor.run { SyncStatusStore.shared.record(message, isError: isError) }
+    }
+
+    /// Records a failed cycle with the underlying error's description.
+    private func recordFailure(_ error: Error) async {
+        let message = String(localized: "icloudSync.status.profilesSyncFailed")
+        await MainActor.run { SyncStatusStore.shared.recordFailure(message, error) }
+    }
+
     // MARK: - Sync cycle
 
     /// Serializes full bidirectional merge cycles. Saves arriving mid-cycle
@@ -329,16 +351,19 @@ actor ProfileSyncEngine {
                     cycleRequestedWhileBusy = true
                 } catch {
                     logger.error("Unable to recreate the iCloud profile sync zone: \(error.localizedDescription, privacy: .public)")
+                    await recordFailure(error)
                 }
             }
             return
         } catch let error as CKError where error.code == .notAuthenticated {
             logger.error("iCloud account signed out; profile sync paused.")
+            await recordStatus(String(localized: "icloudSync.status.accountUnavailable"), isError: true)
             epoch &+= 1
             stopSync()
             return
         } catch {
             logger.error("Unable to fetch iCloud profile changes: \(error.localizedDescription, privacy: .public)")
+            await recordFailure(error)
             return
         }
 
@@ -346,6 +371,7 @@ actor ProfileSyncEngine {
         // mistaken for a remote wipe; skip this cycle instead.
         if remote.zoneInfoUnreadable {
             logger.error("The iCloud sync zone info is unreadable; skipping this cycle.")
+            await recordStatus(String(localized: "icloudSync.status.profilesSyncFailed"), isError: true)
             return
         }
 
@@ -384,6 +410,7 @@ actor ProfileSyncEngine {
             local = try await repository.loadSnapshot()
         } catch {
             logger.error("Unable to read the local profile store for sync: \(error.localizedDescription, privacy: .public)")
+            await recordFailure(error)
             return
         }
         lastObservedState = (local.profiles, local.overrides, local.overridesUpdatedAt)
@@ -404,8 +431,12 @@ actor ProfileSyncEngine {
 
         // Records that are present but unreadable are unknown, not deleted:
         // exclude them from the merge and carry their base entries forward.
+        // The whole profile merge only runs under the profiles switch; the
+        // overrides record below has its own gate.
         let unreadableIDs = Set(remote.undecodableRecordNames.compactMap { UUID(uuidString: $0) })
-        let allIDs = Set(localProfiles.keys).union(remote.profiles.keys).subtracting(unreadableIDs)
+        let allIDs = syncsProfiles
+            ? Set(localProfiles.keys).union(remote.profiles.keys).subtracting(unreadableIDs)
+            : []
         for id in allIDs {
             let localProfile = localProfiles[id]
             let remoteEntry = remote.profiles[id]
@@ -468,11 +499,12 @@ actor ProfileSyncEngine {
         }
 
         // Overrides: last-writer-wins on overridesUpdatedAt, secret
-        // preserved. An unreadable remote record is unknown state, not
-        // absence: skip both directions for this cycle.
+        // preserved, and only while the overrides switch is on. An unreadable
+        // remote record is unknown state, not absence: skip both directions
+        // for this cycle.
         var overridesApply: (value: ProxyOverrides, updatedAt: Date)?
         var overridesRecord: CKRecord?
-        if !remote.overridesUnreadable {
+        if syncsOverrides, !remote.overridesUnreadable {
             if let remoteOverrides = remote.overrides, remoteOverrides.updatedAt > local.overridesUpdatedAt {
                 var value = remoteOverrides.value
                 value.controllerSecret = local.overrides.controllerSecret
@@ -498,6 +530,7 @@ actor ProfileSyncEngine {
                 )
             } catch {
                 logger.error("Unable to apply iCloud profile changes locally: \(error.localizedDescription, privacy: .public)")
+                await recordFailure(error)
             }
         }
 
@@ -518,13 +551,15 @@ actor ProfileSyncEngine {
 
         var newBase = SyncBase(
             zoneGeneration: generation,
-            profiles: [:],
+            // Profiles switch off: carry the base forward untouched so
+            // re-enabling later still knows what was synced.
+            profiles: syncsProfiles ? [:] : baseProfiles,
             overridesUpdatedAt: base?.overridesUpdatedAt
         )
-        let knownNames = Set(baseProfiles.keys)
+        let knownNames = syncsProfiles ? Set(baseProfiles.keys)
             .union(remote.profiles.keys.map { $0.uuidString })
             .union(plannedUpsertIDs.map { $0.uuidString })
-            .union(plannedDeletionIDs.map { $0.uuidString })
+            .union(plannedDeletionIDs.map { $0.uuidString }) : []
         for name in knownNames {
             guard let id = UUID(uuidString: name) else { continue }
             if appliedDeletionIDs.contains(id) {
@@ -543,7 +578,7 @@ actor ProfileSyncEngine {
         }
         // Overrides follow the same rule: advance to the remote timestamp
         // only when no pull was planned or the pull was applied.
-        if let remoteOverrides = remote.overrides,
+        if syncsOverrides, let remoteOverrides = remote.overrides,
            overridesApply == nil || applyResult?.overridesApplied == true {
             newBase.overridesUpdatedAt = remoteOverrides.updatedAt
         }
@@ -569,6 +604,7 @@ actor ProfileSyncEngine {
                         }
                     case .failure(let error):
                         logger.error("Unable to push record \(recordID.recordName, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                        await recordFailure(error)
                     }
                 }
                 for (recordID, result) in deleteResults {
@@ -577,10 +613,12 @@ actor ProfileSyncEngine {
                         newBase.profiles.removeValue(forKey: recordID.recordName)
                     case .failure(let error):
                         logger.error("Unable to delete record \(recordID.recordName, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                        await recordFailure(error)
                     }
                 }
             } catch {
                 logger.error("Unable to push merged profile changes to iCloud: \(error.localizedDescription, privacy: .public)")
+                await recordFailure(error)
             }
         }
 
@@ -591,6 +629,7 @@ actor ProfileSyncEngine {
         base = newBase
         saveBase()
 
+        await recordStatus(String(localized: "icloudSync.status.profilesSynced"))
         if applyResult != nil {
             NotificationCenter.default.post(name: .profileSyncDidApplyRemoteChanges, object: nil)
         }
@@ -604,9 +643,10 @@ actor ProfileSyncEngine {
         stopSync()
         clearBase()
         await MainActor.run {
-            SettingsSyncController.shared.silenceProfilesSyncFromRemote()
+            SettingsSyncController.shared.silenceZoneSyncFromRemote()
         }
         logger.notice("The iCloud profile data was deleted elsewhere; profile sync silenced locally.")
+        await recordStatus(String(localized: "icloudSync.status.remoteWipe"))
     }
 
     private func claimZoneGeneration() async throws -> String {

@@ -59,6 +59,8 @@
 		100000000000000000000057 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000057 /* SettingsStore.swift */; };
 		100000000000000000000058 /* SettingsSyncController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000058 /* SettingsSyncController.swift */; };
 		100000000000000000000059 /* ProfileSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000059 /* ProfileSyncEngine.swift */; };
+		100000000000000000000061 /* SyncStatusStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000061 /* SyncStatusStore.swift */; };
+		100000000000000000000060 /* ICloudSyncSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000060 /* ICloudSyncSettingsView.swift */; };
 		D000000000000000000000001 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = D000000000000000000000003 /* Yams */; };
 		D000000000000000000000004 /* CodeEditorView in Frameworks */ = {isa = PBXBuildFile; productRef = D000000000000000000000006 /* CodeEditorView */; };
 		D000000000000000000000005 /* LanguageSupport in Frameworks */ = {isa = PBXBuildFile; productRef = D000000000000000000000007 /* LanguageSupport */; };
@@ -142,7 +144,9 @@
 		200000000000000000000052 /* ScreenshotDemoFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotDemoFixtures.swift; sourceTree = "<group>"; };
 		200000000000000000000057 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
 		200000000000000000000058 /* SettingsSyncController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSyncController.swift; sourceTree = "<group>"; };
+		200000000000000000000061 /* SyncStatusStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncStatusStore.swift; sourceTree = "<group>"; };
 		200000000000000000000059 /* ProfileSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSyncEngine.swift; sourceTree = "<group>"; };
+		200000000000000000000060 /* ICloudSyncSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICloudSyncSettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -215,6 +219,7 @@
 				200000000000000000000004 /* Models.swift */,
 				200000000000000000000057 /* SettingsStore.swift */,
 				200000000000000000000058 /* SettingsSyncController.swift */,
+				200000000000000000000061 /* SyncStatusStore.swift */,
 				200000000000000000000006 /* ProfileStore.swift */,
 				200000000000000000000007 /* MihomoConfiguration.swift */,
 				200000000000000000000021 /* PersistentLogStore.swift */,
@@ -286,6 +291,7 @@
 				200000000000000000000042 /* ExternalResourcesView.swift */,
 				200000000000000000000043 /* LogsView.swift */,
 				200000000000000000000055 /* ToolsView.swift */,
+				200000000000000000000060 /* ICloudSyncSettingsView.swift */,
 				400000000000000000000012 /* Shared */,
 			);
 			path = Views;
@@ -497,12 +503,14 @@
 				100000000000000000000054 /* DetailPageHost.swift in Sources */,
 				100000000000000000000056 /* LayerSwapHost.swift in Sources */,
 				100000000000000000000055 /* ToolsView.swift in Sources */,
+				100000000000000000000060 /* ICloudSyncSettingsView.swift in Sources */,
 				100000000000000000000050 /* ThemeOptionCard.swift in Sources */,
 				100000000000000000000051 /* QRCodeScannerSheet.swift in Sources */,
 				100000000000000000000003 /* AppModel.swift in Sources */,
 				100000000000000000000004 /* Models.swift in Sources */,
 				100000000000000000000057 /* SettingsStore.swift in Sources */,
 				100000000000000000000058 /* SettingsSyncController.swift in Sources */,
+				100000000000000000000061 /* SyncStatusStore.swift in Sources */,
 				100000000000000000000006 /* ProfileStore.swift in Sources */,
 				100000000000000000000007 /* MihomoConfiguration.swift in Sources */,
 				100000000000000000000008 /* TunnelController.swift in Sources */,
