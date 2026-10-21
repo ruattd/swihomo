@@ -333,3 +333,11 @@
 "preferences.experimental.realtimeDelayTest" = "实时延迟测试";
 "preferences.experimental.realtimeDelayTest.description" = "逐个测试节点并实时更新结果卡片, 关闭时组测速使用统一的组 API, 失败的节点一律视为错误";
 "preferences.experimental.delayTestConcurrency.description" = "限制组测速时同时测试的节点数量, 过大的数量容易造成内存压力";
+"preferences.experimental.iCloudSync" = "iCloud 同步";
+"preferences.experimental.iCloudSync.description" = "通过 iCloud 在你的设备之间同步数据, 仅当下方对应分类开关打开时才会同步该分类的内容";
+"preferences.experimental.iCloudSync.content.preferences" = "偏好设置";
+"preferences.experimental.iCloudSync.content.preferences.description" = "外观, 排序与行为偏好, 网络与设备相关的设置始终保留在本机";
+"preferences.experimental.iCloudSync.deleteData" = "删除 iCloud 数据";
+"preferences.experimental.iCloudSync.deleteData.description" = "移除 Swihomo 存储在 iCloud 中的全部内容, 不会影响本机数据";
+"preferences.experimental.iCloudSync.deleteData.confirmationTitle" = "删除 iCloud 中的所有 Swihomo 数据?";
+"preferences.experimental.iCloudSync.deleteData.confirmationMessage" = "将永久删除 iCloud 中所有已同步的内容, 本机数据会保留";

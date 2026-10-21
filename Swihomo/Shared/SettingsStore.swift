@@ -34,6 +34,11 @@ struct Settings: Codable, Equatable, @unchecked Sendable {
     var proxyNodeSortCriterion: ProxyNodeSortCriterion = .original
     var proxyNodeSortDirection: ProxySortDirection = .ascending
     var pendingCoreLogClear: Bool = false
+    /// Master switch for iCloud sync. Local-only: each device opts in itself,
+    /// while the content category switches below sync through iCloud.
+    var iCloudSyncEnabled: Bool = false
+    var iCloudSyncPreferences: Bool = false
+    var iCloudSyncProfiles: Bool = false
     /// Geo-data timestamps keyed by ExternalResource.id (a string, not a UUID).
     var geoDataLastUpdated: [String: Date] = [:]
 
@@ -69,6 +74,9 @@ struct Settings: Codable, Equatable, @unchecked Sendable {
         case proxyNodeSortCriterion
         case proxyNodeSortDirection
         case pendingCoreLogClear
+        case iCloudSyncEnabled
+        case iCloudSyncPreferences
+        case iCloudSyncProfiles
         case geoDataLastUpdated
     }
 
@@ -117,6 +125,9 @@ struct Settings: Codable, Equatable, @unchecked Sendable {
         proxyNodeSortCriterion = try container.decodeIfPresent(ProxyNodeSortCriterion.self, forKey: .proxyNodeSortCriterion) ?? .original
         proxyNodeSortDirection = try container.decodeIfPresent(ProxySortDirection.self, forKey: .proxyNodeSortDirection) ?? .ascending
         pendingCoreLogClear = try container.decodeIfPresent(Bool.self, forKey: .pendingCoreLogClear) ?? false
+        iCloudSyncEnabled = try container.decodeIfPresent(Bool.self, forKey: .iCloudSyncEnabled) ?? false
+        iCloudSyncPreferences = try container.decodeIfPresent(Bool.self, forKey: .iCloudSyncPreferences) ?? false
+        iCloudSyncProfiles = try container.decodeIfPresent(Bool.self, forKey: .iCloudSyncProfiles) ?? false
         geoDataLastUpdated = try container.decodeIfPresent([String: Date].self, forKey: .geoDataLastUpdated) ?? [:]
     }
 }
@@ -480,6 +491,7 @@ final class SettingsStore: ObservableObject {
         didSet {
             guard settings != oldValue else { return }
             objectWillChange.send()
+            SettingsSyncController.shared.settingsDidChange(new: settings, old: oldValue)
             guard let persistence, !persistence.isStorageReadOnly else { return }
             let snapshot = settings
             persistenceQueue.async {
@@ -511,6 +523,7 @@ final class SettingsStore: ObservableObject {
         if loadResult.shouldPersist && !persistence.isStorageReadOnly {
             persistence.persist(loadResult.settings)
         }
+        SettingsSyncController.shared.start(store: self)
     }
 
     func binding<V>(_ keyPath: WritableKeyPath<Settings, V>) -> Binding<V> {

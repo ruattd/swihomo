@@ -14,6 +14,9 @@ struct PreferencesView: View {
     @AppSetting(\.replaceGeoDatabasesWithRulesets) private var replaceGeoDatabasesWithRulesets
     @AppSetting(\.realtimeDelayTest) private var realtimeDelayTest
     @AppSetting(\.delayTestMaxConcurrency) private var delayTestMaxConcurrency
+    @AppSetting(\.iCloudSyncEnabled) private var iCloudSyncEnabled
+    @AppSetting(\.iCloudSyncPreferences) private var iCloudSyncPreferences
+    @State private var showingDeleteICloudDataConfirmation = false
     @AppSetting(\.autoCollapseProxyGroups) private var autoCollapseProxyGroups
     @AppSetting(\.subscriptionInfoDisplay) private var subscriptionInfoDisplay
     @AppSetting(\.showsMenuBar) private var showsMenuBar
@@ -196,8 +199,48 @@ struct PreferencesView: View {
                 }
             }
             .disabled(!realtimeDelayTest)
+
+            PreferenceRow(
+                title: Text("preferences.experimental.iCloudSync"),
+                description: Text("preferences.experimental.iCloudSync.description")
+            ) {
+                Toggle("preferences.experimental.iCloudSync", isOn: $iCloudSyncEnabled)
+                    .labelsHidden()
+            }
+
+            if iCloudSyncEnabled {
+                PreferenceRow(
+                    title: Text("preferences.experimental.iCloudSync.content.preferences"),
+                    description: Text("preferences.experimental.iCloudSync.content.preferences.description")
+                ) {
+                    Toggle("preferences.experimental.iCloudSync.content.preferences", isOn: $iCloudSyncPreferences)
+                        .labelsHidden()
+                }
+
+                PreferenceRow(
+                    title: Text("preferences.experimental.iCloudSync.deleteData"),
+                    description: Text("preferences.experimental.iCloudSync.deleteData.description")
+                ) {
+                    Button("preferences.experimental.iCloudSync.deleteData", role: .destructive) {
+                        showingDeleteICloudDataConfirmation = true
+                    }
+                    .labelsHidden()
+                }
+            }
         } header: {
             SectionHeaderLabel("preferences.experimental", systemImage: "flask")
+        }
+        .confirmationDialog(
+            Text("preferences.experimental.iCloudSync.deleteData.confirmationTitle"),
+            isPresented: $showingDeleteICloudDataConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("preferences.experimental.iCloudSync.deleteData", role: .destructive) {
+                SettingsSyncController.shared.deleteAllSyncedData()
+            }
+            Button("common.cancel", role: .cancel) {}
+        } message: {
+            Text("preferences.experimental.iCloudSync.deleteData.confirmationMessage")
         }
     }
 

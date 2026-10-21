@@ -333,3 +333,11 @@
 "preferences.experimental.realtimeDelayTest" = "Realtime delay test";
 "preferences.experimental.realtimeDelayTest.description" = "Tests each node individually and updates cards as results arrive. When off, group tests use the group API instead and failed nodes are all reported as errors.";
 "preferences.experimental.delayTestConcurrency.description" = "Caps how many nodes are tested at the same time during group delay tests. Excessively large values can easily cause memory pressure.";
+"preferences.experimental.iCloudSync" = "iCloud Sync";
+"preferences.experimental.iCloudSync.description" = "Syncs data between your devices through iCloud. A content category only syncs while its switch below is on.";
+"preferences.experimental.iCloudSync.content.preferences" = "Preferences";
+"preferences.experimental.iCloudSync.content.preferences.description" = "Appearance, sorting, and behavior preferences. Network and per-device settings always stay on this device.";
+"preferences.experimental.iCloudSync.deleteData" = "Delete iCloud Data";
+"preferences.experimental.iCloudSync.deleteData.description" = "Removes everything Swihomo has stored in iCloud. Data on this device is not affected.";
+"preferences.experimental.iCloudSync.deleteData.confirmationTitle" = "Delete all Swihomo data stored in iCloud?";
+"preferences.experimental.iCloudSync.deleteData.confirmationMessage" = "This permanently deletes every synced item from iCloud on all of your devices. Local data is kept.";
