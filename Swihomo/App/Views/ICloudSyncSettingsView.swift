@@ -51,6 +51,11 @@ struct ICloudSyncSettingsView: View {
                     Text("icloudSync.status.none")
                         .foregroundStyle(.secondary)
                 }
+
+                Button("icloudSync.syncNow") {
+                    syncController.syncNow()
+                }
+                .disabled(!iCloudSyncEnabled)
             } header: {
                 SectionHeaderLabel("icloudSync.status", systemImage: "clock.arrow.circlepath")
             }

@@ -151,6 +151,14 @@ actor ProfileSyncEngine {
         }
     }
 
+    /// User-requested immediate cycle from the sync settings page. No-op
+    /// while sync is stopped (both content switches off, or the engine
+    /// unprepared).
+    func syncNow() async {
+        guard isSyncing else { return }
+        await syncCycle()
+    }
+
     /// Deletes the whole sync zone and resets local sync state. Local profile
     /// data is untouched. Runs regardless of toggle state: the user asked to
     /// remove cloud data, whatever is currently syncing. A failed deletion

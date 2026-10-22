@@ -153,6 +153,21 @@ final class SettingsSyncController: ObservableObject {
         performInitialSync()
     }
 
+    /// User-requested immediate sync from the sync settings page: pulls the
+    /// latest KVS state (reseeding keys the cloud has never seen — an
+    /// explicit user action) and kicks a profile engine cycle. No-op while
+    /// the master switch is off.
+    func syncNow() {
+        guard isStarted, let settingsStore, settingsStore.settings.iCloudSyncEnabled else { return }
+        keyValueStore.synchronize()
+        let configChanged = pullConfiguration(remoteDeletionSilencesLocal: true)
+        let valuesChanged = pullPreferences(reseedMissing: true)
+        if !configChanged, !valuesChanged {
+            SyncStatusStore.shared.record(String(localized: "icloudSync.status.upToDate"))
+        }
+        Task { await ProfileSyncEngine.shared.syncNow() }
+    }
+
     /// Removes every value Swihomo has written to the ubiquitous key-value
     /// store, then silences the local content switches without re-publishing
     /// them. Peers observing the removal do the same (see pullConfiguration),
@@ -362,8 +377,9 @@ final class SettingsSyncController: ObservableObject {
     /// Applies the remotely stored sync configuration (content category
     /// switches). Never pushes: outbound configuration writes happen only for
     /// local user actions, so a deleted store stays deleted.
-    private func pullConfiguration(remoteDeletionSilencesLocal: Bool = false) {
-        guard let settingsStore else { return }
+    @discardableResult
+    private func pullConfiguration(remoteDeletionSilencesLocal: Bool = false) -> Bool {
+        guard let settingsStore else { return false }
         var settings = settingsStore.settings
         var changed = false
         var sawRemoteConfiguration = false
@@ -415,14 +431,16 @@ final class SettingsSyncController: ObservableObject {
             SyncStatusStore.shared.record(String(localized: "icloudSync.status.remoteWipe"))
             Task { await ProfileSyncEngine.shared.remoteDataWasDeleted() }
         }
+        return changed
     }
 
     /// Pulls preference values for enabled categories whose keys exist
     /// remotely. With `reseedMissing`, also publishes local values for keys
     /// the remote store has never seen — reserved for explicit user action so
     /// a deleted store is not silently refilled.
-    private func pullPreferences(reseedMissing: Bool) {
-        guard let settingsStore else { return }
+    @discardableResult
+    private func pullPreferences(reseedMissing: Bool) -> Bool {
+        guard let settingsStore else { return false }
         var settings = settingsStore.settings
         var changed = false
         for key in Self.syncedPreferences where key.category.isEnabled(settings) {
@@ -437,6 +455,7 @@ final class SettingsSyncController: ObservableObject {
         if reseedMissing {
             pushMissingPreferences(settingsStore.settings)
         }
+        return changed
     }
 
     private func handleExternalChange(_ notification: Notification) {
