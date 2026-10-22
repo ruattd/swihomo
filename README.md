@@ -91,7 +91,7 @@ Packet Tunnel extension
 Embedded mihomo core
 ```
 
-The app stores profiles in its private Application Support container and passes the active YAML plus runtime overrides to the extension via `NETunnelProviderProtocol.providerConfiguration`. The extension owns the core and the controller secret; the app talks to it only through provider messages. More details are in the [Mihomo bridge documentation](https://ruattd.github.io/swihomo/pages/architecture/mihomo-bridge/).
+The app stores profiles in its private Application Support container and passes the active YAML plus runtime overrides to the extension via `NETunnelProviderProtocol.providerConfiguration`. The extension owns the core and the controller secret; the app talks to it only through provider messages. More details are in the [Mihomo bridge documentation](https://ruattd.github.io/swihomo/mihomo-bridge).
 
 ### Updating the core
 
