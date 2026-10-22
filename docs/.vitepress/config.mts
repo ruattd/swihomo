@@ -91,8 +91,11 @@ export default defineConfig({
             ],
           },
           {
-            text: '架构',
+            text: '开发',
             items: [
+              { text: '开发环境', link: '/zh/development' },
+              { text: '项目结构', link: '/zh/project-structure' },
+              { text: '贡献指南', link: '/zh/contributing' },
               { text: '内嵌 Mihomo Bridge', link: '/zh/mihomo-bridge' },
             ],
           },
@@ -174,8 +177,11 @@ export default defineConfig({
         ],
       },
       {
-        text: 'Architecture',
+        text: 'Development',
         items: [
+          { text: 'Development Setup', link: '/development' },
+          { text: 'Project Structure', link: '/project-structure' },
+          { text: 'Contributing', link: '/contributing' },
           { text: 'Embedded Mihomo Bridge', link: '/mihomo-bridge' },
         ],
       },
