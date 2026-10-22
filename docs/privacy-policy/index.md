@@ -1,9 +1,3 @@
----
-layout: post
-title: Privacy Policy
-permalink: /privacy-policy/
----
-
 # Privacy Policy
 
 **Last updated:** 19:10 on Aug 5, 2026

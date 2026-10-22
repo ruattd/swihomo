@@ -1,9 +1,3 @@
----
-layout: post
-title: Embedded Mihomo Bridge
-permalink: /pages/architecture/mihomo-bridge/
----
-
 # Embedded Mihomo Bridge
 
 Swihomo vendors `MetaCubeX/mihomo` from the `Alpha` branch at
