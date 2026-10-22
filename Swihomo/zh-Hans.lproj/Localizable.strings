@@ -347,7 +347,7 @@
 "icloudSync.category.experimental" = "Experimental 配置";
 "icloudSync.category.experimental.description" = "自动内存回收, GeoIP 规则集替换, 实时延迟测试以及延迟测试并发数";
 "icloudSync.category.profiles" = "配置文件";
-"icloudSync.category.profiles.description" = "配置列表与内容, 订阅地址以及每个配置的自定义覆盖, 控制器密钥与当前启用的配置保留在本机";
+"icloudSync.category.profiles.description" = "配置列表与内容, 订阅地址以及每个配置的自定义覆盖 (YAML 原文同步, 包括写在其中的 secret), 当前启用的配置保留在本机";
 "icloudSync.category.overrides" = "覆盖设置";
 "icloudSync.category.overrides.description" = "应用于所有配置的运行时覆盖设置, 控制器密钥保留在本机";
 "icloudSync.dangerZone" = "危险操作";
@@ -369,3 +369,5 @@
 "icloudSync.enableConflict.message" = "选择保留云端的设置还是本机的设置";
 "icloudSync.enableConflict.useRemote" = "云端覆盖本机";
 "icloudSync.enableConflict.useLocal" = "本机覆盖云端";
+"icloudSync.syncNow" = "立即同步";
+"icloudSync.status.upToDate" = "已是最新";

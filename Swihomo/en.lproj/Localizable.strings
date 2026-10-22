@@ -347,7 +347,7 @@
 "icloudSync.category.experimental" = "Experimental";
 "icloudSync.category.experimental.description" = "Automatic memory reclaim, GeoIP ruleset replacement, realtime delay testing, and delay test concurrency.";
 "icloudSync.category.profiles" = "Profiles";
-"icloudSync.category.profiles.description" = "Profile list with contents, subscription URLs, and custom per-profile overrides. The controller secret and the active profile selection stay on this device.";
+"icloudSync.category.profiles.description" = "Profile list with contents, subscription URLs, and custom per-profile overrides (synced verbatim, including any secret written into the YAML). The active profile selection stays on this device.";
 "icloudSync.category.overrides" = "Global Overrides";
 "icloudSync.category.overrides.description" = "Runtime override settings that apply to every profile. The controller secret stays on this device.";
 "icloudSync.dangerZone" = "Danger Zone";
@@ -369,3 +369,5 @@
 "icloudSync.enableConflict.message" = "Choose whether the cloud copy or the copy on this device wins.";
 "icloudSync.enableConflict.useRemote" = "Use iCloud Settings";
 "icloudSync.enableConflict.useLocal" = "Keep Local Settings";
+"icloudSync.syncNow" = "Sync Now";
+"icloudSync.status.upToDate" = "Everything is up to date";
