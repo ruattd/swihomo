@@ -163,7 +163,7 @@ final class SettingsSyncController: ObservableObject {
         let configChanged = pullConfiguration(remoteDeletionSilencesLocal: true)
         let valuesChanged = pullPreferences(reseedMissing: true)
         if !configChanged, !valuesChanged {
-            SyncStatusStore.shared.record(String(localized: "icloudSync.status.upToDate"))
+            SyncStatusStore.shared.record(String(localized: "icloudSync.status.upToDate"), source: .preferences)
         }
         Task { await ProfileSyncEngine.shared.syncNow() }
     }
@@ -194,7 +194,7 @@ final class SettingsSyncController: ObservableObject {
         applyRemote(settings)
         Task { await ProfileSyncEngine.shared.deleteAllSyncedData() }
         logger.notice("Deleted all settings data from the ubiquitous key-value store.")
-        SyncStatusStore.shared.record(String(localized: "icloudSync.status.dataDeleted"))
+        SyncStatusStore.shared.record(String(localized: "icloudSync.status.dataDeleted"), source: .preferences)
     }
 
     // MARK: - Outbound
@@ -302,7 +302,7 @@ final class SettingsSyncController: ObservableObject {
             if didPush {
                 keyValueStore.synchronize()
                 didPushFromUserAction = true
-                SyncStatusStore.shared.record(String(localized: "icloudSync.status.settingsPushed"))
+                SyncStatusStore.shared.record(String(localized: "icloudSync.status.settingsPushed"), source: .preferences)
             }
             pullPreferences(reseedMissing: true)
         }
@@ -317,7 +317,7 @@ final class SettingsSyncController: ObservableObject {
         }
         keyValueStore.synchronize()
         didPushFromUserAction = true
-        SyncStatusStore.shared.record(String(localized: "icloudSync.status.settingsPushed"))
+        SyncStatusStore.shared.record(String(localized: "icloudSync.status.settingsPushed"), source: .preferences)
     }
 
     private func pushConfiguration(_ settings: Settings) {
@@ -328,7 +328,7 @@ final class SettingsSyncController: ObservableObject {
         keyValueStore.set(settings.iCloudSyncOverrides, forKey: KVSKey.configOverrides)
         keyValueStore.synchronize()
         didPushFromUserAction = true
-        SyncStatusStore.shared.record(String(localized: "icloudSync.status.settingsPushed"))
+        SyncStatusStore.shared.record(String(localized: "icloudSync.status.settingsPushed"), source: .preferences)
     }
 
     private func pushChangedPreferences(new: Settings, old: Settings) {
@@ -341,7 +341,7 @@ final class SettingsSyncController: ObservableObject {
         if didPush {
             keyValueStore.synchronize()
             didPushFromUserAction = true
-            SyncStatusStore.shared.record(String(localized: "icloudSync.status.settingsPushed"))
+            SyncStatusStore.shared.record(String(localized: "icloudSync.status.settingsPushed"), source: .preferences)
         }
     }
 
@@ -357,7 +357,7 @@ final class SettingsSyncController: ObservableObject {
         if didPush {
             keyValueStore.synchronize()
             didPushFromUserAction = true
-            SyncStatusStore.shared.record(String(localized: "icloudSync.status.settingsPushed"))
+            SyncStatusStore.shared.record(String(localized: "icloudSync.status.settingsPushed"), source: .preferences)
         }
     }
 
@@ -421,14 +421,14 @@ final class SettingsSyncController: ObservableObject {
         }
         if changed {
             applyRemote(settings)
-            SyncStatusStore.shared.record(String(localized: "icloudSync.status.settingsPulled"))
+            SyncStatusStore.shared.record(String(localized: "icloudSync.status.settingsPulled"), source: .preferences)
         }
         if zoneSyncSilencedByDeletion {
             // The remote store was wiped: the sync zone is gone too, so the
             // engine's merge base (tagged with the deleted zone's generation)
             // must go with it. Otherwise a later re-enable reads a stale base
             // against a fresh zone and the engine keeps silencing itself.
-            SyncStatusStore.shared.record(String(localized: "icloudSync.status.remoteWipe"))
+            SyncStatusStore.shared.record(String(localized: "icloudSync.status.remoteWipe"), source: .preferences)
             Task { await ProfileSyncEngine.shared.remoteDataWasDeleted() }
         }
         return changed
@@ -450,7 +450,7 @@ final class SettingsSyncController: ObservableObject {
         }
         if changed {
             applyRemote(settings)
-            SyncStatusStore.shared.record(String(localized: "icloudSync.status.settingsPulled"))
+            SyncStatusStore.shared.record(String(localized: "icloudSync.status.settingsPulled"), source: .preferences)
         }
         if reseedMissing {
             pushMissingPreferences(settingsStore.settings)
@@ -471,7 +471,7 @@ final class SettingsSyncController: ObservableObject {
             break
         default:
             // Quota violations carry no usable values; surface them instead.
-            SyncStatusStore.shared.record(String(localized: "icloudSync.status.quotaExceeded"), isError: true)
+            SyncStatusStore.shared.record(String(localized: "icloudSync.status.quotaExceeded"), source: .preferences, isError: true)
             return
         }
 

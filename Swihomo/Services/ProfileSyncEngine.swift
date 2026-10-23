@@ -151,11 +151,14 @@ actor ProfileSyncEngine {
         }
     }
 
-    /// User-requested immediate cycle from the sync settings page. No-op
-    /// while sync is stopped (both content switches off, or the engine
-    /// unprepared).
+    /// User-requested immediate cycle from the sync settings page. An idle
+    /// engine (content switches off, unprepared, or a read-only store) says
+    /// so instead of silently doing nothing.
     func syncNow() async {
-        guard isSyncing else { return }
+        guard isSyncing else {
+            await recordStatus(String(localized: "icloudSync.status.syncNotActive"), isError: true)
+            return
+        }
         await syncCycle()
     }
 
@@ -307,13 +310,13 @@ actor ProfileSyncEngine {
 
     /// Records a sync event for the status line on the sync settings page.
     private func recordStatus(_ message: String, isError: Bool = false) async {
-        await MainActor.run { SyncStatusStore.shared.record(message, isError: isError) }
+        await MainActor.run { SyncStatusStore.shared.record(message, source: .profiles, isError: isError) }
     }
 
     /// Records a failed cycle with the underlying error's description.
     private func recordFailure(_ error: Error) async {
         let message = String(localized: "icloudSync.status.profilesSyncFailed")
-        await MainActor.run { SyncStatusStore.shared.recordFailure(message, error) }
+        await MainActor.run { SyncStatusStore.shared.recordFailure(message, source: .profiles, error) }
     }
 
     // MARK: - Sync cycle
@@ -338,7 +341,10 @@ actor ProfileSyncEngine {
         guard let repository, isSyncing else { return }
         // Syncing against a read-only store (another instance holds the
         // storage lock) would poison the merge base, so stay idle.
-        if await repository.isStorageReadOnly { return }
+        if await repository.isStorageReadOnly {
+            await recordStatus(String(localized: "icloudSync.status.storageReadOnly"), isError: true)
+            return
+        }
         let cycleEpoch = epoch
 
         let remote: RemoteState

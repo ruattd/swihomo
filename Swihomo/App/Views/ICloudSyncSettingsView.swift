@@ -38,19 +38,8 @@ struct ICloudSyncSettingsView: View {
             }
 
             Section {
-                if let event = statusStore.lastEvent {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(event.message)
-                            .foregroundStyle(event.isError ? Color.red : Color.primary)
-                        Text(event.date.formatted(date: .numeric, time: .standard))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 2)
-                } else {
-                    Text("icloudSync.status.none")
-                        .foregroundStyle(.secondary)
-                }
+                statusRow(title: "icloudSync.status.preferences", event: statusStore.preferencesEvent)
+                statusRow(title: "icloudSync.status.profiles", event: statusStore.profilesEvent)
 
                 Button("icloudSync.syncNow") {
                     syncController.syncNow()
@@ -152,6 +141,27 @@ struct ICloudSyncSettingsView: View {
         } message: {
             Text("icloudSync.enableConflict.message")
         }
+    }
+
+    /// One pipeline's latest event: source label, message (red on failure),
+    /// and its timestamp.
+    private func statusRow(title: LocalizedStringKey, event: SyncStatusStore.Event?) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if let event {
+                Text(event.message)
+                    .foregroundStyle(event.isError ? Color.red : Color.primary)
+                Text(event.date.formatted(date: .numeric, time: .standard))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("icloudSync.status.none")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 2)
     }
 
     private func categoryRow(

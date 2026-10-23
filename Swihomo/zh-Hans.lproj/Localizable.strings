@@ -371,3 +371,7 @@
 "icloudSync.enableConflict.useLocal" = "本机覆盖云端";
 "icloudSync.syncNow" = "立即同步";
 "icloudSync.status.upToDate" = "已是最新";
+"icloudSync.status.syncNotActive" = "配置同步未在运行, 请检查主开关和分类开关";
+"icloudSync.status.storageReadOnly" = "配置存储为只读, 已跳过同步";
+"icloudSync.status.preferences" = "偏好设置";
+"icloudSync.status.profiles" = "配置数据";
