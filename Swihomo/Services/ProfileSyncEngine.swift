@@ -176,7 +176,7 @@ actor ProfileSyncEngine {
         let targetGeneration = base?.zoneGeneration
         clearBase()
         do {
-            try await timed("delete sync zone") { try await self.database.deleteRecordZone(withID: self.zoneID) }
+            _ = try await timed("delete sync zone") { try await self.database.deleteRecordZone(withID: self.zoneID) }
             setPendingZoneDeletion(false, generation: nil)
             logger.notice("Deleted the iCloud profile sync zone.")
             await recordStatus(String(localized: "icloudSync.status.dataDeleted"))
@@ -238,7 +238,7 @@ actor ProfileSyncEngine {
                 }
                 if shouldDelete {
                     do {
-                        try await timed("delete sync zone") { try await self.database.deleteRecordZone(withID: self.zoneID) }
+                        _ = try await timed("delete sync zone") { try await self.database.deleteRecordZone(withID: self.zoneID) }
                     } catch let error as CKError where error.code == .zoneNotFound {
                         // Already gone — the deletion has effectively completed.
                     }
@@ -323,11 +323,15 @@ actor ProfileSyncEngine {
     /// path can park a call forever and wedge the cycle lock (observed in
     /// the field as sync stuck at "Syncing…"). Race every request against a
     /// timeout so a stuck network fails the cycle visibly and frees the
-    /// lock for the next attempt. The losing request task is cancelled but
-    /// may linger in CloudKit internally; it is inert once the cycle moves
-    /// on.
+    /// lock for the next attempt.
+    ///
+    /// This deliberately avoids withThrowingTaskGroup: a group awaits all
+    /// children on exit, and a CloudKit call that ignores cancellation
+    /// would hold the timeout's error hostage forever — the exact hang this
+    /// helper exists to break. Here the timeout resumes the continuation
+    /// without waiting; the losing request task is cancelled and left to
+    /// finish (or rot) on its own, discarded by the gate.
     private static let requestTimeoutNanoseconds: UInt64 = 60 * NSEC_PER_SEC
-
     private struct RequestTimeout: LocalizedError {
         let operation: String
         var errorDescription: String? {
@@ -335,19 +339,39 @@ actor ProfileSyncEngine {
         }
     }
 
+    /// Once-only arbiter for the timed race: exactly one side (result or
+    /// timeout) resumes the continuation; the loser discards its outcome.
+    private final class ResumeGate: @unchecked Sendable {
+        private let lock = NSLock()
+        private var claimed = false
+        func claim() -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            if claimed { return false }
+            claimed = true
+            return true
+        }
+    }
+
     private func timed<T: Sendable>(
         _ operation: String,
         _ body: @escaping @Sendable () async throws -> T
     ) async throws -> T {
-        try await withThrowingTaskGroup(of: T.self) { group in
-            group.addTask { try await body() }
-            group.addTask {
-                try await Task.sleep(nanoseconds: Self.requestTimeoutNanoseconds)
-                throw RequestTimeout(operation: operation)
+        let gate = ResumeGate()
+        return try await withCheckedThrowingContinuation { continuation in
+            let work = Task { @Sendable in
+                do {
+                    let value = try await body()
+                    if gate.claim() { continuation.resume(returning: value) }
+                } catch {
+                    if gate.claim() { continuation.resume(throwing: error) }
+                }
             }
-            guard let result = try await group.next() else { throw RequestTimeout(operation: operation) }
-            group.cancelAll()
-            return result
+            Task { @Sendable in
+                try? await Task.sleep(nanoseconds: Self.requestTimeoutNanoseconds)
+                work.cancel()
+                if gate.claim() { continuation.resume(throwing: RequestTimeout(operation: operation)) }
+            }
         }
     }
 
