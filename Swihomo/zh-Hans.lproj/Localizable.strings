@@ -375,3 +375,5 @@
 "icloudSync.status.storageReadOnly" = "配置存储为只读, 已跳过同步";
 "icloudSync.status.preferences" = "偏好设置";
 "icloudSync.status.profiles" = "配置数据";
+"icloudSync.status.syncing" = "同步中…";
+"icloudSync.status.inProgress" = "已有同步正在进行";

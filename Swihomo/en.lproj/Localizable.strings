@@ -375,3 +375,5 @@
 "icloudSync.status.storageReadOnly" = "Profile storage is read-only; sync skipped";
 "icloudSync.status.preferences" = "Preferences";
 "icloudSync.status.profiles" = "Profile Data";
+"icloudSync.status.syncing" = "Syncing…";
+"icloudSync.status.inProgress" = "A sync is already in progress";

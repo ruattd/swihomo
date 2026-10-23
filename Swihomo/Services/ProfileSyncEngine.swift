@@ -326,6 +326,9 @@ actor ProfileSyncEngine {
     private func syncCycle() async {
         guard isSyncing, didPrepare, repository != nil else { return }
         if cycleInFlight {
+            // A manual tap during a stuck cycle (e.g. a hung network request)
+            // must be visible, not silent.
+            await recordStatus(String(localized: "icloudSync.status.inProgress"), isError: true)
             cycleRequestedWhileBusy = true
             return
         }
@@ -339,6 +342,7 @@ actor ProfileSyncEngine {
 
     private func runCycle() async {
         guard let repository, isSyncing else { return }
+        await recordStatus(String(localized: "icloudSync.status.syncing"))
         // Syncing against a read-only store (another instance holds the
         // storage lock) would poison the merge base, so stay idle.
         if await repository.isStorageReadOnly {
