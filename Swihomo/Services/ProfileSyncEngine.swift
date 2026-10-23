@@ -176,7 +176,7 @@ actor ProfileSyncEngine {
         let targetGeneration = base?.zoneGeneration
         clearBase()
         do {
-            try await database.deleteRecordZone(withID: zoneID)
+            try await timed("delete sync zone") { try await self.database.deleteRecordZone(withID: self.zoneID) }
             setPendingZoneDeletion(false, generation: nil)
             logger.notice("Deleted the iCloud profile sync zone.")
             await recordStatus(String(localized: "icloudSync.status.dataDeleted"))
@@ -204,7 +204,7 @@ actor ProfileSyncEngine {
 
     private func prepare() async {
         do {
-            let status = try await container.accountStatus()
+            let status = try await timed("fetch iCloud account status") { try await self.container.accountStatus() }
             guard status == .available else {
                 logger.error("iCloud account is unavailable (status \(status.rawValue, privacy: .public)); profile sync stays idle.")
                 await recordStatus(String(localized: "icloudSync.status.accountUnavailable"), isError: true)
@@ -221,7 +221,7 @@ actor ProfileSyncEngine {
                 if let targetGeneration = pendingDeletionGeneration() {
                     let zoneInfo: CKRecord?
                     do {
-                        zoneInfo = try await database.record(for: zoneInfoRecordID)
+                        zoneInfo = try await timed("fetch zone info") { try await self.database.record(for: self.zoneInfoRecordID) }
                     } catch let error as CKError where error.code == .unknownItem || error.code == .zoneNotFound {
                         // No zone-info record: nothing new to protect.
                         zoneInfo = nil
@@ -238,7 +238,7 @@ actor ProfileSyncEngine {
                 }
                 if shouldDelete {
                     do {
-                        try await database.deleteRecordZone(withID: zoneID)
+                        try await timed("delete sync zone") { try await self.database.deleteRecordZone(withID: self.zoneID) }
                     } catch let error as CKError where error.code == .zoneNotFound {
                         // Already gone — the deletion has effectively completed.
                     }
@@ -253,7 +253,7 @@ actor ProfileSyncEngine {
                 if shouldDelete { return }
             }
 
-            _ = try await database.save(CKRecordZone(zoneID: zoneID))
+            _ = try await timed("create sync zone") { try await self.database.save(CKRecordZone(zoneID: self.zoneID)) }
             didPrepare = true
             logger.notice("iCloud profile sync zone is ready.")
         } catch {
@@ -319,6 +319,38 @@ actor ProfileSyncEngine {
         await MainActor.run { SyncStatusStore.shared.recordFailure(message, source: .profiles, error) }
     }
 
+    /// CloudKit requests carry no deadline of their own; a broken network
+    /// path can park a call forever and wedge the cycle lock (observed in
+    /// the field as sync stuck at "Syncing…"). Race every request against a
+    /// timeout so a stuck network fails the cycle visibly and frees the
+    /// lock for the next attempt. The losing request task is cancelled but
+    /// may linger in CloudKit internally; it is inert once the cycle moves
+    /// on.
+    private static let requestTimeoutNanoseconds: UInt64 = 60 * NSEC_PER_SEC
+
+    private struct RequestTimeout: LocalizedError {
+        let operation: String
+        var errorDescription: String? {
+            "Timed out after 60s waiting for iCloud: \(operation)"
+        }
+    }
+
+    private func timed<T: Sendable>(
+        _ operation: String,
+        _ body: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await body() }
+            group.addTask {
+                try await Task.sleep(nanoseconds: Self.requestTimeoutNanoseconds)
+                throw RequestTimeout(operation: operation)
+            }
+            guard let result = try await group.next() else { throw RequestTimeout(operation: operation) }
+            group.cancelAll()
+            return result
+        }
+    }
+
     // MARK: - Sync cycle
 
     /// Serializes full bidirectional merge cycles. Saves arriving mid-cycle
@@ -365,7 +397,7 @@ actor ProfileSyncEngine {
                 // generation.
                 do {
                     guard epoch == cycleEpoch else { return }
-                    _ = try await database.save(CKRecordZone(zoneID: zoneID))
+                    _ = try await timed("recreate sync zone") { try await self.database.save(CKRecordZone(zoneID: self.zoneID)) }
                     cycleRequestedWhileBusy = true
                 } catch {
                     logger.error("Unable to recreate the iCloud profile sync zone: \(error.localizedDescription, privacy: .public)")
@@ -602,12 +634,14 @@ actor ProfileSyncEngine {
         }
         if !remoteUpserts.isEmpty || !remoteDeletions.isEmpty {
             do {
-                let (saveResults, deleteResults) = try await database.modifyRecords(
-                    saving: remoteUpserts,
-                    deleting: remoteDeletions,
-                    savePolicy: .allKeys,
-                    atomically: false
-                )
+                let (saveResults, deleteResults) = try await timed("push profile changes (\(remoteUpserts.count) saves, \(remoteDeletions.count) deletes)") {
+                    try await self.database.modifyRecords(
+                        saving: remoteUpserts,
+                        deleting: remoteDeletions,
+                        savePolicy: .allKeys,
+                        atomically: false
+                    )
+                }
                 let localByID = Dictionary(uniqueKeysWithValues: local.profiles.map { ($0.id.uuidString, $0) })
                 for (recordID, result) in saveResults {
                     switch result {
@@ -671,15 +705,17 @@ actor ProfileSyncEngine {
         let generation = UUID().uuidString
         let record = CKRecord(recordType: RecordType.zoneInfo, recordID: zoneInfoRecordID)
         record[Field.generation] = generation
-        let (saveResults, _) = try await database.modifyRecords(
-            saving: [record],
-            deleting: [],
-            // A fresh record carries no change tag, so this save succeeds
-            // only when the zone-info record does not exist yet — an atomic
-            // compare-and-set claim against a racing device.
-            savePolicy: .ifServerRecordUnchanged,
-            atomically: true
-        )
+        let (saveResults, _) = try await timed("claim zone generation") {
+            try await self.database.modifyRecords(
+                saving: [record],
+                deleting: [],
+                // A fresh record carries no change tag, so this save succeeds
+                // only when the zone-info record does not exist yet — an
+                // atomic compare-and-set claim against a racing device.
+                savePolicy: .ifServerRecordUnchanged,
+                atomically: true
+            )
+        }
         for (_, result) in saveResults {
             try result.get()
         }
@@ -721,7 +757,7 @@ actor ProfileSyncEngine {
         var token: CKServerChangeToken?
         var moreComing = true
         while moreComing {
-            let result = try await database.recordZoneChanges(inZoneWith: zoneID, since: token)
+            let result = try await timed("fetch zone changes") { try await self.database.recordZoneChanges(inZoneWith: self.zoneID, since: token) }
             token = result.changeToken
             moreComing = result.moreComing
             for (recordID, changeResult) in result.modificationResultsByID {
