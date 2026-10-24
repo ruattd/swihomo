@@ -359,7 +359,11 @@ actor ProfileSyncEngine {
     ) async throws -> T {
         let gate = ResumeGate()
         return try await withCheckedThrowingContinuation { continuation in
-            let work = Task { @Sendable in
+            // Detached on purpose: both sides must survive a hard-blocked
+            // engine actor (a synchronous IO call on the actor starves
+            // executor-inheriting tasks, which is exactly how the first
+            // version of this timeout was neutralized).
+            let work = Task.detached { @Sendable in
                 do {
                     let value = try await body()
                     if gate.claim() { continuation.resume(returning: value) }
@@ -367,7 +371,7 @@ actor ProfileSyncEngine {
                     if gate.claim() { continuation.resume(throwing: error) }
                 }
             }
-            Task { @Sendable in
+            Task.detached { @Sendable in
                 try? await Task.sleep(nanoseconds: Self.requestTimeoutNanoseconds)
                 work.cancel()
                 if gate.claim() { continuation.resume(throwing: RequestTimeout(operation: operation)) }
@@ -806,7 +810,7 @@ actor ProfileSyncEngine {
         for record in records {
             switch record.recordType {
             case RecordType.profile:
-                if let entry = Self.decodeProfileRecord(record) {
+                if let entry = await decodeProfileRecord(record) {
                     state.profiles[entry.profile.id] = entry
                 } else {
                     state.undecodableRecordNames.insert(record.recordID.recordName)
@@ -883,7 +887,7 @@ actor ProfileSyncEngine {
         return record
     }
 
-    private static func decodeProfileRecord(_ record: CKRecord) -> RemoteProfileEntry? {
+    private func decodeProfileRecord(_ record: CKRecord) async -> RemoteProfileEntry? {
         guard let id = UUID(uuidString: record.recordID.recordName),
               let name = record[Field.name] as? String,
               let sourceRaw = record[Field.source] as? String,
@@ -891,8 +895,25 @@ actor ProfileSyncEngine {
               let createdAt = record[Field.createdAt] as? Date,
               let updatedAt = record[Field.updatedAt] as? Date,
               let asset = record[Field.contents] as? CKAsset,
-              let assetURL = asset.fileURL,
-              let contents = try? String(contentsOf: assetURL, encoding: .utf8) else {
+              let assetURL = asset.fileURL else {
+            return nil
+        }
+
+        // Reading a CKAsset file is synchronous IO and can block
+        // indefinitely; on the engine actor that would wedge the whole
+        // pipeline (this exact hang kept sync stuck at "Syncing…"). Read
+        // off-actor under a timeout; a stalled asset marks the record
+        // undecodable so it is retried on a later cycle instead of
+        // poisoning the base.
+        let contents: String
+        do {
+            contents = try await timed("read profile asset \(id.uuidString)") {
+                try await Task.detached(priority: .utility) {
+                    try String(contentsOf: assetURL, encoding: .utf8)
+                }.value
+            }
+        } catch {
+            logger.error("Unable to read synced profile asset \(id.uuidString, privacy: .public): \(error.localizedDescription, privacy: .public)")
             return nil
         }
 
