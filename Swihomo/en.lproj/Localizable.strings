@@ -198,6 +198,11 @@
 "profiles.edit" = "Edit Profile";
 "profiles.editContent" = "Edit Content";
 "profiles.delete" = "Delete Profile";
+"profiles.reorder" = "Reorder";
+"profiles.reorderTop" = "Move to Top";
+"profiles.reorderUp" = "Move Up";
+"profiles.reorderDown" = "Move Down";
+"profiles.reorderBottom" = "Move to Bottom";
 "profiles.delete.confirmationTitle" = "Delete %@?";
 "profiles.delete.description" = "This removes the profile and its stored configuration. This action can't be undone.";
 "profiles.customOverride.title" = "Profile Custom Override";

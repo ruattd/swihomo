@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import os.log
 import Darwin
 
@@ -279,7 +280,8 @@ actor SharedProfileRepository {
     func applySyncedChanges(
         upserts: [(profile: Profile, contents: String)],
         deletions: [(id: UUID, baseUpdatedAt: Date?)],
-        overrides: (value: ProxyOverrides, updatedAt: Date)?
+        overrides: (value: ProxyOverrides, updatedAt: Date)?,
+        order: [UUID]?
     ) throws -> SyncApplyResult {
         try ensureWritable()
         var result = SyncApplyResult()
@@ -338,9 +340,30 @@ actor SharedProfileRepository {
                 result.overridesApplied = true
             }
 
+            var orderApplied = false
+            if let order {
+                // Remote order wins for the IDs it names; local-only
+                // profiles keep their relative order after it. Unknown
+                // remote IDs are skipped, so nothing is ever dropped.
+                let byID = Dictionary(uniqueKeysWithValues: working.profiles.map { ($0.id, $0) })
+                // The record is untrusted input: drop repeated IDs so a
+                // malformed order can never persist duplicated profiles
+                // (which would crash every later dictionary build).
+                var seen = Set<UUID>()
+                var reordered: [Profile] = []
+                for id in order where seen.insert(id).inserted {
+                    if let profile = byID[id] { reordered.append(profile) }
+                }
+                let included = Set(reordered.map(\.id))
+                reordered += working.profiles.filter { !included.contains($0.id) }
+                orderApplied = reordered.map(\.id) != working.profiles.map(\.id)
+                working.profiles = reordered
+            }
+
             let changed = !result.appliedUpsertIDs.isEmpty
                 || !result.appliedDeletionIDs.isEmpty
                 || result.overridesApplied
+                || orderApplied
             if changed {
                 suppressSaveObserver = true
                 // save() consumes the flag on success; the defer covers the
@@ -382,6 +405,19 @@ actor SharedProfileRepository {
         return snapshot
     }
 
+    /// Moves a profile to an absolute position in the list (0 = top).
+    /// Saving triggers the snapshot observer, so the new order syncs.
+    func moveProfile(_ id: UUID, to newIndex: Int) throws -> ClientSnapshot {
+        try ensureWritable()
+        guard let from = snapshot.profiles.firstIndex(where: { $0.id == id }),
+              !snapshot.profiles.isEmpty else { return snapshot }
+        let bounded = max(0, min(newIndex, snapshot.profiles.count - 1))
+        guard from != bounded else { return snapshot }
+        snapshot.profiles.insert(snapshot.profiles.remove(at: from), at: bounded)
+        try save(snapshot)
+        return snapshot
+    }
+
     func activateProfile(_ id: UUID) throws -> ClientSnapshot {
         try ensureWritable()
         guard snapshot.profiles.contains(where: { $0.id == id }) else {
@@ -410,6 +446,24 @@ actor SharedProfileRepository {
         }
         return (profile, contents, snapshot.overrides)
     }
+    /// Deterministic remote-profile identity (SHA-256, UUIDv5-shaped): the
+    /// same name + subscription URL imported on two devices yields the
+    /// same UUID, so iCloud sync merges them as one profile. Never used
+    /// for local files, whose same-named content may differ per device.
+    private static func deterministicProfileID(name: String, remoteURL: URL?) -> UUID {
+        var key = "swihomo-profile-v1\n\(name)"
+        if let remoteURL { key += "\n\(remoteURL.absoluteString)" }
+        let digest = SHA256.hash(data: Data(key.utf8))
+        var bytes = Array(digest.prefix(16))
+        bytes[6] = (bytes[6] & 0x0F) | 0x50
+        bytes[8] = (bytes[8] & 0x3F) | 0x80
+        return UUID(uuid: (
+            bytes[0], bytes[1], bytes[2], bytes[3],
+            bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[8], bytes[9], bytes[10], bytes[11],
+            bytes[12], bytes[13], bytes[14], bytes[15]
+        ))
+    }
 
     private func createProfile(
         name: String,
@@ -425,9 +479,25 @@ actor SharedProfileRepository {
         }
 
         let now = Date.syncComparableNow
+        let resolvedName = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Untitled Profile" : name
+        // Deterministic identity for REMOTE subscriptions only: the same
+        // name + URL imported on two devices produces the same UUID, so
+        // sync merges them as one profile instead of creating duplicates.
+        // Derived only at creation — renames never change identity. An
+        // intentional second copy falls back to a random UUID.
+        // Local files keep random IDs: two devices can hold different
+        // content under the same name (e.g. "Untitled Profile"), and
+        // merging those by name would silently overwrite user-authored
+        // YAML via last-writer-wins.
+        var id = source == .remote
+            ? Self.deterministicProfileID(name: resolvedName, remoteURL: remoteURL)
+            : UUID()
+        if snapshot.profiles.contains(where: { $0.id == id }) {
+            id = UUID()
+        }
         let profile = Profile(
-            id: UUID(),
-            name: name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Untitled Profile" : name,
+            id: id,
+            name: resolvedName,
             source: source,
             remoteURL: remoteURL,
             customUserAgent: customUserAgent,

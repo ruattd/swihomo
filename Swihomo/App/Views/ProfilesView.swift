@@ -221,6 +221,16 @@ private struct ProfileCard: View {
         model.snapshot.activeProfileID == profile.id
     }
 
+    /// Current list position for the move submenu; recomputed from the
+    /// snapshot so it stays correct after reorders.
+    private var position: Int {
+        model.snapshot.profiles.firstIndex(where: { $0.id == profile.id }) ?? 0
+    }
+
+    private var profileCount: Int {
+        model.snapshot.profiles.count
+    }
+
     private var subscriptionDisplay: SubscriptionInfoDisplay {
         subscriptionInfoDisplay
     }
@@ -343,6 +353,34 @@ private struct ProfileCard: View {
 #endif
                     } label: {
                         Label("profiles.editContent", systemImage: "doc.text")
+                    }
+                    Menu {
+                        Button {
+                            Task { await model.moveProfile(profile, to: 0) }
+                        } label: {
+                            Label("profiles.reorderTop", systemImage: "arrow.up.to.line")
+                        }
+                        .disabled(position == 0)
+                        Button {
+                            Task { await model.moveProfile(profile, to: position - 1) }
+                        } label: {
+                            Label("profiles.reorderUp", systemImage: "chevron.up")
+                        }
+                        .disabled(position == 0)
+                        Button {
+                            Task { await model.moveProfile(profile, to: position + 1) }
+                        } label: {
+                            Label("profiles.reorderDown", systemImage: "chevron.down")
+                        }
+                        .disabled(position >= profileCount - 1)
+                        Button {
+                            Task { await model.moveProfile(profile, to: profileCount - 1) }
+                        } label: {
+                            Label("profiles.reorderBottom", systemImage: "arrow.down.to.line")
+                        }
+                        .disabled(position >= profileCount - 1)
+                    } label: {
+                        Label("profiles.reorder", systemImage: "arrow.up.arrow.down")
                     }
                     Button(role: .destructive) {
                         showingDeleteConfirmation = true

@@ -46,6 +46,7 @@ actor ProfileSyncEngine {
     private enum RecordType {
         static let profile = "Profile"
         static let overrides = "Overrides"
+        static let profileOrder = "ProfileOrder"
         static let zoneInfo = "ZoneInfo"
     }
 
@@ -62,6 +63,7 @@ actor ProfileSyncEngine {
         static let customOverrideYAML = "customOverrideYAML"
         static let contents = "contents"
         static let payload = "payload"
+        static let orderedIDs = "orderedIDs"
         static let generation = "generation"
     }
 
@@ -71,6 +73,11 @@ actor ProfileSyncEngine {
         var zoneGeneration: String
         var profiles: [String: Profile]
         var overridesUpdatedAt: Date?
+        /// Last commonly synced profile order (UUID strings) and the order
+        /// record's timestamp. Optional: bases written by older versions
+        /// decode with nil and simply re-sync the order once.
+        var orderIDs: [String]?
+        var orderUpdatedAt: Date?
     }
 
     private let logger = Logger(
@@ -80,6 +87,7 @@ actor ProfileSyncEngine {
     private let container = CKContainer(identifier: "iCloud.com.swihomo.client")
     private let zoneID = CKRecordZone.ID(zoneName: "SwihomoProfiles", ownerName: CKCurrentUserDefaultName)
     private let overridesRecordID: CKRecord.ID
+    private let orderRecordID: CKRecord.ID
     private let zoneInfoRecordID: CKRecord.ID
 
     private var repository: SharedProfileRepository?
@@ -106,6 +114,7 @@ actor ProfileSyncEngine {
 
     private init() {
         overridesRecordID = CKRecord.ID(recordName: "overrides", zoneID: zoneID)
+        orderRecordID = CKRecord.ID(recordName: "profile-order", zoneID: zoneID)
         zoneInfoRecordID = CKRecord.ID(recordName: "zone-info", zoneID: zoneID)
     }
 
@@ -509,6 +518,10 @@ actor ProfileSyncEngine {
         var remoteUpserts: [CKRecord] = []
         var remoteDeletions: [CKRecord.ID] = []
         var assetFiles: [URL] = []
+        /// Same-URL duplicates skipped this cycle. They must NEVER enter
+        /// the base: a base entry would make the next cycle read the skip
+        /// as "deleted locally" and propagate a cloud deletion.
+        var dedupSkippedIDs = Set<UUID>()
         defer {
             for file in assetFiles {
                 try? FileManager.default.removeItem(at: file)
@@ -540,7 +553,23 @@ actor ProfileSyncEngine {
                         remoteDeletions.append(CKRecord.ID(recordName: id.uuidString, zoneID: zoneID))
                     }
                 } else {
-                    // New profile from another device.
+                    // New profile from another device. If it is a remote
+                    // subscription this device already has under a
+                    // different UUID (imported independently on both
+                    // devices, or one predating deterministic IDs), skip
+                    // the import instead of creating a visible duplicate.
+                    // Cloud records are left untouched; the local copy
+                    // still syncs under its own identity. Skipped records
+                    // stay out of the base, so they are re-evaluated every
+                    // cycle: deleting the local same-URL copy lets the
+                    // remaining cloud copy import on the next cycle.
+                    if remoteEntry.profile.source == .remote,
+                       let url = remoteEntry.profile.remoteURL,
+                       local.profiles.contains(where: { $0.source == .remote && $0.remoteURL == url })
+                        || localUpserts.contains(where: { $0.profile.source == .remote && $0.profile.remoteURL == url }) {
+                        dedupSkippedIDs.insert(id)
+                        continue
+                    }
                     localUpserts.append((remoteEntry.profile, remoteEntry.contents))
                 }
             case (.some(let localProfile), .none):
@@ -606,13 +635,59 @@ actor ProfileSyncEngine {
             }
         }
 
+        // Profile order: one zone-level record holding the ordered UUID
+        // list, three-way merged against the base order. Local-only change
+        // → push; remote changed → apply. Concurrent reorders on two
+        // devices resolve remote-wins by design (not by timestamp).
+        // Applying never drops local-only profiles: they keep their
+        // relative order after the remotely ordered prefix.
+        var orderApply: [UUID]?
+        var orderPush: (ids: [String], updatedAt: Date)?
+        if syncsProfiles, !remote.orderUnreadable {
+            let localOrder = local.profiles.map { $0.id.uuidString }
+            let baseOrder = base?.orderIDs
+            // Compare against the base order PROJECTED onto the local set
+            // (base IDs present locally, then local-only IDs in local
+            // order) — the same rule applySyncedChanges uses. Comparing the
+            // raw lists would flag every post-apply state as changed and
+            // ping-pong order pushes between devices forever.
+            let localSet = Set(localOrder)
+            let localChanged: Bool
+            if let baseOrder {
+                var projected = baseOrder.filter { localSet.contains($0) }
+                let included = Set(projected)
+                projected += localOrder.filter { !included.contains($0) }
+                let baseSet = Set(baseOrder)
+                // A profile that IS synced (present remotely) but missing
+                // from the order record arrived after the last order push.
+                // Its tail position may differ across devices (Set
+                // iteration order on import), so push once to converge;
+                // after the push the base includes it and this stays quiet.
+                let syncedButUnordered = localOrder.contains { name in
+                    !baseSet.contains(name) && UUID(uuidString: name).map { remote.profiles[$0] != nil } == true
+                }
+                localChanged = localOrder != projected || syncedButUnordered
+            } else {
+                localChanged = true
+            }
+            let remoteChanged = remote.order != nil && remote.order?.ids != baseOrder
+            if remoteChanged, let remoteOrder = remote.order {
+                orderApply = remoteOrder.ids.compactMap { UUID(uuidString: $0) }
+            } else if localChanged, !localOrder.isEmpty {
+                let pushed = (ids: localOrder, updatedAt: Date.syncComparableNow)
+                orderPush = pushed
+                remoteUpserts.append(makeOrderRecord(ids: pushed.ids, updatedAt: pushed.updatedAt))
+            }
+        }
+
         var applyResult: SharedProfileRepository.SyncApplyResult?
-        if !localUpserts.isEmpty || !localDeletions.isEmpty || overridesApply != nil {
+        if !localUpserts.isEmpty || !localDeletions.isEmpty || overridesApply != nil || orderApply != nil {
             do {
                 applyResult = try await repository.applySyncedChanges(
                     upserts: localUpserts,
                     deletions: localDeletions,
-                    overrides: overridesApply
+                    overrides: overridesApply,
+                    order: orderApply
                 )
             } catch {
                 logger.error("Unable to apply iCloud profile changes locally: \(error.localizedDescription, privacy: .public)")
@@ -640,12 +715,15 @@ actor ProfileSyncEngine {
             // Profiles switch off: carry the base forward untouched so
             // re-enabling later still knows what was synced.
             profiles: syncsProfiles ? [:] : baseProfiles,
-            overridesUpdatedAt: base?.overridesUpdatedAt
+            overridesUpdatedAt: base?.overridesUpdatedAt,
+            orderIDs: base?.orderIDs,
+            orderUpdatedAt: base?.orderUpdatedAt
         )
         let knownNames = syncsProfiles ? Set(baseProfiles.keys)
             .union(remote.profiles.keys.map { $0.uuidString })
             .union(plannedUpsertIDs.map { $0.uuidString })
-            .union(plannedDeletionIDs.map { $0.uuidString }) : []
+            .union(plannedDeletionIDs.map { $0.uuidString })
+            .subtracting(dedupSkippedIDs.map { $0.uuidString }) : []
         for name in knownNames {
             guard let id = UUID(uuidString: name) else { continue }
             if appliedDeletionIDs.contains(id) {
@@ -668,6 +746,15 @@ actor ProfileSyncEngine {
            overridesApply == nil || applyResult?.overridesApplied == true {
             newBase.overridesUpdatedAt = remoteOverrides.updatedAt
         }
+        // Order follows the same rule: advance to the remote order only
+        // when no apply was planned or the apply landed (any apply failure
+        // throws out of applySyncedChanges, so applyResult != nil means the
+        // reorder was saved).
+        if syncsProfiles, let remoteOrder = remote.order,
+           orderApply == nil || applyResult != nil {
+            newBase.orderIDs = remoteOrder.ids
+            newBase.orderUpdatedAt = remoteOrder.updatedAt
+        }
         if !remoteUpserts.isEmpty || !remoteDeletions.isEmpty {
             do {
                 let (saveResults, deleteResults) = try await timed("push profile changes (\(remoteUpserts.count) saves, \(remoteDeletions.count) deletes)") {
@@ -684,6 +771,9 @@ actor ProfileSyncEngine {
                     case .success:
                         if recordID == overridesRecordID {
                             newBase.overridesUpdatedAt = local.overridesUpdatedAt
+                        } else if recordID == orderRecordID {
+                            newBase.orderIDs = orderPush?.ids
+                            newBase.orderUpdatedAt = orderPush?.updatedAt
                         } else if let profile = localByID[recordID.recordName] {
                             // Only confirmed uploads enter the base; a profile
                             // whose push failed stays out, so the next cycle
@@ -768,6 +858,8 @@ actor ProfileSyncEngine {
     private struct RemoteState {
         var profiles: [UUID: RemoteProfileEntry] = [:]
         var overrides: (value: ProxyOverrides, updatedAt: Date)?
+        /// The zone-level profile order record, if present.
+        var order: (ids: [String], updatedAt: Date)?
         var zoneGeneration: String?
         /// The zone-info record exists but its generation cannot be read:
         /// unknown state, never a wipe.
@@ -775,7 +867,9 @@ actor ProfileSyncEngine {
         /// The overrides record exists but cannot be read: skip overrides
         /// decisions for the cycle instead of treating it as absent.
         var overridesUnreadable = false
-        /// Record names (UUID strings) present in the zone but not decodable
+        /// The order record exists but cannot be read: skip order decisions
+        /// for the cycle instead of treating it as absent.
+        var orderUnreadable = false
         /// on this device — e.g. written by a newer app version.
         var undecodableRecordNames: Set<String> = []
     }
@@ -808,6 +902,8 @@ actor ProfileSyncEngine {
                         state.zoneInfoUnreadable = true
                     } else if recordID == overridesRecordID {
                         state.overridesUnreadable = true
+                    } else if recordID == orderRecordID {
+                        state.orderUnreadable = true
                     } else {
                         state.undecodableRecordNames.insert(recordID.recordName)
                     }
@@ -830,6 +926,13 @@ actor ProfileSyncEngine {
                     // Present but unreadable (e.g. written by a newer app
                     // version): skip overrides decisions this cycle.
                     state.overridesUnreadable = true
+                }
+            case RecordType.profileOrder:
+                if let ids = record[Field.orderedIDs] as? [String],
+                   let updatedAt = record[Field.updatedAt] as? Date {
+                    state.order = (ids, updatedAt)
+                } else {
+                    state.orderUnreadable = true
                 }
             case RecordType.zoneInfo:
                 if let generation = record[Field.generation] as? String {
@@ -882,6 +985,13 @@ actor ProfileSyncEngine {
         try contents.write(to: assetFile, atomically: true, encoding: .utf8)
         record[Field.contents] = CKAsset(fileURL: assetFile)
         return (record, assetFile)
+    }
+
+    private func makeOrderRecord(ids: [String], updatedAt: Date) -> CKRecord {
+        let record = CKRecord(recordType: RecordType.profileOrder, recordID: orderRecordID)
+        record[Field.orderedIDs] = ids
+        record[Field.updatedAt] = updatedAt
+        return record
     }
 
     private func makeOverridesRecord(_ overrides: ProxyOverrides, updatedAt: Date) throws -> CKRecord {

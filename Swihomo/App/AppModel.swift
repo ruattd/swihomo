@@ -346,6 +346,21 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Manual reordering from the profile list's move submenu.
+    func moveProfile(_ profile: Profile, to newIndex: Int) async {
+        if screenshotDemoMode {
+            guard let from = snapshot.profiles.firstIndex(where: { $0.id == profile.id }),
+                  !snapshot.profiles.isEmpty else { return }
+            let bounded = max(0, min(newIndex, snapshot.profiles.count - 1))
+            guard from != bounded else { return }
+            snapshot.profiles.insert(snapshot.profiles.remove(at: from), at: bounded)
+            return
+        }
+        await perform(module: "Profiles", "Reordered profile \(profile.name).") { [self] in
+            snapshot = try await profiles.moveProfile(profile.id, to: newIndex)
+        }
+    }
+
     func connect(profile: Profile) async {
         if screenshotDemoMode {
             guard snapshot.profiles.contains(where: { $0.id == profile.id }) else { return }

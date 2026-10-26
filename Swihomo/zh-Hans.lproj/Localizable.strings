@@ -198,6 +198,11 @@
 "profiles.edit" = "编辑配置文件";
 "profiles.editContent" = "编辑内容";
 "profiles.delete" = "删除配置文件";
+"profiles.reorder" = "移动顺序";
+"profiles.reorderTop" = "移到顶部";
+"profiles.reorderUp" = "上移";
+"profiles.reorderDown" = "下移";
+"profiles.reorderBottom" = "移到底部";
 "profiles.delete.confirmationTitle" = "删除 %@？";
 "profiles.delete.description" = "这会删除配置文件及其存储的配置, 此操作无法撤销";
 "profiles.customOverride.title" = "配置文件自定义覆盖";
