@@ -117,6 +117,7 @@ struct OverridesView: View {
             } label: {
                 Image(systemName: "square.and.arrow.up")
             }
+            .labelStyle(.titleAndIcon)
             .buttonStyle(.plain)
             .accessibilityLabel("accessibility.exportControllerConfiguration")
             .help("accessibility.exportControllerConfiguration")

@@ -199,6 +199,7 @@ private struct ProfilesToolbarContent: View {
         } label: {
             Image(systemName: "ellipsis.circle")
         }
+        .labelStyle(.titleAndIcon)
         .accessibilityLabel(Text("common.more"))
     }
 }
@@ -390,6 +391,7 @@ private struct ProfileCard: View {
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
+                .labelStyle(.titleAndIcon)
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text("accessibility.profileActions") + Text(verbatim: " \(profile.name)"))
             }

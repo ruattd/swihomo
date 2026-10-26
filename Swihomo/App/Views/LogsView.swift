@@ -232,6 +232,7 @@ private struct LogsToolbarContent: View {
         } label: {
             Label("common.more", systemImage: "ellipsis.circle")
         }
+        .labelStyle(.titleAndIcon)
     }
 
     private var sourceFilterSection: some View {
