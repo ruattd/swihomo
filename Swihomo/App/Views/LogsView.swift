@@ -352,12 +352,15 @@ private struct LogTailFollower: View {
             // disable following for the page's whole lifetime.
             uiView.attachIfNeeded()
             uiView.handleFollowRequest(followRequest)
+            uiView.jumpIfPossible()
         }
 
         fileprivate final class FollowerView: UIView {
             private var offsetObservation: NSKeyValueObservation?
             private var sizeObservation: NSKeyValueObservation?
             private var isAtBottom = true
+            private var lastContentHeight: CGFloat = 0
+            private var pendingJump = false
             private var handledFollowRequest = 0
 
             override init(frame: CGRect) {
@@ -376,25 +379,37 @@ private struct LogTailFollower: View {
 
             func attachIfNeeded() {
                 guard sizeObservation == nil, let scrollView = resolveScrollView() else { return }
+                lastContentHeight = scrollView.contentSize.height
                 // Open pinned to the latest entries.
                 scrollView.setContentOffset(Self.bottomOffset(of: scrollView), animated: false)
                 offsetObservation = scrollView.observe(\.contentOffset, options: [.new]) { [weak self] view, _ in
                     guard let self else { return }
-                    self.isAtBottom = Self.offsetIsAtBottom(view)
+                    // Compare against the smaller of the last-known and
+                    // current content heights: appended rows must not
+                    // clear follow intent (KVO delivers contentOffset and
+                    // contentSize in no guaranteed order), and cleared
+                    // logs must not strand it either.
+                    let referenceHeight = min(self.lastContentHeight, view.contentSize.height)
+                    self.isAtBottom = Self.offsetIsAtBottom(view, contentHeight: referenceHeight)
+                    self.lastContentHeight = view.contentSize.height
                     guard !view.isTracking, !view.isDecelerating, self.isAtBottom else { return }
-                    // The collection view reconciles estimated cell heights on its
-                    // own schedule and can drift the offset; re-assert the bottom
-                    // while the view is supposed to rest there. Setting the offset
-                    // re-fires this observer; the guard then passes and the
-                    // recursion ends.
+                    // Re-assert the bottom while the view rests there; this
+                    // also absorbs appended rows immediately instead of
+                    // waiting for the contentSize observer. Setting the
+                    // offset re-fires this observer and then converges.
                     let bottom = Self.bottomOffset(of: view)
                     if abs(view.contentOffset.y - bottom.y) > 0.5 {
                         view.setContentOffset(bottom, animated: false)
                     }
                 }
                 sizeObservation = scrollView.observe(\.contentSize, options: [.new]) { [weak self, weak scrollView] _, _ in
-                    guard let self, let scrollView, self.isAtBottom else { return }
-                    scrollView.setContentOffset(Self.bottomOffset(of: scrollView), animated: false)
+                    guard let self, let scrollView else { return }
+                    self.lastContentHeight = scrollView.contentSize.height
+                    if self.pendingJump {
+                        self.jumpIfPossible()
+                    } else if self.isAtBottom {
+                        scrollView.setContentOffset(Self.bottomOffset(of: scrollView), animated: false)
+                    }
                 }
             }
 
@@ -402,20 +417,28 @@ private struct LogTailFollower: View {
                 guard request != handledFollowRequest else { return }
                 handledFollowRequest = request
                 isAtBottom = true
-                if let scrollView = resolveScrollView() {
-                    scrollView.setContentOffset(Self.bottomOffset(of: scrollView), animated: false)
-                }
+                // The scroll view may not exist yet on page entry: stay
+                // pending and retry on updates and content-size changes
+                // instead of consuming the request silently.
+                pendingJump = true
+                jumpIfPossible()
             }
 
-            private static func bottomOffset(of scrollView: UIScrollView) -> CGPoint {
+            func jumpIfPossible() {
+                guard pendingJump, let scrollView = resolveScrollView() else { return }
+                scrollView.setContentOffset(Self.bottomOffset(of: scrollView), animated: false)
+                pendingJump = false
+            }
+
+            private static func bottomOffset(of scrollView: UIScrollView, contentHeight: CGFloat? = nil) -> CGPoint {
                 CGPoint(
                     x: 0,
-                    y: scrollView.contentSize.height - scrollView.bounds.height + scrollView.adjustedContentInset.bottom
+                    y: (contentHeight ?? scrollView.contentSize.height) - scrollView.bounds.height + scrollView.adjustedContentInset.bottom
                 )
             }
 
-            private static func offsetIsAtBottom(_ scrollView: UIScrollView) -> Bool {
-                scrollView.contentOffset.y >= Self.bottomOffset(of: scrollView).y - 1
+            private static func offsetIsAtBottom(_ scrollView: UIScrollView, contentHeight: CGFloat) -> Bool {
+                scrollView.contentOffset.y >= Self.bottomOffset(of: scrollView, contentHeight: contentHeight).y - 1
             }
 
             /// The follower sits in an overlay next to the list's scroll view:
@@ -446,12 +469,15 @@ private struct LogTailFollower: View {
         func updateNSView(_ nsView: FollowerView, context: Context) {
             nsView.attachIfNeeded()
             nsView.handleFollowRequest(followRequest)
+            nsView.jumpIfPossible()
         }
 
         fileprivate final class FollowerView: NSView {
             private var offsetObserver: NSObjectProtocol?
             private var frameObserver: NSObjectProtocol?
             private var isAtBottom = true
+            private var lastDocumentHeight: CGFloat = 0
+            private var pendingJump = false
             private var handledFollowRequest = 0
 
             override init(frame frameRect: NSRect) {
@@ -478,6 +504,7 @@ private struct LogTailFollower: View {
                 guard frameObserver == nil,
                       let scrollView = resolveScrollView(),
                       let document = scrollView.documentView else { return }
+                lastDocumentHeight = document.frame.height
                 // Open pinned to the latest entries.
                 Self.scrollToBottom(scrollView)
                 let clip = scrollView.contentView
@@ -485,15 +512,29 @@ private struct LogTailFollower: View {
                 offsetObserver = NotificationCenter.default.addObserver(
                     forName: NSView.boundsDidChangeNotification, object: clip, queue: .main
                 ) { [weak self, weak scrollView] _ in
-                    guard let self, let scrollView else { return }
-                    self.isAtBottom = Self.offsetIsAtBottom(scrollView)
+                    guard let self, let scrollView, let document = scrollView.documentView else { return }
+                    // Evaluate against the smaller of the last-known and
+                    // current document heights: appended rows must not
+                    // clear follow intent (bounds/frame notifications have
+                    // no guaranteed order), and cleared logs must not
+                    // strand it either.
+                    let referenceHeight = min(self.lastDocumentHeight, document.frame.height)
+                    self.isAtBottom = Self.offsetIsAtBottom(scrollView, documentHeight: referenceHeight)
+                    self.lastDocumentHeight = document.frame.height
+                    guard self.isAtBottom else { return }
+                    Self.scrollToBottomIfNeeded(scrollView)
                 }
                 document.postsFrameChangedNotifications = true
                 frameObserver = NotificationCenter.default.addObserver(
                     forName: NSView.frameDidChangeNotification, object: document, queue: .main
                 ) { [weak self, weak scrollView] _ in
-                    guard let self, let scrollView, self.isAtBottom else { return }
-                    Self.scrollToBottom(scrollView)
+                    guard let self, let scrollView, let document = scrollView.documentView else { return }
+                    self.lastDocumentHeight = document.frame.height
+                    if self.pendingJump {
+                        self.jumpIfPossible()
+                    } else if self.isAtBottom {
+                        Self.scrollToBottom(scrollView)
+                    }
                 }
             }
 
@@ -501,9 +542,16 @@ private struct LogTailFollower: View {
                 guard request != handledFollowRequest else { return }
                 handledFollowRequest = request
                 isAtBottom = true
-                if let scrollView = resolveScrollView() {
-                    Self.scrollToBottom(scrollView)
-                }
+                // Retry on updates and document-frame changes if the scroll
+                // view is not in the hierarchy yet on page entry.
+                pendingJump = true
+                jumpIfPossible()
+            }
+
+            func jumpIfPossible() {
+                guard pendingJump, let scrollView = resolveScrollView() else { return }
+                Self.scrollToBottom(scrollView)
+                pendingJump = false
             }
 
             private static func scrollToBottom(_ scrollView: NSScrollView) {
@@ -513,12 +561,19 @@ private struct LogTailFollower: View {
                 scrollView.reflectScrolledClipView(clip)
             }
 
-            private static func offsetIsAtBottom(_ scrollView: NSScrollView) -> Bool {
-                guard let document = scrollView.documentView else { return true }
+            private static func scrollToBottomIfNeeded(_ scrollView: NSScrollView) {
+                guard let document = scrollView.documentView else { return }
                 let clip = scrollView.contentView
-                return clip.bounds.origin.y >= document.frame.height - clip.bounds.height - 1
+                let bottom = document.frame.height - clip.bounds.height
+                if abs(clip.bounds.origin.y - bottom) > 0.5 {
+                    scrollToBottom(scrollView)
+                }
             }
 
+            private static func offsetIsAtBottom(_ scrollView: NSScrollView, documentHeight: CGFloat) -> Bool {
+                let clip = scrollView.contentView
+                return clip.bounds.origin.y >= documentHeight - clip.bounds.height - 1
+            }
             /// The follower sits in an overlay next to the list's scroll view:
             /// walk up, then search each ancestor's subtree downwards (never
             /// the whole window — the sidebar has its own scroll view).
