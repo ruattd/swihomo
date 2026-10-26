@@ -477,8 +477,16 @@ actor ProfileSyncEngine {
             do {
                 guard epoch == cycleEpoch else { return }
                 generation = try await claimZoneGeneration()
-            } catch {
+            } catch let error as CKError where error.code == .serverRecordChanged {
                 logger.notice("Another device claimed the sync zone generation first; adopting it on the next cycle.")
+                return
+            } catch {
+                // Real failure (permissions, schema not deployed to
+                // Production, container misconfiguration…): surface it.
+                // Swallowing every error as a race made sync spin at
+                // "Syncing…" forever with no visible error.
+                logger.error("Unable to claim the sync zone generation: \(error.localizedDescription, privacy: .public)")
+                await recordFailure(error)
                 return
             }
         }
