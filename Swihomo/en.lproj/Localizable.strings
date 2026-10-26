@@ -318,6 +318,7 @@
 
 "logs.allLevels" = "All levels";
 "logs.empty" = "No Logs";
+"logs.endOfLog" = "— You're at the latest entry —";
 "logs.empty.description" = "App and mihomo core events will appear here.";
 "logs.search" = "Search module, message, or level";
 "logs.clearLogs" = "Clear Logs";

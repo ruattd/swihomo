@@ -318,6 +318,7 @@
 
 "logs.allLevels" = "所有级别";
 "logs.empty" = "没有日志";
+"logs.endOfLog" = "— 已经到底了 —";
 "logs.empty.description" = "应用和 mihomo 核心事件会显示在这里";
 "logs.search" = "搜索模块, 消息或级别";
 "logs.clearLogs" = "清除日志";

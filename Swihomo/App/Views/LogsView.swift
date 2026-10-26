@@ -108,6 +108,13 @@ struct LogsView: View {
                         .listRowSeparator(.hidden)
                         .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
                 }
+                if !visibleEntries.isEmpty {
+                    Text("logs.endOfLog")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .listRowSeparator(.hidden)
+                }
             }
             .listStyle(.plain)
             // Instant inserts: bursts of appended rows must not animate — a frame
@@ -178,8 +185,13 @@ struct LogsView: View {
             } message: {
                 Text(LocalizedStringKey("logs.clearLogs.description"))
             }
-            .task { await model.reloadLogs() }
-            .onAppear { recomputeEntries() }
+            .onAppear {
+                recomputeEntries()
+                // Entering the page always lands on the latest entries;
+                // the follower re-arms and jumps even if a previous visit
+                // left the list scrolled up.
+                followRequest += 1
+            }
             .onChange(of: model.logEntries) { _ in recomputeEntries() }
             .onChange(of: filter) { _ in recomputeEntries() }
             .onChange(of: levelFilter) { _ in recomputeEntries() }
@@ -334,6 +346,10 @@ private struct LogTailFollower: View {
         }
 
         func updateUIView(_ uiView: FollowerView, context: Context) {
+            // Retry attachment: didMoveToWindow can fire before the list's
+            // scroll view is in the hierarchy, and giving up there used to
+            // disable following for the page's whole lifetime.
+            uiView.attachIfNeeded()
             uiView.handleFollowRequest(followRequest)
         }
 
@@ -354,6 +370,10 @@ private struct LogTailFollower: View {
 
             override func didMoveToWindow() {
                 super.didMoveToWindow()
+                attachIfNeeded()
+            }
+
+            func attachIfNeeded() {
                 guard sizeObservation == nil, let scrollView = resolveScrollView() else { return }
                 // Open pinned to the latest entries.
                 scrollView.setContentOffset(Self.bottomOffset(of: scrollView), animated: false)
@@ -423,6 +443,7 @@ private struct LogTailFollower: View {
         }
 
         func updateNSView(_ nsView: FollowerView, context: Context) {
+            nsView.attachIfNeeded()
             nsView.handleFollowRequest(followRequest)
         }
 
@@ -449,6 +470,10 @@ private struct LogTailFollower: View {
 
             override func viewDidMoveToWindow() {
                 super.viewDidMoveToWindow()
+                attachIfNeeded()
+            }
+
+            func attachIfNeeded() {
                 guard frameObserver == nil,
                       let scrollView = resolveScrollView(),
                       let document = scrollView.documentView else { return }
